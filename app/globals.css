@@ -1,26 +1,201 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 263.4 70% 50.4%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 263.4 70% 50.4%;
+    --radius: 0.5rem;
+    --neon-cyan: 180 100% 50%;
+    --neon-purple: 280 100% 65%;
+    --neon-pink: 320 100% 65%;
+    --neon-blue: 210 100% 60%;
+
+    /* Sidebar variables */
+    --sidebar-background: 240 10% 3.9%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 0 0% 98%;
+    --sidebar-primary-foreground: 240 5.9% 10%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-width: 16rem;
+      /* EKLENDİ */
+      --sidebar-width-icon: 3rem;
+  }
+
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 263.4 70% 50.4%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 263.4 70% 50.4%;
+
+    /* Sidebar variables */
+    --sidebar-background: 240 10% 3.9%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 0 0% 98%;
+    --sidebar-primary-foreground: 240 5.9% 10%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-width: 16rem;
+      /* EKLENDİ */
+      --sidebar-width-icon: 3rem;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    background-image: radial-gradient(circle at center, rgba(124, 58, 237, 0.1) 0%, rgba(0, 0, 0, 0) 70%);
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
 }
+
+.neon-border {
+  box-shadow: 0 0 5px theme("colors.purple.500"), 0 0 10px theme("colors.purple.500");
+  border: 1px solid theme("colors.purple.500");
+}
+
+.neon-text-purple {
+  color: theme("colors.purple.400");
+  text-shadow: 0 0 5px theme("colors.purple.500"), 0 0 10px theme("colors.purple.500");
+}
+
+.neon-text-cyan {
+  color: theme("colors.cyan.400");
+  text-shadow: 0 0 5px theme("colors.cyan.500"), 0 0 10px theme("colors.cyan.500");
+}
+
+.neon-text-pink {
+  color: theme("colors.pink.400");
+  text-shadow: 0 0 5px theme("colors.pink.500"), 0 0 10px theme("colors.pink.500");
+}
+
+.neon-glow {
+  box-shadow: 0 0 5px theme("colors.purple.500"), 0 0 10px theme("colors.purple.500");
+}
+
+.neon-glow-cyan {
+  box-shadow: 0 0 5px theme("colors.cyan.500"), 0 0 10px theme("colors.cyan.500");
+}
+
+.neon-glow-pink {
+  box-shadow: 0 0 5px theme("colors.pink.500"), 0 0 10px theme("colors.pink.500");
+}
+
+.cyberpunk-grid {
+  background-image: linear-gradient(to right, rgba(124, 58, 237, 0.1) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(124, 58, 237, 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Animations */
+@keyframes pulse-neon {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.animate-pulse-neon {
+  animation: pulse-neon 2s ease-in-out infinite;
+}
+
+@keyframes glow-flicker {
+  0%,
+  19.999%,
+  22%,
+  62.999%,
+  64%,
+  64.999%,
+  70%,
+  100% {
+    opacity: 0.99;
+    filter: drop-shadow(0 0 1px rgba(124, 58, 237, 0.5)) drop-shadow(0 0 5px rgba(124, 58, 237, 0.3));
+  }
+  20%,
+  21.999%,
+  63%,
+  63.999%,
+  65%,
+  69.999% {
+    opacity: 0.4;
+    filter: none;
+  }
+}
+
+.animate-flicker {
+  animation: glow-flicker 4s linear infinite;
+}
+
+/* Improved card styling */
+.card-cyberpunk {
+  @apply bg-background/80 backdrop-blur-sm border-purple-500/30 transition-all duration-300;
+}
+
+.card-cyberpunk:hover {
+  @apply border-purple-500/50 neon-glow;
+}
+
+/* Improved button styling */
+.btn-cyberpunk {
+  @apply bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-700 hover:to-cyan-700 transition-all duration-300;
+}
+
+.btn-cyberpunk:hover {
+  @apply neon-glow scale-[1.02];
+}
+
+/* Sidebar specific styles */
+.bg-sidebar {
+  background-color: hsl(var(--sidebar-background));
+}
+
+.text-sidebar-foreground {
+  color: hsl(var(--sidebar-foreground));
+}
+

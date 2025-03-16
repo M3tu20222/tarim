@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "module": "CommonJS",
+    "target": "ES2018", // Veya projenizle uyumlu başka bir hedef
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "sourceMap": true,
+    "outDir": "dist", // İsteğe bağlı
+    "baseUrl": ".",
+    "paths": {
+      "*": ["node_modules/*"]
+    },
+    "strict": true, // Daha katı tür denetimi için
+    "forceConsistentCasingInFileNames": true // Farklı işletim sistemlerinde tutarlılık için
+  },
+  "include": ["*.ts", "**/*.ts"],
+  "exclude": ["node_modules"]
+}

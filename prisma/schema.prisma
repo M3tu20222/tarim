@@ -1,0 +1,307 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("MONGODB_URI")
+}
+
+enum Role {
+  ADMIN
+  OWNER
+  WORKER
+}
+
+enum Status {
+  ACTIVE
+  INACTIVE
+}
+
+// Kullanıcı modeli
+model User {
+  id                String          @id @default(auto()) @map("_id") @db.ObjectId
+  name              String
+  email             String          @unique
+  password          String
+  role              Role            @default(WORKER)
+  status            Status          @default(ACTIVE)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  // İlişkiler
+  ownedFields       Field[]         @relation("FieldOwner")
+  //assignedFields    Field[]         @relation("FieldWorkers") // YORUM SATIRINA ALINDI - Çoktan çoğa ilişki için
+  fieldAssignments  FieldAssignment[] // YENİ EKLENDİ - Çoktan çoğa ilişki için ara tablo
+  irrigationLogs    IrrigationLog[]
+  processingLogs    ProcessingLog[]
+  inventory         Inventory[]
+  invoices          Invoice[]       @relation("InvoiceOwner")
+  receivedInvoices  Invoice[]       @relation("InvoiceReceiver")
+  notifications     Notification[]  @relation("NotificationReceiver")
+  sentNotifications Notification[]  @relation("NotificationSender")
+  debts             Debt[]          @relation("DebtOwner")
+  receivableDebts   Debt[]          @relation("DebtReceiver")
+}
+
+// Tarla modeli
+model Field {
+  id             String          @id @default(auto()) @map("_id") @db.ObjectId
+  name           String
+  location       String
+  size           Float           // Dönüm cinsinden
+  coordinates    String?         // Opsiyonel GPS koordinatları
+  status         FieldStatus     @default(ACTIVE)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  
+  // İlişkiler
+  owner          User            @relation("FieldOwner", fields: [ownerId], references: [id])
+  ownerId        String          @db.ObjectId
+  //workers        User[]          @relation("FieldWorkers") // YORUM SATIRINA ALINDI - Çoktan çoğa ilişki için
+  workerAssignments FieldAssignment[] // YENİ EKLENDİ - Çoktan çoğa ilişki için
+  crops          Crop[]
+  irrigationLogs IrrigationLog[]
+  processingLogs ProcessingLog[]
+  wells          Well[]
+}
+
+// YENİ EKLENDİ - Çoktan çoğa ilişki için ara tablo (User <-> Field)
+model FieldAssignment {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String   @db.ObjectId
+  field     Field    @relation(fields: [fieldId], references: [id])
+  fieldId   String   @db.ObjectId
+  assignedAt DateTime @default(now())
+
+  @@unique([userId, fieldId]) // Aynı kullanıcının aynı tarlaya birden fazla atanmasını engeller.
+}
+
+
+enum FieldStatus {
+  ACTIVE
+  FALLOW
+  HARVESTED
+}
+
+// Kuyu modeli
+model Well {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  depth     Float    // Metre cinsinden
+  capacity  Float    // Litre/saat cinsinden
+  status    WellStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // İlişkiler
+  field     Field    @relation(fields: [fieldId], references: [id])
+  fieldId   String   @db.ObjectId
+}
+
+enum WellStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
+// Ürün modeli
+model Crop {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  plantedDate DateTime
+  harvestDate DateTime?
+  status      CropStatus @default(GROWING)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // İlişkiler
+  field       Field    @relation(fields: [fieldId], references: [id])
+  fieldId     String   @db.ObjectId
+}
+
+enum CropStatus {
+  GROWING
+  HARVESTED
+  FAILED
+}
+
+// Sulama kaydı modeli
+model IrrigationLog {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  date        DateTime
+  amount      Float    // Litre cinsinden
+  duration    Float    // Saat cinsinden
+  method      String
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // İlişkiler
+  field       Field    @relation(fields: [fieldId], references: [id])
+  fieldId     String   @db.ObjectId
+  worker      User     @relation(fields: [workerId], references: [id])
+  workerId    String   @db.ObjectId
+}
+
+// Tarla işleme kaydı modeli
+model ProcessingLog {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  date        DateTime
+  processType ProcessType
+  equipment   String?
+  duration    Float    // Saat cinsinden
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // İlişkiler
+  field       Field    @relation(fields: [fieldId], references: [id])
+  fieldId     String   @db.ObjectId
+  worker      User     @relation(fields: [workerId], references: [id])
+  workerId    String   @db.ObjectId
+}
+
+enum ProcessType {
+  PLOWING
+  SEEDING
+  FERTILIZING
+  PESTICIDE
+  HARVESTING
+  OTHER
+}
+
+// Envanter modeli
+model Inventory {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  category    InventoryCategory
+  quantity    Float
+  unit        String
+  purchaseDate DateTime?
+  expiryDate  DateTime?
+  status      InventoryStatus @default(AVAILABLE)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // İlişkiler
+  owner       User     @relation(fields: [ownerId], references: [id])
+  ownerId     String   @db.ObjectId
+  usageLogs   InventoryUsage[]
+}
+
+enum InventoryCategory {
+  SEED
+  FERTILIZER
+  PESTICIDE
+  EQUIPMENT
+  FUEL
+  OTHER
+}
+
+enum InventoryStatus {
+  AVAILABLE
+  LOW_STOCK
+  OUT_OF_STOCK
+  EXPIRED
+}
+
+// Envanter kullanım kaydı modeli
+model InventoryUsage {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  date        DateTime
+  quantity    Float
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // İlişkiler
+  inventory   Inventory @relation(fields: [inventoryId], references: [id])
+  inventoryId String    @db.ObjectId
+}
+
+// Fatura modeli
+model Invoice {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  invoiceNumber String  @unique
+  amount      Float
+  issueDate   DateTime
+  dueDate     DateTime
+  status      InvoiceStatus @default(PENDING)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // İlişkiler
+  owner       User     @relation("InvoiceOwner", fields: [ownerId], references: [id])
+  ownerId     String   @db.ObjectId
+  receiver    User?    @relation("InvoiceReceiver", fields: [receiverId], references: [id])
+  receiverId  String?  @db.ObjectId
+  debts       Debt[]
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+// Borç modeli
+model Debt {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  amount      Float
+  dueDate     DateTime
+  status      DebtStatus @default(PENDING)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // İlişkiler
+  owner       User     @relation("DebtOwner", fields: [ownerId], references: [id])
+  ownerId     String   @db.ObjectId
+  receiver    User     @relation("DebtReceiver", fields: [receiverId], references: [id])
+  receiverId  String   @db.ObjectId
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id])
+  invoiceId   String   @db.ObjectId
+}
+
+enum DebtStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+// Bildirim modeli
+model Notification {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  message     String
+  type        NotificationType
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // İlişkiler
+  receiver    User     @relation("NotificationReceiver", fields: [receiverId], references: [id])
+  receiverId  String   @db.ObjectId
+  sender      User?    @relation("NotificationSender", fields: [senderId], references: [id])
+  senderId    String?  @db.ObjectId
+}
+
+enum NotificationType {
+  SYSTEM
+  IRRIGATION
+  PROCESSING
+  INVENTORY
+  INVOICE
+  DEBT
+  OTHER
+}
