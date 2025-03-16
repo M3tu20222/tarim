@@ -13,11 +13,11 @@ type FieldAssignmentType = {
 // Belirli bir tarlayı getir
 export async function GET(
   request: NextRequest,
-  context: { params: { id: string } }
+  { params }: { params: { id: string } }
 ) {
   try {
     const field = await prisma.field.findUnique({
-      where: { id: context.params.id },
+      where: { id: params.id },
       include: {
         owner: {
           select: {
@@ -85,7 +85,7 @@ export async function GET(
 // Tarlayı güncelle
 export async function PUT(
   request: NextRequest,
-  context: { params: { id: string } }
+  { params }: { params: { id: string } }
 ) {
   try {
     const { name, location, size, coordinates, status, workerIds } =
@@ -93,7 +93,7 @@ export async function PUT(
 
     // Tarlayı kontrol et
     const existingField = await prisma.field.findUnique({
-      where: { id: context.params.id },
+      where: { id: params.id },
       include: {
         workerAssignments: true,
       },
@@ -113,7 +113,7 @@ export async function PUT(
     if (Array.isArray(workerIds)) {
       await prisma.fieldAssignment.deleteMany({
         where: {
-          fieldId: context.params.id,
+          fieldId: params.id,
           userId: {
             in: existingField.workerAssignments.map(
               (assignment: FieldAssignmentType) => assignment.userId
@@ -124,14 +124,14 @@ export async function PUT(
 
       await prisma.fieldAssignment.createMany({
         data: workerIds.map((userId: string) => ({
-          fieldId: context.params.id,
+          fieldId: params.id,
           userId,
         })),
       });
     }
 
     const updatedField = await prisma.field.update({
-      where: { id: context.params.id },
+      where: { id: params.id },
       data: updateData,
       include: {
         owner: {
@@ -168,11 +168,11 @@ export async function PUT(
 // Tarlayı sil
 export async function DELETE(
   request: NextRequest,
-  context: { params: { id: string } }
+  { params }: { params: { id: string } }
 ) {
   try {
     const existingField = await prisma.field.findUnique({
-      where: { id: context.params.id },
+      where: { id: params.id },
     });
 
     if (!existingField) {
@@ -182,22 +182,22 @@ export async function DELETE(
     // İlişkili kayıtları sil (transaction içinde)
     await prisma.$transaction([
       prisma.irrigationLog.deleteMany({
-        where: { fieldId: context.params.id },
+        where: { fieldId: params.id },
       }),
       prisma.processingLog.deleteMany({
-        where: { fieldId: context.params.id },
+        where: { fieldId: params.id },
       }),
       prisma.crop.deleteMany({
-        where: { fieldId: context.params.id },
+        where: { fieldId: params.id },
       }),
       prisma.well.deleteMany({
-        where: { fieldId: context.params.id },
+        where: { fieldId: params.id },
       }),
       prisma.fieldAssignment.deleteMany({
-        where: { fieldId: context.params.id },
+        where: { fieldId: params.id },
       }),
       prisma.field.delete({
-        where: { id: context.params.id },
+        where: { id: params.id },
       }),
     ]);
 
