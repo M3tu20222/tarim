@@ -1,3 +1,4 @@
+// Bu dosyayı app/auth/layout.tsx olarak taşıyalım
 import type React from "react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Inter } from "next/font/google";

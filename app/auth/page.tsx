@@ -1,3 +1,4 @@
+// Bu dosyayı app/auth/page.tsx olarak taşıyalım
 import { LoginForm } from "@/components/login-form";
 import Image from "next/image";
 

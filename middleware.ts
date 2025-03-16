@@ -42,7 +42,7 @@ export function middleware(request: NextRequest) {
     // Token yoksa login sayfasına yönlendir
     if (!token) {
       console.log("Token bulunamadı, login sayfasına yönlendiriliyor");
-      return NextResponse.redirect(new URL("/", request.url));
+      return NextResponse.redirect(new URL("/auth", request.url));
     }
 
     // Token'ı doğrula
@@ -50,7 +50,7 @@ export function middleware(request: NextRequest) {
 
     if (!valid) {
       console.log("Token geçersiz, login sayfasına yönlendiriliyor");
-      return NextResponse.redirect(new URL("/", request.url));
+      return NextResponse.redirect(new URL("/auth", request.url));
     }
 
     // Token geçerliyse devam et
