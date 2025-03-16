@@ -30,3 +30,4 @@ export function useIsMobile() {
 
 // Eski adı da destekleyelim (geriye dönük uyumluluk için)
 export const useMobile = useIsMobile;
+ 
