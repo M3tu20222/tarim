@@ -1,10 +1,18 @@
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client"; // Prisma'dan türleri import edin
+import type { FieldUpdateInput } from "@/types/prisma-types";
+
+// Prisma şemanıza uygun olarak güncellendi
+type FieldAssignmentType = {
+  id: string;
+  userId: string;
+  fieldId: string;
+  assignedAt: Date; // Sadece assignedAt var, createdAt ve updatedAt yok
+};
 
 // Belirli bir tarlayı getir
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
@@ -76,7 +84,7 @@ export async function GET(
 
 // Tarlayı güncelle
 export async function PUT(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
@@ -95,7 +103,7 @@ export async function PUT(
       return NextResponse.json({ error: "Tarla bulunamadı" }, { status: 404 });
     }
 
-    const updateData: Prisma.FieldUpdateInput = {};
+    const updateData: FieldUpdateInput = {};
     if (name) updateData.name = name;
     if (location) updateData.location = location;
     if (size) updateData.size = size;
@@ -108,14 +116,14 @@ export async function PUT(
           fieldId: params.id,
           userId: {
             in: existingField.workerAssignments.map(
-              (assignment) => assignment.userId
+              (assignment: FieldAssignmentType) => assignment.userId
             ),
           },
         },
       });
 
       await prisma.fieldAssignment.createMany({
-        data: workerIds.map((userId) => ({
+        data: workerIds.map((userId: string) => ({
           fieldId: params.id,
           userId,
         })),
@@ -159,13 +167,11 @@ export async function PUT(
 
 // Tarlayı sil
 export async function DELETE(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  // Tarlayı kontrol et
   try {
     const existingField = await prisma.field.findUnique({
-      // try blogu buraya
       where: { id: params.id },
     });
 
@@ -188,7 +194,6 @@ export async function DELETE(
         where: { fieldId: params.id },
       }),
       prisma.fieldAssignment.deleteMany({
-        // FieldAssignment silme eklendi
         where: { fieldId: params.id },
       }),
       prisma.field.delete({
@@ -198,7 +203,6 @@ export async function DELETE(
 
     return NextResponse.json({ message: "Tarla başarıyla silindi" });
   } catch (error) {
-    // catch blogu buraya
     console.error("Error deleting field:", error);
     return NextResponse.json(
       { error: "Tarla silinirken bir hata oluştu" },

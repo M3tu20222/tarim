@@ -3,9 +3,7 @@ export type FieldAssignment = {
   id: string;
   userId: string;
   fieldId: string;
-  createdAt?: Date;
-  updatedAt?: Date;
-  // Diğer alanlar varsa ekleyin
+  assignedAt: Date; // createdAt ve updatedAt yerine assignedAt
 };
 
 export type Field = {
