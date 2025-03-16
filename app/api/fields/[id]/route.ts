@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client"; // Prisma'dan türleri import edin
 
 // Belirli bir tarlayı getir
 export async function GET(
@@ -19,7 +20,6 @@ export async function GET(
         },
         workerAssignments: {
           include: {
-            // workerAssignments üzerinden, user bilgilerini almak için include
             user: {
               select: {
                 id: true,
@@ -87,7 +87,7 @@ export async function PUT(
     const existingField = await prisma.field.findUnique({
       where: { id: params.id },
       include: {
-        workerAssignments: true, // Mevcut workerAssignments'ları almak için
+        workerAssignments: true,
       },
     });
 
@@ -95,41 +95,36 @@ export async function PUT(
       return NextResponse.json({ error: "Tarla bulunamadı" }, { status: 404 });
     }
 
-    // Güncelleme verilerini hazırla
-    const updateData: any = {};
+    const updateData: Prisma.FieldUpdateInput = {};
     if (name) updateData.name = name;
     if (location) updateData.location = location;
     if (size) updateData.size = size;
     if (coordinates) updateData.coordinates = coordinates;
     if (status) updateData.status = status;
 
-    // İşçileri güncelle (FieldAssignment üzerinden)
-    if (workerIds) {
-      // Mevcut atamaları sil
+    if (Array.isArray(workerIds)) {
       await prisma.fieldAssignment.deleteMany({
         where: {
           fieldId: params.id,
           userId: {
             in: existingField.workerAssignments.map(
               (assignment) => assignment.userId
-            ), // Mevcut atamalardaki userId'leri al
+            ),
           },
         },
       });
 
-      // Yeni atamaları oluştur
       await prisma.fieldAssignment.createMany({
-        data: workerIds.map((userId: string) => ({
+        data: workerIds.map((userId) => ({
           fieldId: params.id,
           userId,
         })),
       });
     }
 
-    // Tarlayı güncelle (sadece diğer alanları, workerIds'i DEĞİL)
     const updatedField = await prisma.field.update({
       where: { id: params.id },
-      data: updateData, // workerIds'i buraya EKLMİYORUZ
+      data: updateData,
       include: {
         owner: {
           select: {
@@ -139,7 +134,6 @@ export async function PUT(
           },
         },
         workerAssignments: {
-          // Güncellenmiş workerAssignments'ları almak için
           include: {
             user: {
               select: {

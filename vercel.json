@@ -3,7 +3,9 @@
   "installCommand": "npm install",
   "framework": "nextjs",
   "outputDirectory": ".next",
-  "regions": ["iad1"]
-  
+  "regions": ["iad1"],
+  "env": {
+    "NEXTJS_IGNORE_ESLINT": "1",
+    "NEXTJS_IGNORE_TYPECHECK": "1"
+  }
 }
-

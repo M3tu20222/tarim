@@ -187,7 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       clearAuthData();
-      router.push("/");
+      router.push("/auth");
 
       toast({
         title: "Çıkış başarılı",

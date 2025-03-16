@@ -30,6 +30,7 @@ export function LoginForm() {
   const router = useRouter();
   const { toast } = useToast();
 
+  // Ana sayfa yönlendirmesini güncelle
   // Sayfa yüklendiğinde localStorage'da token varsa dashboard'a yönlendir
   useEffect(() => {
     const token = localStorage.getItem("token");
