@@ -1,4 +1,4 @@
-import { type NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { FieldUpdateInput } from "@/types/prisma-types";
 
@@ -13,11 +13,11 @@ type FieldAssignmentType = {
 // Belirli bir tarlayı getir
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
   try {
     const field = await prisma.field.findUnique({
-      where: { id: params.id },
+      where: { id: context.params.id },
       include: {
         owner: {
           select: {
@@ -85,7 +85,7 @@ export async function GET(
 // Tarlayı güncelle
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
   try {
     const { name, location, size, coordinates, status, workerIds } =
@@ -93,7 +93,7 @@ export async function PUT(
 
     // Tarlayı kontrol et
     const existingField = await prisma.field.findUnique({
-      where: { id: params.id },
+      where: { id: context.params.id },
       include: {
         workerAssignments: true,
       },
@@ -113,7 +113,7 @@ export async function PUT(
     if (Array.isArray(workerIds)) {
       await prisma.fieldAssignment.deleteMany({
         where: {
-          fieldId: params.id,
+          fieldId: context.params.id,
           userId: {
             in: existingField.workerAssignments.map(
               (assignment: FieldAssignmentType) => assignment.userId
@@ -124,14 +124,14 @@ export async function PUT(
 
       await prisma.fieldAssignment.createMany({
         data: workerIds.map((userId: string) => ({
-          fieldId: params.id,
+          fieldId: context.params.id,
           userId,
         })),
       });
     }
 
     const updatedField = await prisma.field.update({
-      where: { id: params.id },
+      where: { id: context.params.id },
       data: updateData,
       include: {
         owner: {
@@ -168,11 +168,11 @@ export async function PUT(
 // Tarlayı sil
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
   try {
     const existingField = await prisma.field.findUnique({
-      where: { id: params.id },
+      where: { id: context.params.id },
     });
 
     if (!existingField) {
@@ -182,22 +182,22 @@ export async function DELETE(
     // İlişkili kayıtları sil (transaction içinde)
     await prisma.$transaction([
       prisma.irrigationLog.deleteMany({
-        where: { fieldId: params.id },
+        where: { fieldId: context.params.id },
       }),
       prisma.processingLog.deleteMany({
-        where: { fieldId: params.id },
+        where: { fieldId: context.params.id },
       }),
       prisma.crop.deleteMany({
-        where: { fieldId: params.id },
+        where: { fieldId: context.params.id },
       }),
       prisma.well.deleteMany({
-        where: { fieldId: params.id },
+        where: { fieldId: context.params.id },
       }),
       prisma.fieldAssignment.deleteMany({
-        where: { fieldId: params.id },
+        where: { fieldId: context.params.id },
       }),
       prisma.field.delete({
-        where: { id: params.id },
+        where: { id: context.params.id },
       }),
     ]);
 
