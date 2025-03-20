@@ -34,6 +34,9 @@ model User {
   inventoryUsages       InventoryUsage[]
   processes             Process[]
   invoicesPurchased     Invoice[]               @relation("InvoicePurchaser")
+  paymentsMade          PaymentHistory[]        @relation("PaymentsMade") // YENİ
+  paymentsReceived      PaymentHistory[]        @relation("PaymentsReceived") // YENİ
+  inventoryTransactions InventoryTransaction[]  // YENİ
 }
 
 // Tarla Modeli
@@ -167,8 +170,9 @@ model Inventory {
   updatedAt     DateTime          @updatedAt
 
   // İlişkiler
-  ownerships InventoryOwnership[]
-  usages     InventoryUsage[]
+  ownerships          InventoryOwnership[]
+  usages              InventoryUsage[]
+  inventoryTransactions InventoryTransaction[] // YENİ
 }
 
 // Envanter Payları
@@ -195,25 +199,77 @@ model Purchase {
   dueDate       DateTime? // Ödeme vadesi (ör: 3 ay sonra)
   description   String?
   createdAt     DateTime      @default(now())
+  isTemplate    Boolean       @default(false) // YENİ: Şablon mu?
+  templateName  String?       // YENİ: Şablon adı
 
   // İlişkiler
-  contributors PurchaseContributor[]
-  debts        Debt[]                @relation("PurchaseDebts")
-  invoices     Invoice[]             @relation("PurchaseInvoices")
+  contributors         PurchaseContributor[]
+  debts                Debt[]                @relation("PurchaseDebts")
+  invoices             Invoice[]             @relation("PurchaseInvoices")
+  inventoryTransactions InventoryTransaction[] // YENİ
 }
 
-// Alış Katılımcıları
+// Alış Katılımcıları (Genişletilmiş)
 model PurchaseContributor {
-  id           String   @id @default(auto()) @map("_id") @db.ObjectId
-  purchase     Purchase @relation(fields: [purchaseId], references: [id])
-  purchaseId   String   @db.ObjectId
-  user         User     @relation(fields: [userId], references: [id])
-  userId       String   @db.ObjectId
-  contribution Float // Bu kullanıcının payı (ör: 500 TL)
-  isCreditor   Boolean // Kredi veren mi? (true ise borcun sahibi)
+  id                 String    @id @default(auto()) @map("_id") @db.ObjectId
+  purchase           Purchase  @relation(fields: [purchaseId], references: [id])
+  purchaseId         String    @db.ObjectId
+  user               User      @relation(fields: [userId], references: [id])
+  userId             String    @db.ObjectId
+  sharePercentage    Float     // Ortaklık yüzdesi (ör: 50.0)
+  contribution       Float     // Bu kullanıcının payı (ör: 26000 TL)
+  expectedContribution Float    // YENİ: Beklenen katkı (hesaplanmış)
+  actualContribution Float     @default(0) // YENİ: Gerçekte ödenen miktar
+  remainingAmount    Float?    // YENİ: Kalan borç miktarı
+  hasPaid            Boolean   @default(false) // Ödeme yaptı mı?
+  paymentDate        DateTime? // Ödeme tarihi
+  isCreditor         Boolean   // Kredi veren mi? (true ise borcun sahibi)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  // İlişkiler
+  paymentHistory     PaymentHistory[] // YENİ
 }
 
-// Borç Modeli
+// YENİ: Ödeme Geçmişi Modeli
+model PaymentHistory {
+  id            String        @id @default(auto()) @map("_id") @db.ObjectId
+  amount        Float
+  paymentDate   DateTime
+  paymentMethod PaymentMethod
+  notes         String?
+  createdAt     DateTime      @default(now())
+  
+  // İlişkiler
+  debt          Debt?         @relation(fields: [debtId], references: [id])
+  debtId        String?       @db.ObjectId
+  contributor   PurchaseContributor @relation(fields: [contributorId], references: [id])
+  contributorId String        @db.ObjectId
+  payer         User          @relation("PaymentsMade", fields: [payerId], references: [id])
+  payerId       String        @db.ObjectId
+  receiver      User          @relation("PaymentsReceived", fields: [receiverId], references: [id])
+  receiverId    String        @db.ObjectId
+}
+
+// YENİ: Envanter İşlemleri Modeli
+model InventoryTransaction {
+  id            String           @id @default(auto()) @map("_id") @db.ObjectId
+  type          TransactionType
+  quantity      Float
+  date          DateTime
+  notes         String?
+  createdAt     DateTime         @default(now())
+  
+  // İlişkiler
+  inventory     Inventory        @relation(fields: [inventoryId], references: [id])
+  inventoryId   String           @db.ObjectId
+  purchase      Purchase?        @relation(fields: [purchaseId], references: [id])
+  purchaseId    String?          @db.ObjectId
+  user          User             @relation(fields: [userId], references: [id])
+  userId        String           @db.ObjectId
+}
+
+// Borç Modeli (Genişletilmiş)
 model Debt {
   id          String     @id @default(auto()) @map("_id") @db.ObjectId
   amount      Float
@@ -223,15 +279,19 @@ model Debt {
   createdAt   DateTime   @default(now())
   paymentDate DateTime?
 
+  // Borç nedeni (alış, fatura vb.)
+  reason      String?
+
   // İlişkiler
-  creditor   User      @relation("DebtsGiven", fields: [creditorId], references: [id])
-  creditorId String    @db.ObjectId
-  debtor     User      @relation("DebtsTaken", fields: [debtorId], references: [id])
-  debtorId   String    @db.ObjectId
-  invoice    Invoice?  @relation("DebtInvoice", fields: [invoiceId], references: [id])
-  invoiceId  String?   @db.ObjectId
-  purchase   Purchase? @relation("PurchaseDebts", fields: [purchaseId], references: [id])
-  purchaseId String?   @db.ObjectId
+  creditor       User            @relation("DebtsGiven", fields: [creditorId], references: [id])
+  creditorId     String          @db.ObjectId
+  debtor         User            @relation("DebtsTaken", fields: [debtorId], references: [id])
+  debtorId       String          @db.ObjectId
+  invoice        Invoice?        @relation("DebtInvoice", fields: [invoiceId], references: [id])
+  invoiceId      String?         @db.ObjectId
+  purchase       Purchase?       @relation("PurchaseDebts", fields: [purchaseId], references: [id])
+  purchaseId     String?         @db.ObjectId
+  paymentHistory PaymentHistory[] // YENİ
 }
 
 // Fatura Modeli
@@ -350,6 +410,7 @@ enum PaymentMethod {
   CASH
   CREDIT_CARD
   CREDIT
+  BANK_TRANSFER // YENİ
 }
 
 enum DebtStatus {
@@ -357,6 +418,7 @@ enum DebtStatus {
   PAID
   OVERDUE
   CANCELLED
+  PARTIALLY_PAID // YENİ
 }
 
 enum InvoiceStatus {
@@ -391,7 +453,14 @@ enum NotificationType {
   OTHER
 }
 
-// Enum'lar bölümüne aşağıdaki enum'u ekleyelim
+// YENİ: Envanter İşlem Tipleri
+enum TransactionType {
+  PURCHASE
+  USAGE
+  TRANSFER
+  ADJUSTMENT
+}
+
 enum Unit {
   KG
   TON

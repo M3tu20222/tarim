@@ -17,20 +17,14 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, LayoutTemplateIcon as Template } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Yeni Alış | Tarım Yönetim Sistemi",
-  description: "Yeni alış oluşturma sayfası",
+  title: "Yeni Alış Şablonu | Tarım Yönetim Sistemi",
+  description: "Yeni alış şablonu oluşturma sayfası",
 };
 
-export default function NewPurchasePage({
-  searchParams,
-}: {
-  searchParams: { templateId?: string };
-}) {
-  const templateId = searchParams.templateId;
-
+export default function NewPurchaseTemplatePage() {
   return (
     <div className="flex flex-col gap-4 p-4 md:p-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -47,35 +41,38 @@ export default function NewPurchasePage({
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>
-              <BreadcrumbPage>Yeni Alış</BreadcrumbPage>
+              <BreadcrumbLink href="/dashboard/owner/purchases/templates">
+                Şablonlar
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>Yeni Şablon</BreadcrumbPage>
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
 
-        <div className="flex gap-2">
-          <Button variant="outline" asChild>
-            <Link href="/dashboard/owner/purchases">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Geri Dön
-            </Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/dashboard/owner/purchases/templates">Şablonlar</Link>
-          </Button>
-        </div>
+        <Button variant="outline" asChild>
+          <Link href="/dashboard/owner/purchases/templates">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Geri Dön
+          </Link>
+        </Button>
       </div>
 
       <Card className="border-purple-500/30 bg-background/95 backdrop-blur-sm">
         <CardHeader>
-          <CardTitle>Yeni Alış Oluştur</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Template className="h-5 w-5" />
+            Yeni Alış Şablonu Oluştur
+          </CardTitle>
           <CardDescription>
-            {templateId
-              ? "Seçilen şablonu kullanarak yeni bir alış kaydı oluşturun."
-              : "Yeni bir alış kaydı oluşturmak için aşağıdaki formu doldurun."}
+            Sık kullandığınız alış bilgilerini şablon olarak kaydedin ve
+            gelecekte tekrar kullanın.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <EnhancedPurchaseForm templateId={templateId} />
+          <EnhancedPurchaseForm />
         </CardContent>
       </Card>
     </div>
