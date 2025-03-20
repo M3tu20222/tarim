@@ -1,9 +1,9 @@
 "use client";
 
-import type React from "react";
+"use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import type React from "react";
+import { redirect } from 'next/navigation'
 import { useAuth } from "@/components/auth-provider";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -14,21 +14,6 @@ interface ProtectedPageProps {
 
 export function ProtectedPage({ children, allowedRoles }: ProtectedPageProps) {
   const { user, isLoading } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!isLoading && !user) {
-      router.push("/");
-    } else if (
-      !isLoading &&
-      user &&
-      allowedRoles &&
-      !allowedRoles.includes(user.role)
-    ) {
-      // Kullanıcının rolü izin verilen roller arasında değilse
-      router.push(`/dashboard/${user.role.toLowerCase()}`);
-    }
-  }, [user, isLoading, router, allowedRoles]);
 
   if (isLoading) {
     return (
@@ -46,11 +31,11 @@ export function ProtectedPage({ children, allowedRoles }: ProtectedPageProps) {
   }
 
   if (!user) {
-    return null;
+    redirect("/");
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return null;
+  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
+    redirect(`/dashboard/${user.role.toLowerCase()}`);
   }
 
   return <>{children}</>;

@@ -1,31 +1,37 @@
-// Bu dosyayı app/auth/layout.tsx olarak taşıyalım
 import type React from "react";
-import { ThemeProvider } from "@/components/theme-provider";
+import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import "../globals.css";
+import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { ThemeProvider } from "@/components/theme-provider";
+import { AuthProvider } from "@/components/auth-provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
-export default function AuthLayout({
+export const metadata: Metadata = {
+  title: "Tarım Yönetim Sistemi",
+  description: "Tarım işletmenizi yönetmek için kapsamlı bir sistem",
+};
+
+export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <html lang="tr" suppressHydrationWarning>
-      <body className={`${inter.className} antialiased bg-background dark`}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          enableSystem={false}
-          disableTransitionOnChange
-        >
-          <main className="flex min-h-screen flex-col items-center justify-center p-4 cyberpunk-grid">
+      <body className={inter.className}>
+        <AuthProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="dark"
+            enableSystem={false}
+            disableTransitionOnChange
+          >
             {children}
-          </main>
-          <Toaster />
-        </ThemeProvider>
+            <Toaster />
+          </ThemeProvider>
+        </AuthProvider>
       </body>
     </html>
   );

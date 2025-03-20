@@ -1,49 +1,11 @@
-"use server"
+"use server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import * as bcrypt from "bcrypt";
 import { cookies } from "next/headers";
+import { signToken } from "@/lib/jwt"; // signToken fonksiyonunu içe aktar
 
-// Edge-compatible JWT oluşturma
-function createJWT(payload: any, secret: string, expiresIn = 86400): string {
-  // Header
-  const header = {
-    alg: "HS256",
-    typ: "JWT",
-  };
-
-  // Payload
-  const now = Math.floor(Date.now() / 1000);
-  const exp = now + expiresIn; // Default: 1 gün (86400 saniye)
-
-  const jwtPayload = {
-    ...payload,
-    iat: now,
-    exp,
-  };
-
-  // Base64Url encoding
-  const base64UrlEncode = (str: string) => {
-    return Buffer.from(str)
-      .toString("base64")
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=/g, "");
-  };
-
-  // Header ve payload'ı encode et
-  const encodedHeader = base64UrlEncode(JSON.stringify(header));
-  const encodedPayload = base64UrlEncode(JSON.stringify(jwtPayload));
-
-  // İmza oluştur (Not: Bu basit bir implementasyon, üretimde crypto kullanılmalı)
-  // Gerçek bir imza oluşturmak için jose gibi Edge-compatible bir kütüphane kullanılmalıdır
-  const signature = base64UrlEncode(
-    `${secret}-${encodedHeader}-${encodedPayload}`
-  );
-
-  // JWT'yi birleştir
-  return `${encodedHeader}.${encodedPayload}.${signature}`;
-}
+// Edge-compatible JWT oluşturma fonksiyonunu (createJWT) artık kullanmıyoruz.
 
 export async function POST(request: Request) {
   try {
@@ -113,17 +75,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Token oluştur
-    const token = createJWT(
-      { id: user.id, role: user.role },
-      process.env.JWT_SECRET || "default-secret",
-      86400 // 1 gün
-    );
+    // Token oluştur (signToken kullanılıyor)
+    const token = await signToken({ id: user.id, role: user.role });
 
     console.log("Token oluşturuldu");
 
-    // Cookie'yi ayarla - await eklendi
-    const cookieStore = await cookies();
+
+    // Cookie'yi ayarla
+    const cookieStore = await cookies(); // await eklendi
     cookieStore.set("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

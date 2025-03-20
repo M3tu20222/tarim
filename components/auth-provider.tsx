@@ -8,9 +8,9 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/components/ui/use-toast";
 
-interface User {
+export interface User {
   id: string;
   name: string;
   email: string;
@@ -28,7 +28,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Token'ın geçerli olup olmadığını kontrol eden yardımcı fonksiyon
-function isTokenExpired(token: string): boolean {
+export function isTokenExpired(token: string): boolean {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return true;
@@ -40,36 +40,53 @@ function isTokenExpired(token: string): boolean {
   }
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+interface AuthProviderProps {
+  children: ReactNode;
+  initialToken?: string | null;
+}
+
+export function AuthProvider({ children, initialToken }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const { toast } = useToast();
 
-  // Sayfa yüklendiğinde localStorage'dan kullanıcı bilgilerini al
+  // Sayfa yüklendiğinde localStorage'dan kullanıcı bilgilerini al ve initialToken'ı kontrol et
   useEffect(() => {
-    const storedToken = localStorage.getItem("token");
-    const storedUser = localStorage.getItem("user");
+    let tokenToUse = initialToken;
 
-    if (storedToken && storedUser) {
-      try {
-        // Token'ın süresi dolmuş mu kontrol et
-        if (isTokenExpired(storedToken)) {
-          clearAuthData();
-        } else {
-          const userData = JSON.parse(storedUser);
-          setUser(userData);
-          setToken(storedToken);
-        }
-      } catch (error) {
-        console.error("Kullanıcı bilgisi parse edilemedi:", error);
-        clearAuthData();
+    if (initialToken) {
+      if (isTokenExpired(initialToken)) {
+        tokenToUse = null;
       }
     }
 
+    if (!tokenToUse) {
+      const storedToken = localStorage.getItem("token");
+      const storedUser = localStorage.getItem("user");
+
+      if (storedToken && storedUser) {
+        try {
+          // Token'ın süresi dolmuş mu kontrol et
+          if (isTokenExpired(storedToken)) {
+            clearAuthData();
+          } else {
+            const userData = JSON.parse(storedUser);
+            setUser(userData);
+            setToken(storedToken);
+          }
+        } catch (error) {
+          console.error("Kullanıcı bilgisi parse edilemedi:", error);
+          clearAuthData();
+        }
+      }
+    } else {
+      setToken(tokenToUse)
+    }
+
     setIsLoading(false);
-  }, []);
+  }, [initialToken]);
 
   // Kullanıcı aktivite takibi
   useEffect(() => {
@@ -143,13 +160,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem("token", data.token);
         localStorage.setItem("user", JSON.stringify(data.user));
 
-        // Ayrıca document.cookie'ye de ekleyelim (client-side)
-        const expiryDate = new Date();
-        expiryDate.setDate(expiryDate.getDate() + 1); // 1 gün
-        document.cookie = `token=${
-          data.token
-        }; path=/; expires=${expiryDate.toUTCString()}; SameSite=Strict`;
-
         setUser(data.user);
         setToken(data.token);
       }
@@ -163,7 +173,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       // Role göre yönlendirme
-      const dashboardPath = `/dashboard/${data.user.role.toLowerCase()}`;
+      // const dashboardPath = `/dashboard/${data.user.role.toLowerCase()}`; // YANLIŞ
+      const dashboardPath = `/dashboard/dashboard`; // DOĞRU - Her zaman ana dashboard'a yönlendir
       router.push(dashboardPath);
     } catch (error: any) {
       console.error("Giriş hatası:", error);
@@ -187,7 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       clearAuthData();
-      router.push("/auth");
+      router.push("/");
 
       toast({
         title: "Çıkış başarılı",
@@ -206,11 +217,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
+      <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
+        {children}
+      </AuthContext.Provider>
+    );
+  }
 
 export function useAuth() {
   const context = useContext(AuthContext);

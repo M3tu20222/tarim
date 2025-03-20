@@ -9,18 +9,18 @@ import { Label } from "@/components/ui/label";
 import { LockIcon, UserIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-// Token'ın geçerli olup olmadığını kontrol eden yardımcı fonksiyon
-function isTokenExpired(token: string): boolean {
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 3) return true;
+// Token'ın geçerli olup olmadığını kontrol eden yardımcı fonksiyon (ARTIK GEREKSİZ)
+// function isTokenExpired(token: string): boolean {
+//   try {
+//     const parts = token.split(".");
+//     if (parts.length !== 3) return true;
 
-    const payload = JSON.parse(atob(parts[1]));
-    return payload.exp * 1000 < Date.now();
-  } catch (error) {
-    return true;
-  }
-}
+//     const payload = JSON.parse(atob(parts[1]));
+//     return payload.exp * 1000 < Date.now();
+//   } catch (error) {
+//     return true;
+//   }
+// }
 
 export function LoginForm() {
   const [username, setUsername] = useState("");
@@ -30,43 +30,42 @@ export function LoginForm() {
   const router = useRouter();
   const { toast } = useToast();
 
-  // Ana sayfa yönlendirmesini güncelle
-  // Sayfa yüklendiğinde localStorage'da token varsa dashboard'a yönlendir
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    const user = localStorage.getItem("user");
+  // Ana sayfa yönlendirmesini güncelle (useEffect'i TAMAMEN KALDIR)
+  // useEffect(() => {
+  //   const token = localStorage.getItem("token");
+  //   const user = localStorage.getItem("user");
 
-    if (token && user) {
-      try {
-        // Token'ın süresi dolmuş mu kontrol et
-        if (isTokenExpired(token)) {
-          console.log("Token süresi dolmuş, temizleniyor");
-          localStorage.removeItem("token");
-          localStorage.removeItem("user");
-          document.cookie =
-            "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-          return;
-        }
+  //   if (token && user) {
+  //     try {
+  //       // Token'ın süresi dolmuş mu kontrol et (GEREKSİZ)
+  //       if (isTokenExpired(token)) {
+  //         console.log("Token süresi dolmuş, temizleniyor");
+  //         localStorage.removeItem("token");
+  //         localStorage.removeItem("user");
+  //         document.cookie =
+  //           "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+  //         return;
+  //       }
 
-        const userData = JSON.parse(user);
-        const dashboardPath = `/dashboard/${userData.role.toLowerCase()}`;
-        console.log(
-          "Token ve kullanıcı bilgisi bulundu, yönlendiriliyor:",
-          dashboardPath
-        );
+  //       const userData = JSON.parse(user);
+  //       const dashboardPath = `/dashboard/${userData.role.toLowerCase()}`;
+  //       console.log(
+  //         "Token ve kullanıcı bilgisi bulundu, yönlendiriliyor:",
+  //         dashboardPath
+  //       );
 
-        // Doğrudan yönlendirme yapalım
-        window.location.href = dashboardPath;
-      } catch (error) {
-        console.error("Kullanıcı bilgisi parse edilemedi:", error);
-        // Hatalı veri varsa temizleyelim
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        document.cookie =
-          "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-      }
-    }
-  }, []);
+  //       // Doğrudan yönlendirme yapalım (GEREKSİZ)
+  //       window.location.href = dashboardPath;
+  //     } catch (error) {
+  //       console.error("Kullanıcı bilgisi parse edilemedi:", error);
+  //       // Hatalı veri varsa temizleyelim
+  //       localStorage.removeItem("token");
+  //       localStorage.removeItem("user");
+  //       document.cookie =
+  //         "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+  //     }
+  //   }
+  // }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

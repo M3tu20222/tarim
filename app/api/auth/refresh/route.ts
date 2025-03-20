@@ -1,92 +1,36 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server"; // NextRequest eklendi
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
+import { signToken, decodeToken } from "@/lib/jwt"; // Gerekli fonksiyonları içe aktar
 
-// Edge-compatible JWT oluşturma (login route.ts ile aynı)
-function createJWT(payload: any, secret: string, expiresIn = 86400): string {
-  // Header
-  const header = {
-    alg: "HS256",
-    typ: "JWT",
-  };
-
-  // Payload
-  const now = Math.floor(Date.now() / 1000);
-  const exp = now + expiresIn; // Default: 1 gün (86400 saniye)
-
-  const jwtPayload = {
-    ...payload,
-    iat: now,
-    exp,
-  };
-
-  // Base64Url encoding
-  const base64UrlEncode = (str: string) => {
-    return Buffer.from(str)
-      .toString("base64")
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=/g, "");
-  };
-
-  // Header ve payload'ı encode et
-  const encodedHeader = base64UrlEncode(JSON.stringify(header));
-  const encodedPayload = base64UrlEncode(JSON.stringify(jwtPayload));
-
-  // İmza oluştur (Not: Bu basit bir implementasyon, üretimde crypto kullanılmalı)
-  const signature = base64UrlEncode(
-    `${secret}-${encodedHeader}-${encodedPayload}`
-  );
-
-  // JWT'yi birleştir
-  return `${encodedHeader}.${encodedPayload}.${signature}`;
-}
-
-// Edge-compatible JWT verification
-function decodeToken(token: string): any | null {
+export async function POST(request: NextRequest) {
   try {
-    // JWT'yi manuel olarak decode et
-    const parts = token.split(".");
-    if (parts.length !== 3) {
-      return null;
-    }
-
-    // Payload'ı decode et (JWT'nin ikinci kısmı)
-    return JSON.parse(atob(parts[1]));
-  } catch (error) {
-    console.error("Token decode hatası:", error);
-    return null;
-  }
-}
-
-export async function POST(request: Request) {
-  try {
-    // Mevcut token'ı al
-    const { token } = await request.json();
+    const cookieStore = await cookies();
+    const token = cookieStore.get("token")?.value; // 'token' adını kullan
 
     if (!token) {
       return NextResponse.json(
         {
           success: false,
-          message: "Token gerekli",
-        },
-        { status: 400 }
-      );
-    }
-
-    // Token'ı decode et
-    const decoded = decodeToken(token);
-    if (!decoded || !decoded.id) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Geçersiz token formatı",
+          message: "Token bulunamadı",
         },
         { status: 401 }
       );
     }
 
-    // Token'ın süresi dolmuş mu kontrol et
+    // Token'ı decode et (decodeToken kullanılıyor)
+    const decoded = await decodeToken(token); // await ekle
+    if (!decoded || !decoded.id) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Geçersiz token",
+        },
+        { status: 401 }
+      );
+    }
+
+    // Token'ın süresinin dolup dolmadığını kontrol et
     const now = Math.floor(Date.now() / 1000);
     if (decoded.exp && decoded.exp < now) {
       return NextResponse.json(
@@ -98,30 +42,25 @@ export async function POST(request: Request) {
       );
     }
 
-    // Kullanıcıyı kontrol et
+    // Kullanıcıyı veritabanından bul
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
     });
 
-    if (!user || user.status !== "ACTIVE") {
+    if (!user) {
       return NextResponse.json(
         {
           success: false,
-          message: "Geçersiz kullanıcı veya hesap aktif değil",
+          message: "Kullanıcı bulunamadı",
         },
         { status: 401 }
       );
     }
 
-    // Yeni token oluştur
-    const newToken = createJWT(
-      { id: user.id, role: user.role },
-      process.env.JWT_SECRET || "default-secret",
-      86400 // 1 gün
-    );
+    // Yeni token oluştur (signToken kullanılıyor)
+    const newToken = await signToken({ id: user.id, role: user.role });
 
-    // Cookie'yi güncelle - await eklendi
-    const cookieStore = await cookies();
+    // Yeni token'ı cookie'ye yaz
     cookieStore.set("token", newToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -133,7 +72,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       message: "Token yenilendi",
-      token: newToken,
+      token: newToken, // Yeni token'ı döndür
     });
   } catch (error) {
     console.error("Token yenileme hatası:", error);

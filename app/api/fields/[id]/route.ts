@@ -2,28 +2,32 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { FieldUpdateInput } from "@/types/prisma-types";
 
-// Prisma şemanıza uygun olarak güncellendi
+// Güncellenmiş tip
 type FieldAssignmentType = {
   id: string;
   userId: string;
   fieldId: string;
-  assignedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 // Belirli bir tarlayı getir
 export async function GET(req: NextRequest) {
-  // URL'den id parametresini al
   const id = req.nextUrl.pathname.split("/").pop() || "";
 
   try {
     const field = await prisma.field.findUnique({
       where: { id },
       include: {
-        owner: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
+        owners: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
           },
         },
         workerAssignments: {
@@ -40,27 +44,11 @@ export async function GET(req: NextRequest) {
         crops: true,
         wells: true,
         irrigationLogs: {
-          include: {
-            worker: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-          },
           orderBy: {
             date: "desc",
           },
         },
         processingLogs: {
-          include: {
-            worker: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-          },
           orderBy: {
             date: "desc",
           },
@@ -84,14 +72,12 @@ export async function GET(req: NextRequest) {
 
 // Tarlayı güncelle
 export async function PUT(req: NextRequest) {
-  // URL'den id parametresini al
   const id = req.nextUrl.pathname.split("/").pop() || "";
 
   try {
     const { name, location, size, coordinates, status, workerIds } =
       await req.json();
 
-    // Tarlayı kontrol et
     const existingField = await prisma.field.findUnique({
       where: { id },
       include: {
@@ -111,7 +97,7 @@ export async function PUT(req: NextRequest) {
     if (status) updateData.status = status;
 
     if (Array.isArray(workerIds)) {
-      await prisma.fieldAssignment.deleteMany({
+      await prisma.fieldWorkerAssignment.deleteMany({
         where: {
           fieldId: id,
           userId: {
@@ -122,7 +108,7 @@ export async function PUT(req: NextRequest) {
         },
       });
 
-      await prisma.fieldAssignment.createMany({
+      await prisma.fieldWorkerAssignment.createMany({
         data: workerIds.map((userId: string) => ({
           fieldId: id,
           userId,
@@ -134,11 +120,15 @@ export async function PUT(req: NextRequest) {
       where: { id },
       data: updateData,
       include: {
-        owner: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
+        owners: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
           },
         },
         workerAssignments: {
@@ -167,7 +157,6 @@ export async function PUT(req: NextRequest) {
 
 // Tarlayı sil
 export async function DELETE(req: NextRequest) {
-  // URL'den id parametresini al
   const id = req.nextUrl.pathname.split("/").pop() || "";
 
   try {
@@ -179,7 +168,6 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "Tarla bulunamadı" }, { status: 404 });
     }
 
-    // İlişkili kayıtları sil (transaction içinde)
     await prisma.$transaction([
       prisma.irrigationLog.deleteMany({
         where: { fieldId: id },
@@ -193,7 +181,7 @@ export async function DELETE(req: NextRequest) {
       prisma.well.deleteMany({
         where: { fieldId: id },
       }),
-      prisma.fieldAssignment.deleteMany({
+      prisma.fieldWorkerAssignment.deleteMany({
         where: { fieldId: id },
       }),
       prisma.field.delete({

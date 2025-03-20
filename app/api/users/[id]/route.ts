@@ -1,14 +1,28 @@
-"use server"
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+// import { getServerSession } from "next-auth"; // Bu satırı sil
+// import { authOptions } from "../../auth/[...nextauth]/route"; // Bu satırı ve ilgili dosyayı sil.
 import * as bcrypt from "bcrypt";
+import { getSession } from "@/lib/session"; // Kendi oturum kontrol fonksiyonunu kullan
 
-// Belirli bir kullanıcıyı getir
+// Get a specific user
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
   try {
+    // const session = await getServerSession(authOptions); // NextAuth yerine kendi oturum kontrolünü kullan
+    const session = await getSession();
+
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    // Only allow users to view their own profile or admins to view any profile
+    if (session.user.id !== params.id && session.user.role !== "ADMIN") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
     const user = await prisma.user.findUnique({
       where: { id: params.id },
       select: {
@@ -18,86 +32,56 @@ export async function GET(
         role: true,
         status: true,
         createdAt: true,
-        ownedFields: {
-          select: {
-            id: true,
-            name: true,
-            location: true,
-            size: true,
-            status: true,
-          },
-        },
-        fieldAssignments: {
-          select: {
-            //          id: true, // FieldWorker'ın id'si
-            //          name: true, // HATA: FieldWorker'da name yok
-            //          location: true,
-            //          size: true,
-            //          status: true,
-            field: {
-              // field ilişkisi üzerinden
-              select: {
-                id: true,
-                name: true,
-                location: true,
-                size: true,
-                status: true,
-              },
-            },
-          },
-        },
       },
     });
 
     if (!user) {
-      return NextResponse.json(
-        { error: "Kullanıcı bulunamadı" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     return NextResponse.json(user);
   } catch (error) {
     console.error("Error fetching user:", error);
     return NextResponse.json(
-      { error: "Kullanıcı getirilirken bir hata oluştu" },
+      { error: "Failed to fetch user" },
       { status: 500 }
     );
   }
 }
 
-// Kullanıcıyı güncelle
+// Update a user
 export async function PUT(
   request: Request,
   { params }: { params: { id: string } }
 ) {
   try {
-    const { name, email, password, role, status } = await request.json();
+    // const session = await getServerSession(authOptions); // NextAuth yerine kendi oturum kontrolünü kullan
+    const session = await getSession();
 
-    // Kullanıcıyı kontrol et
-    const existingUser = await prisma.user.findUnique({
-      where: { id: params.id },
-    });
-
-    if (!existingUser) {
-      return NextResponse.json(
-        { error: "Kullanıcı bulunamadı" },
-        { status: 404 }
-      );
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    // Güncelleme verilerini hazırla
+    // Only allow users to update their own profile or admins to update any profile
+    if (session.user.id !== params.id && session.user.role !== "ADMIN") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    const { name, email, password, role, status } = await request.json();
+
+    // Prepare update data
     const updateData: any = {};
     if (name) updateData.name = name;
     if (email) updateData.email = email;
-    if (role) updateData.role = role;
-    if (status) updateData.status = status;
-    if (password) {
-      updateData.password = await bcrypt.hash(password, 10);
+    if (password) updateData.password = await bcrypt.hash(password, 10);
+
+    // Only allow admins to update role and status
+    if (session.user.role === "ADMIN") {
+      if (role) updateData.role = role;
+      if (status) updateData.status = status;
     }
 
-    // Kullanıcıyı güncelle
-    const updatedUser = await prisma.user.update({
+    const user = await prisma.user.update({
       where: { id: params.id },
       data: updateData,
       select: {
@@ -106,48 +90,42 @@ export async function PUT(
         email: true,
         role: true,
         status: true,
-        updatedAt: true,
+        createdAt: true,
       },
     });
 
-    return NextResponse.json(updatedUser);
+    return NextResponse.json(user);
   } catch (error) {
     console.error("Error updating user:", error);
     return NextResponse.json(
-      { error: "Kullanıcı güncellenirken bir hata oluştu" },
+      { error: "Failed to update user" },
       { status: 500 }
     );
   }
 }
 
-// Kullanıcıyı sil
+// Delete a user
 export async function DELETE(
   request: Request,
   { params }: { params: { id: string } }
 ) {
   try {
-    // Kullanıcıyı kontrol et
-    const existingUser = await prisma.user.findUnique({
-      where: { id: params.id },
-    });
+    // const session = await getServerSession(authOptions); // NextAuth yerine kendi oturum kontrolünü kullan
+    const session = await getSession();
 
-    if (!existingUser) {
-      return NextResponse.json(
-        { error: "Kullanıcı bulunamadı" },
-        { status: 404 }
-      );
+    if (!session || session.user.role !== "ADMIN") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    // Kullanıcıyı sil
     await prisma.user.delete({
       where: { id: params.id },
     });
 
-    return NextResponse.json({ message: "Kullanıcı başarıyla silindi" });
+    return NextResponse.json({ message: "User deleted successfully" });
   } catch (error) {
     console.error("Error deleting user:", error);
     return NextResponse.json(
-      { error: "Kullanıcı silinirken bir hata oluştu" },
+      { error: "Failed to delete user" },
       { status: 500 }
     );
   }

@@ -4,51 +4,33 @@ import { Inter } from "next/font/google";
 import "../globals.css";
 import { cookies } from "next/headers";
 import { AppSidebar } from "@/components/app-sidebar";
-import {
-  SidebarProvider,
-  SidebarInset,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/toaster";
 
 const inter = Inter({ subsets: ["latin"] });
 
+interface DashboardLayoutProps {
+  children: React.ReactNode;
+}
+
 export default async function DashboardLayout({
   children,
-}: {
-  children: React.ReactNode;
-}) {
-  // Sidebar durumunu cookie'den al
+}: DashboardLayoutProps) {
   const cookieStore = await cookies();
-  const defaultOpen = cookieStore.get("sidebar:state")?.value === "true";
+  const sidebarStateCookie = cookieStore.get("sidebar:state");
+  const defaultOpen = sidebarStateCookie
+    ? sidebarStateCookie.value === "true"
+    : true;
 
-  return (
+return (
     <html lang="tr" suppressHydrationWarning>
-      {/* ThemeProvider'ı body ETRAFINA sarın */}
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="dark"
-        enableSystem={false}
-        disableTransitionOnChange
-      >
-        <body className={`${inter.className} antialiased`}>
-          <SidebarProvider defaultOpen={defaultOpen}>
-            <AppSidebar />
-            <SidebarInset className="cyberpunk-grid">
-              <header className="flex h-16 items-center gap-4 border-b border-purple-500/30 px-6">
-                <SidebarTrigger />
-                <div className="flex-1">
-                  <h1 className="text-lg font-semibold">
-                    Tarım Yönetim Sistemi
-                  </h1>
-                </div>
-              </header>
-              {children}
-            </SidebarInset>
-          </SidebarProvider>
-          <Toaster />
-        </body>
-      </ThemeProvider>
+      <body className={inter.className}>
+        <SidebarProvider defaultOpen={defaultOpen}>
+          <AppSidebar />
+          <SidebarInset className="cyberpunk-grid">{children}</SidebarInset>
+        </SidebarProvider>
+        <Toaster />
+      </body>
     </html>
   );
 }

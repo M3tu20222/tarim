@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// Tüm tarlaları getir
 export async function GET(request: Request) {
   try {
     const userId = request.headers.get("x-user-id");
@@ -21,11 +20,15 @@ export async function GET(request: Request) {
       // Admin tüm tarlaları görebilir
       fields = await prisma.field.findMany({
         include: {
-          owner: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
+          owners: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
             },
           },
           crops: true,
@@ -36,14 +39,22 @@ export async function GET(request: Request) {
       // Sahip sadece kendi tarlalarını görebilir
       fields = await prisma.field.findMany({
         where: {
-          ownerId: userId,
+          owners: {
+            some: {
+              userId: userId,
+            },
+          },
         },
         include: {
-          owner: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
+          owners: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
             },
           },
           crops: true,
@@ -52,19 +63,24 @@ export async function GET(request: Request) {
       });
     } else if (userRole === "WORKER") {
       // İşçi sadece kendisine atanan tarlaları görebilir
-      // Not: Burada workers ilişkisi yerine başka bir yaklaşım kullanmalıyız
-      // Örneğin, bir FieldWorker ara tablosu oluşturulabilir
       fields = await prisma.field.findMany({
         where: {
-          // Şu anda workers ilişkisi olmadığı için geçici olarak tüm tarlaları gösterelim
-          // Gerçek uygulamada bu kısım düzeltilmelidir
+          workerAssignments: {
+            some: {
+              userId: userId,
+            },
+          },
         },
         include: {
-          owner: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
+          owners: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
             },
           },
           crops: true,
@@ -137,17 +153,24 @@ export async function POST(request: Request) {
         size,
         coordinates,
         status,
-        owner: {
-          connect: { id: owner },
+        owners: {
+          create: {
+            user: {
+              connect: { id: owner },
+            },
+          },
         },
-        // workers ilişkisi şu anda desteklenmiyor, bu kısmı kaldırdık
       },
       include: {
-        owner: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
+        owners: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
           },
         },
       },

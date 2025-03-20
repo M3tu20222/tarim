@@ -26,3 +26,9 @@ export type FieldUpdateInput = {
   status?: "ACTIVE" | "FALLOW" | "HARVESTED";
   ownerId?: string;
 };
+
+export interface InventoryCategoryType {
+  id: string;
+  name: string;
+  description?: string;
+}

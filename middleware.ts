@@ -1,121 +1,77 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { verifyToken } from "./lib/jwt";
 
-// Edge-compatible JWT verification
-function isTokenValid(token: string): { valid: boolean; decoded?: any } {
-  try {
-    // JWT'yi manuel olarak decode et
-    const parts = token.split(".");
-    if (parts.length !== 3) {
-      return { valid: false };
-    }
+export async function middleware(request: NextRequest) {
+  const cookieStore = request.cookies;
+  const token = cookieStore.get("token")?.value;
 
-    // Payload'ı decode et (JWT'nin ikinci kısmı)
-    const payload = JSON.parse(atob(parts[1]));
-
-    // Token'ın süresi dolmuş mu kontrol et
-    const now = Math.floor(Date.now() / 1000);
-    if (payload.exp && payload.exp < now) {
-      return { valid: false };
-    }
-
-    // Not: Bu basit bir doğrulama. Gerçek bir imza doğrulaması yapmıyor.
-    // Üretim ortamında jose gibi Edge-compatible bir kütüphane kullanılmalıdır.
-    return { valid: true, decoded: payload };
-  } catch (error) {
-    console.error("Token doğrulama hatası:", error);
-    return { valid: false };
-  }
-}
-
-export function middleware(request: NextRequest) {
-  // Dashboard rotalarını kontrol et
-  if (request.nextUrl.pathname.startsWith("/dashboard")) {
-    // Token kontrolü - hem cookie'den hem de Authorization header'dan kontrol et
-    const cookieToken = request.cookies.get("token")?.value;
-    const authHeader = request.headers.get("authorization");
-    const headerToken = authHeader?.startsWith("Bearer ")
-      ? authHeader.split(" ")[1]
-      : null;
-    const token = headerToken || cookieToken;
-
-    // Token yoksa login sayfasına yönlendir
-    if (!token) {
-      console.log("Token bulunamadı, login sayfasına yönlendiriliyor");
-      return NextResponse.redirect(new URL("/auth", request.url));
-    }
-
-    // Token'ı doğrula
-    const { valid, decoded } = isTokenValid(token);
-
-    if (!valid) {
-      console.log("Token geçersiz, login sayfasına yönlendiriliyor");
-      return NextResponse.redirect(new URL("/auth", request.url));
-    }
-
-    // Token geçerliyse devam et
-    const requestHeaders = new Headers(request.headers);
-    if (decoded) {
-      requestHeaders.set("x-user-id", decoded.id);
-      requestHeaders.set("x-user-role", decoded.role);
-    }
-
-    return NextResponse.next({
-      request: {
-        headers: requestHeaders,
-      },
-    });
-  }
-
-  // API rotalarını kontrol et
+  // Herkese açık rotalar (login ve register)
   if (
-    request.nextUrl.pathname.startsWith("/api/") &&
-    !request.nextUrl.pathname.startsWith("/api/auth/")
+    request.nextUrl.pathname.startsWith("/api/auth/login") ||
+    request.nextUrl.pathname.startsWith("/api/auth/register") ||
+    request.nextUrl.pathname === "/login" // API olmayan /login rotası
   ) {
-    // Authorization header'ı al
-    const authHeader = request.headers.get("authorization");
-    const token = authHeader?.startsWith("Bearer ")
-      ? authHeader.split(" ")[1]
-      : null;
-    const cookieToken = request.cookies.get("token")?.value;
-    const finalToken = token || cookieToken;
-
-    if (!finalToken) {
-      return NextResponse.json(
-        { error: "Kimlik doğrulama gerekli" },
-        { status: 401 }
-      );
-    }
-
-    // Token'ı doğrula
-    const { valid, decoded } = isTokenValid(finalToken);
-
-    if (!valid) {
-      return NextResponse.json(
-        { error: "Geçersiz veya süresi dolmuş token" },
-        { status: 401 }
-      );
-    }
-
-    // İsteği devam ettir
-    const requestHeaders = new Headers(request.headers);
-    if (decoded) {
-      requestHeaders.set("x-user-id", decoded.id);
-      requestHeaders.set("x-user-role", decoded.role);
-    }
-
-    return NextResponse.next({
-      request: {
-        headers: requestHeaders,
-      },
-    });
+    return NextResponse.next(); // Bu rotalara müdahale etme
   }
 
-  // API olmayan rotalar için normal akışa devam et
-  return NextResponse.next();
+  if (!token) {
+    // Token yoksa ve istek herkese açık olmayan bir rotaya yapılıyorsa, login'e yönlendir
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  try {
+    // Token'ı doğrula
+    const decoded = await verifyToken(token);
+
+    // Yetkilendirme kontrolü (örneğin, sadece admin'lerin erişebileceği bir rota)
+    if (
+      request.nextUrl.pathname.startsWith("/admin") &&
+      decoded.role !== "ADMIN"
+    ) {
+      return NextResponse.redirect(new URL("/", request.url)); // Ana sayfaya yönlendir
+    }
+
+    // API rotaları için yetkilendirme (x-user-id ve x-user-role header'ları)
+    if (
+      request.nextUrl.pathname.startsWith("/api/") &&
+      !request.nextUrl.pathname.startsWith("/api/auth/")
+    ) {
+      const requestHeaders = new Headers(request.headers);
+      requestHeaders.set("x-user-id", decoded.id);
+      requestHeaders.set("x-user-role", decoded.role);
+      return NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      });
+    }
+
+    // Dashboard rotaları için yetkilendirme (x-user-id ve x-user-role header'ları)
+    if (request.nextUrl.pathname.startsWith("/dashboard")) {
+      const requestHeaders = new Headers(request.headers);
+      requestHeaders.set("x-user-id", decoded.id);
+      requestHeaders.set("x-user-role", decoded.role);
+      return NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      });
+    }
+
+    return NextResponse.next();
+  } catch (error) {
+    // Token geçersizse, login sayfasına yönlendir
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
 }
 
-// Middleware'in çalışacağı rotaları belirt
+// Hangi rotalarda middleware'in çalışacağını belirt (daha basit matcher)
 export const config = {
-  matcher: ["/dashboard/:path*", "/api/:path*"],
+  matcher: [
+    "/dashboard/:path*", // Dashboard ve alt sayfaları
+    "/api/:path*", // API rotaları (auth hariç)
+    "/", // Ana sayfa (eğer middleware tarafından korunuyorsa)
+    // '/((?!_next/static|_next/image|favicon.ico).*)', // Diğer dosyalar (gerekli olmayabilir)
+  ],
 };
