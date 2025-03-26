@@ -54,6 +54,7 @@ async function main() {
   console.log({ admin, owner, worker });
 
   // Örnek tarlalar oluştur
+  // Önce FieldOwnership kayıtlarını oluştur
   const field1 = await prisma.field.create({
     data: {
       name: "Merkez Tarla",
@@ -61,7 +62,11 @@ async function main() {
       size: 120,
       status: FieldStatus.ACTIVE,
       owners: {
-        connect: { id: owner.id },
+        create: {
+          user: {
+            connect: { id: owner.id }
+          }
+        }
       },
       workerAssignments: {
         create: [{ userId: worker.id }],
@@ -76,7 +81,11 @@ async function main() {
       size: 85,
       status: FieldStatus.ACTIVE,
       owners: {
-        connect: { id: owner.id },
+        create: {
+          user: {
+            connect: { id: owner.id }
+          }
+        }
       },
       workerAssignments: {
         create: [{ userId: worker.id }],
