@@ -49,6 +49,13 @@ import { Unit } from "@prisma/client";
 import { useAuth } from "@/components/auth-provider";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
+// Sezon tipi tanımı
+interface Season {
+  id: string;
+  name: string;
+  isActive: boolean;
+}
+
 // Partner schema for validation
 const partnerSchema = z.object({
   userId: z.string({
@@ -91,6 +98,9 @@ const formSchema = z.object({
   }),
   isTemplate: z.boolean().default(false),
   templateName: z.string().optional(),
+  seasonId: z.string().optional(), // Sezon ID'si eklendi
+  approvalRequired: z.boolean().default(false),
+  approvalThreshold: z.number().optional(),
 });
 
 export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
@@ -102,6 +112,8 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
   const [totalPercentage, setTotalPercentage] = useState(0);
   const [templates, setTemplates] = useState<any[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
+  const [seasons, setSeasons] = useState<Season[]>([]); // Sezonlar için state eklendi
+  const [activeSeasonId, setActiveSeasonId] = useState<string | null>(null); // Aktif sezon için state eklendi
 
   // Initialize form with current user as first partner
   const form = useForm<z.infer<typeof formSchema>>({
@@ -117,6 +129,7 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
       notes: "",
       isTemplate: false,
       templateName: "",
+      seasonId: "", // Sezon ID'si için varsayılan değer
       partners: user
         ? [
             {
@@ -127,6 +140,8 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
             },
           ]
         : [],
+      approvalRequired: false,
+      approvalThreshold: undefined,
     },
   });
 
@@ -159,7 +174,7 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
     setTotalPercentage(total);
   }, [partners]);
 
-  // Fetch users from API
+  // Fetch users, templates and seasons from API
   useEffect(() => {
     const fetchUsers = async () => {
       try {
@@ -185,9 +200,29 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
       }
     };
 
+    const fetchSeasons = async () => {
+      try {
+        const response = await fetch("/api/seasons");
+        if (response.ok) {
+          const data = await response.json();
+          setSeasons(data);
+
+          // Aktif sezonu bul ve form değerini güncelle
+          const activeSeason = data.find((season: Season) => season.isActive);
+          if (activeSeason) {
+            setActiveSeasonId(activeSeason.id);
+            form.setValue("seasonId", activeSeason.id);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching seasons:", error);
+      }
+    };
+
     fetchUsers();
     fetchTemplates();
-  }, []);
+    fetchSeasons(); // Sezonları getir
+  }, [form]);
 
   // Fetch template data if templateId is provided
   useEffect(() => {
@@ -210,6 +245,7 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
               notes: template.description,
               isTemplate: false,
               templateName: "",
+              seasonId: activeSeasonId || "", // Aktif sezon ID'sini kullan
               partners: template.contributors.map((contributor: any) => ({
                 userId: contributor.userId,
                 userName: contributor.user.name,
@@ -226,7 +262,7 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
 
       fetchTemplate();
     }
-  }, [templateId, form]);
+  }, [templateId, form, activeSeasonId]);
 
   // Handle template selection
   const handleTemplateChange = async (templateId: string) => {
@@ -251,6 +287,7 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
           notes: template.description,
           isTemplate: false,
           templateName: "",
+          seasonId: activeSeasonId || "", // Aktif sezon ID'sini kullan
           partners: template.contributors.map((contributor: any) => ({
             userId: contributor.userId,
             userName: contributor.user.name,
@@ -568,6 +605,86 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
               </FormItem>
             )}
           />
+
+          {/* Sezon seçimi alanı */}
+          <FormField
+            control={form.control}
+            name="seasonId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Sezon</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sezon seçin" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {seasons.length === 0 ? (
+                      <SelectItem value="" disabled>
+                        Sezon bulunamadı
+                      </SelectItem>
+                    ) : (
+                      seasons.map((season) => (
+                        <SelectItem key={season.id} value={season.id}>
+                          {season.name} {season.isActive && "(Aktif)"}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="approvalRequired"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between space-x-3 space-y-0 rounded-md border p-4">
+                <div className="space-y-1 leading-none">
+                  <FormLabel>Onay Gerekli</FormLabel>
+                  <FormDescription>
+                    Bu alış için onay gerekip gerekmediğini belirtin
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          {form.watch("approvalRequired") && (
+            <FormField
+              control={form.control}
+              name="approvalThreshold"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Onay Eşiği (₺)</FormLabel>
+                  <FormDescription>
+                    Bu tutarın üzerindeki alışlar için onay gerekir
+                  </FormDescription>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="100"
+                      {...field}
+                      onChange={(e) =>
+                        field.onChange(Number.parseFloat(e.target.value))
+                      }
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
 
           <FormField
             control={form.control}

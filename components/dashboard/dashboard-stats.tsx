@@ -1,3 +1,4 @@
+// components/dashboard/dashboard-stats.tsx
 "use client"; // Client Component olduğunu belirt
 
 import {
@@ -12,9 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 interface DashboardStatsProps {
-  label: string;
-  value: string | number;
-  description: string;
+  statTitle: string; // Düzeltildi
+  statValue: string | number; // Düzeltildi
+  statDescription: string; // Düzeltildi
   trend: "up" | "down";
   trendValue: string | number;
   icon?: string;
@@ -22,9 +23,9 @@ interface DashboardStatsProps {
 }
 
 export function DashboardStats({
-  label,
-  value,
-  description,
+  statTitle, // Düzeltildi
+  statValue, // Düzeltildi
+  statDescription, // Düzeltildi
   trend,
   trendValue,
   icon,
@@ -33,11 +34,11 @@ export function DashboardStats({
   return (
     <Card className={cn("shadow-sm", className)}>
       <CardHeader className="pb-0">
-        <CardTitle>{label}</CardTitle>
+        <CardTitle>{statTitle}</CardTitle> {/* Düzeltildi */}
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        <CardDescription>{description}</CardDescription>
+        <div className="text-2xl font-bold">{statValue}</div> {/* Düzeltildi */}
+        <CardDescription>{statDescription}</CardDescription> {/* Düzeltildi */}
       </CardContent>
       <CardFooter>
         <Badge

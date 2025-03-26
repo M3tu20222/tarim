@@ -22,18 +22,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="tr" suppressHydrationWarning>
+    <html lang="tr" suppressHydrationWarning className="dark">
       <body
         className={cn(
-          "min-h-screen bg-background font-sans antialiased",
+          "min-h-screen bg-background font-sans antialiased cyberpunk-grid",
           fontSans.variable
         )}
       >
         <AuthProvider>
           <ThemeProvider
             attribute="class"
-            defaultTheme="system"
-            enableSystem
+            defaultTheme="dark"
+            forcedTheme="dark"
             disableTransitionOnChange
           >
             {children}

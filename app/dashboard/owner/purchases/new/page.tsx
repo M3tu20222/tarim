@@ -24,12 +24,12 @@ export const metadata: Metadata = {
   description: "Yeni alış oluşturma sayfası",
 };
 
-export default function NewPurchasePage({
+export default async function NewPurchasePage({
   searchParams,
 }: {
   searchParams: { templateId?: string };
 }) {
-  const templateId = searchParams.templateId;
+  const templateId = await searchParams.templateId;
 
   return (
     <div className="flex flex-col gap-4 p-4 md:p-8">

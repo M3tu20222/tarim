@@ -34,9 +34,33 @@ model User {
   inventoryUsages       InventoryUsage[]
   processes             Process[]
   invoicesPurchased     Invoice[]               @relation("InvoicePurchaser")
-  paymentsMade          PaymentHistory[]        @relation("PaymentsMade") // YENİ
-  paymentsReceived      PaymentHistory[]        @relation("PaymentsReceived") // YENİ
-  inventoryTransactions InventoryTransaction[]  // YENİ
+  paymentsMade          PaymentHistory[]        @relation("PaymentsMade")
+  paymentsReceived      PaymentHistory[]        @relation("PaymentsReceived")
+  inventoryTransactions InventoryTransaction[]
+  seasons               Season[]                @relation("SeasonCreator") // YENİ: Sezon oluşturucu ilişkisi
+  purchaseApprovals     PurchaseApproval[]      // YENİ: Alış onayları
+}
+
+// YENİ: Sezon Modeli
+model Season {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String   // Örn: "2023-2024 Kış Sezonu"
+  startDate   DateTime
+  endDate     DateTime
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // İlişkiler
+  creator   User    @relation("SeasonCreator", fields: [creatorId], references: [id])
+  creatorId String  @db.ObjectId
+  fields    Field[] // Tarlalar
+  crops     Crop[]  // Ekinler
+  purchases Purchase[] // Alışlar
+  inventoryTransactions InventoryTransaction[] // Envanter işlemleri
+  processes Process[] // İşlemler
+  irrigationLogs IrrigationLog[] // Sulama kayıtları
 }
 
 // Tarla Modeli
@@ -49,6 +73,10 @@ model Field {
   status      FieldStatus @default(ACTIVE)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
+  
+  // YENİ: Sezon ilişkisi
+  season   Season? @relation(fields: [seasonId], references: [id])
+  seasonId String? @db.ObjectId
 
   // İlişkiler
   owners            FieldOwnership[]        @relation("FieldOwnerAssignments") // Tarla sahipleri
@@ -116,6 +144,10 @@ model Crop {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
+  // YENİ: Sezon ilişkisi
+  season   Season? @relation(fields: [seasonId], references: [id])
+  seasonId String? @db.ObjectId
+
   // İlişkiler
   field   Field  @relation(fields: [fieldId], references: [id])
   fieldId String @db.ObjectId
@@ -131,6 +163,10 @@ model IrrigationLog {
   notes     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // YENİ: Sezon ilişkisi
+  season   Season? @relation(fields: [seasonId], references: [id])
+  seasonId String? @db.ObjectId
 
   // İlişkiler
   field     Field  @relation(fields: [fieldId], references: [id])
@@ -189,24 +225,47 @@ model InventoryOwnership {
 
 // Alış Modeli
 model Purchase {
-  id            String        @id @default(auto()) @map("_id") @db.ObjectId
+  id            String            @id @default(auto()) @map("_id") @db.ObjectId
   product       String
+  category      ProductCategory   @default(FERTILIZER) // YENİ: Ürün kategorisi
   quantity      Float
-  unit          Unit          @default(KG) // Birim alanını ekleyelim
+  unit          Unit              @default(KG) // Birim alanını ekleyelim
   unitPrice     Float
   totalCost     Float
   paymentMethod PaymentMethod
   dueDate       DateTime? // Ödeme vadesi (ör: 3 ay sonra)
   description   String?
-  createdAt     DateTime      @default(now())
-  isTemplate    Boolean       @default(false) // YENİ: Şablon mu?
-  templateName  String?       // YENİ: Şablon adı
+  createdAt     DateTime          @default(now())
+  isTemplate    Boolean           @default(false) // YENİ: Şablon mu?
+  templateName  String?           // YENİ: Şablon adı
+  approvalStatus ApprovalStatus   @default(PENDING) // YENİ: Onay durumu
+  approvalRequired Boolean        @default(true) // YENİ: Onay gerekli mi?
+  approvalThreshold Float         @default(1000) // YENİ: Onay eşiği (TL)
+
+  // YENİ: Sezon ilişkisi
+  season   Season? @relation(fields: [seasonId], references: [id])
+  seasonId String? @db.ObjectId
 
   // İlişkiler
   contributors         PurchaseContributor[]
   debts                Debt[]                @relation("PurchaseDebts")
   invoices             Invoice[]             @relation("PurchaseInvoices")
   inventoryTransactions InventoryTransaction[] // YENİ
+  approvals            PurchaseApproval[]    // YENİ: Onaylar
+}
+
+// YENİ: Alış Onay Modeli
+model PurchaseApproval {
+  id            String         @id @default(auto()) @map("_id") @db.ObjectId
+  purchase      Purchase       @relation(fields: [purchaseId], references: [id])
+  purchaseId    String         @db.ObjectId
+  approver      User           @relation(fields: [approverId], references: [id])
+  approverId    String         @db.ObjectId
+  status        ApprovalStatus @default(PENDING)
+  comment       String?
+  approvedAt    DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }
 
 // Alış Katılımcıları (Genişletilmiş)
@@ -239,7 +298,7 @@ model PaymentHistory {
   paymentMethod PaymentMethod
   notes         String?
   createdAt     DateTime      @default(now())
-  
+
   // İlişkiler
   debt          Debt?         @relation(fields: [debtId], references: [id])
   debtId        String?       @db.ObjectId
@@ -259,7 +318,11 @@ model InventoryTransaction {
   date          DateTime
   notes         String?
   createdAt     DateTime         @default(now())
-  
+
+  // YENİ: Sezon ilişkisi
+  season   Season? @relation(fields: [seasonId], references: [id])
+  seasonId String? @db.ObjectId
+
   // İlişkiler
   inventory     Inventory        @relation(fields: [inventoryId], references: [id])
   inventoryId   String           @db.ObjectId
@@ -278,6 +341,8 @@ model Debt {
   description String?
   createdAt   DateTime   @default(now())
   paymentDate DateTime?
+  reminderSent Boolean   @default(false) // YENİ: Hatırlatma gönderildi mi?
+  lastReminderDate DateTime? // YENİ: Son hatırlatma tarihi
 
   // Borç nedeni (alış, fatura vb.)
   reason      String?
@@ -340,6 +405,11 @@ model Process {
   workerId        String           @db.ObjectId
   date            DateTime
   description     String?
+  
+  // YENİ: Sezon ilişkisi
+  season   Season? @relation(fields: [seasonId], references: [id])
+  seasonId String? @db.ObjectId
+  
   inventoryUsages InventoryUsage[]
 }
 
@@ -399,6 +469,17 @@ enum InventoryCategory {
   OTHER
 }
 
+// YENİ: Ürün Kategorisi Enum
+enum ProductCategory {
+  FERTILIZER // Gübre
+  FEED       // Besleme
+  PESTICIDE  // İlaç
+  FUEL       // Yakıt
+  SEED       // Tohum
+  EQUIPMENT  // Ekipman
+  OTHER      // Diğer
+}
+
 enum InventoryStatus {
   AVAILABLE
   LOW_STOCK
@@ -450,6 +531,8 @@ enum NotificationType {
   INVENTORY
   INVOICE
   DEBT
+  APPROVAL // YENİ: Onay bildirimi
+  REMINDER // YENİ: Hatırlatma bildirimi
   OTHER
 }
 
@@ -459,6 +542,14 @@ enum TransactionType {
   USAGE
   TRANSFER
   ADJUSTMENT
+}
+
+// YENİ: Onay Durumu Enum
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
 }
 
 enum Unit {

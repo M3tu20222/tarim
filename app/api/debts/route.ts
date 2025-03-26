@@ -1,42 +1,53 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-// import { getServerSession } from "next-auth"; // KALDIR
-// import { authOptions } from "../auth/[...nextauth]/route"; // KALDIR (ve dosyayı sil)
-import { getSession } from "@/lib/session"; // Kendi oturum kontrol fonksiyonunu ekle
 
-// Get all debts
+// Borçları getir
 export async function GET(request: Request) {
   try {
-    // const session = await getServerSession(authOptions); // KALDIR
-    const session = await getSession(); // Kendi oturum kontrolünü kullan
+    const userId = request.headers.get("x-user-id");
+    const userRole = request.headers.get("x-user-role");
 
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    if (!userId || !userRole) {
+      return NextResponse.json(
+        { error: "Kullanıcı ID'si veya rolü eksik" },
+        { status: 401 }
+      );
     }
 
+    // URL parametrelerini al
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
     const status = searchParams.get("status");
-    const type = searchParams.get("type"); // 'given' or 'taken'
+    const creditorId = searchParams.get("creditorId");
+    const debtorId = searchParams.get("debtorId");
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
 
-    const where: any = {};
-
-    if (userId) {
-      if (type === "given") {
-        where.creditorId = userId;
-      } else if (type === "taken") {
-        where.debtorId = userId;
-      } else {
-        where.OR = [{ creditorId: userId }, { debtorId: userId }];
-      }
-    }
-
+    // Filtre oluştur
+    const filter: any = {};
     if (status) {
-      where.status = status;
+      filter.status = status;
+    }
+    if (creditorId) {
+      filter.creditorId = creditorId;
+    }
+    if (debtorId) {
+      filter.debtorId = debtorId;
+    }
+    if (startDate && endDate) {
+      filter.dueDate = {
+        gte: new Date(startDate),
+        lte: new Date(endDate),
+      };
     }
 
+    // Sadece admin ve sahip kullanıcılar tüm borçları görebilir
+    if (userRole !== "ADMIN" && userRole !== "OWNER") {
+      filter.OR = [{ creditorId: userId }, { debtorId: userId }];
+    }
+
+    // Borçları getir
     const debts = await prisma.debt.findMany({
-      where,
+      where: filter,
       include: {
         creditor: {
           select: {
@@ -52,100 +63,110 @@ export async function GET(request: Request) {
             email: true,
           },
         },
-        purchase: true,
-        invoice: true,
+        paymentHistory: true,
       },
-      orderBy: {
-        dueDate: "asc",
-      },
+      orderBy: [{ status: "asc" }, { dueDate: "asc" }],
     });
 
     return NextResponse.json(debts);
   } catch (error) {
     console.error("Error fetching debts:", error);
     return NextResponse.json(
-      { error: "Failed to fetch debts" },
+      { error: "Borçlar getirilirken bir hata oluştu" },
       { status: 500 }
     );
   }
 }
 
-// Create a new debt
+// Yeni borç oluştur
 export async function POST(request: Request) {
   try {
-    // const session = await getServerSession(authOptions); // KALDIR
-    const session = await getSession(); // Kendi oturum kontrolünü kullan
+    const userId = request.headers.get("x-user-id");
+    const userRole = request.headers.get("x-user-role");
 
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    if (!userId || !userRole) {
+      return NextResponse.json(
+        { error: "Kullanıcı ID'si veya rolü eksik" },
+        { status: 401 }
+      );
     }
 
-    const {
-      amount,
-      dueDate,
-      status,
-      description,
-      creditorId,
-      debtorId,
-      purchaseId,
-      invoiceId,
-    } = await request.json();
-
-    // Validate input
-    if (!amount || !dueDate || !creditorId || !debtorId) {
+    // Sadece admin ve sahip kullanıcılar borç oluşturabilir
+    if (userRole !== "ADMIN" && userRole !== "OWNER") {
       return NextResponse.json(
-        { error: "Required fields are missing" },
+        { error: "Bu işlem için yetkiniz yok" },
+        { status: 403 }
+      );
+    }
+
+    const { amount, dueDate, description, creditorId, debtorId, reason } =
+      await request.json();
+
+    // Veri doğrulama
+    if (!amount || amount <= 0) {
+      return NextResponse.json(
+        { error: "Borç tutarı pozitif bir sayı olmalıdır" },
         { status: 400 }
       );
     }
 
+    if (!dueDate) {
+      return NextResponse.json(
+        { error: "Vade tarihi zorunludur" },
+        { status: 400 }
+      );
+    }
+
+    if (!creditorId) {
+      return NextResponse.json(
+        { error: "Alacaklı seçilmelidir" },
+        { status: 400 }
+      );
+    }
+
+    if (!debtorId) {
+      return NextResponse.json(
+        { error: "Borçlu seçilmelidir" },
+        { status: 400 }
+      );
+    }
+
+    // Borç oluştur
     const debt = await prisma.debt.create({
       data: {
         amount,
         dueDate: new Date(dueDate),
-        status: status || "PENDING",
         description,
-        creditorId,
-        debtorId,
-        purchaseId,
-        invoiceId,
-      },
-      include: {
+        reason,
         creditor: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
+          connect: { id: creditorId },
         },
         debtor: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
+          connect: { id: debtorId },
         },
       },
     });
 
-    // Create notification for debtor
+    // Bildirim oluştur
     await prisma.notification.create({
       data: {
-        title: "New Debt Created",
-        message: `You have a new debt of ${amount} due on ${new Date(
-          dueDate
-        ).toLocaleDateString()}`,
+        title: "Yeni Borç",
+        message: `${amount.toFixed(2)} ₺ tutarında yeni bir borç kaydı oluşturuldu. Vade tarihi: ${new Date(dueDate).toLocaleDateString("tr-TR")}`,
         type: "DEBT",
-        receiverId: debtorId,
-        senderId: creditorId,
+        receiver: {
+          connect: { id: debtorId },
+        },
+        sender: {
+          connect: { id: userId },
+        },
       },
     });
 
-    return NextResponse.json(debt, { status: 201 });
+    return NextResponse.json(debt);
   } catch (error) {
     console.error("Error creating debt:", error);
     return NextResponse.json(
-      { error: "Failed to create debt" },
+      { error: "Borç oluşturulurken bir hata oluştu" },
       { status: 500 }
     );
   }

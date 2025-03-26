@@ -1,368 +1,217 @@
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import {
+  PrismaClient,
+  Role,
+  Status,
+  FieldStatus,
+  CropStatus,
+} from "@prisma/client";
+import * as bcrypt from "bcrypt";
 
-// Ödeme geçmişini getir
-export async function GET(request: Request) {
-  try {
-    // Yetkilendirme kontrolü
-    const userId = request.headers.get("x-user-id");
-    const userRole = request.headers.get("x-user-role");
+const prisma = new PrismaClient();
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: "Kimlik doğrulama gerekli" },
-        { status: 401 }
-      );
-    }
+async function main() {
+  // Kullanıcılar oluştur
+  const adminPassword = await bcrypt.hash("admin123", 10);
+  const ownerPassword = await bcrypt.hash("owner123", 10);
+  const workerPassword = await bcrypt.hash("worker123", 10);
 
-    const { searchParams } = new URL(request.url);
-    const debtId = searchParams.get("debtId");
-    const contributorId = searchParams.get("contributorId");
+  const admin = await prisma.user.upsert({
+    where: { email: "admin@example.com" },
+    update: {},
+    create: {
+      name: "Admin Kullanıcı",
+      email: "admin@example.com",
+      password: adminPassword,
+      role: Role.ADMIN,
+      status: Status.ACTIVE,
+    },
+  });
 
-    let payments;
+  const owner = await prisma.user.upsert({
+    where: { email: "owner@example.com" },
+    update: {},
+    create: {
+      name: "Tarla Sahibi",
+      email: "owner@example.com",
+      password: ownerPassword,
+      role: Role.OWNER,
+      status: Status.ACTIVE,
+    },
+  });
 
-    if (debtId) {
-      // Belirli bir borcun ödemelerini getir
-      payments = await prisma.paymentHistory.findMany({
-        where: {
-          debtId,
-        },
-        include: {
-          payer: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-          receiver: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-          debt: true,
-        },
-        orderBy: {
-          paymentDate: "desc",
-        },
-      });
-    } else if (contributorId) {
-      // Belirli bir katkı sahibinin ödemelerini getir
-      payments = await prisma.paymentHistory.findMany({
-        where: {
-          contributorId,
-        },
-        include: {
-          payer: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-          receiver: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-          contributor: {
-            include: {
-              purchase: true,
-            },
-          },
-        },
-        orderBy: {
-          paymentDate: "desc",
-        },
-      });
-    } else {
-      // Kullanıcının tüm ödemelerini getir
-      if (userRole === "ADMIN") {
-        // Admin tüm ödemeleri görebilir
-        payments = await prisma.paymentHistory.findMany({
-          include: {
-            payer: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-            receiver: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-            debt: true,
-            contributor: {
-              include: {
-                purchase: true,
-              },
-            },
-          },
-          orderBy: {
-            paymentDate: "desc",
-          },
-        });
-      } else {
-        // Kullanıcı kendi ödemelerini görebilir
-        payments = await prisma.paymentHistory.findMany({
-          where: {
-            OR: [{ payerId: userId }, { receiverId: userId }],
-          },
-          include: {
-            payer: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-            receiver: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-            debt: true,
-            contributor: {
-              include: {
-                purchase: true,
-              },
-            },
-          },
-          orderBy: {
-            paymentDate: "desc",
-          },
-        });
-      }
-    }
+  const worker = await prisma.user.upsert({
+    where: { email: "worker@example.com" },
+    update: {},
+    create: {
+      name: "Tarla İşçisi",
+      email: "worker@example.com",
+      password: workerPassword,
+      role: Role.WORKER,
+      status: Status.ACTIVE,
+    },
+  });
 
-    return NextResponse.json(payments);
-  } catch (error) {
-    console.error("Error fetching payments:", error);
-    return NextResponse.json(
-      { error: "Ödemeler getirilirken bir hata oluştu" },
-      { status: 500 }
-    );
-  }
-}
+  console.log({ admin, owner, worker });
 
-// Yeni ödeme oluştur
-export async function POST(request: Request) {
-  try {
-    // Yetkilendirme kontrolü
-    const userId = request.headers.get("x-user-id");
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: "Kimlik doğrulama gerekli" },
-        { status: 401 }
-      );
-    }
-
-    const {
-      amount,
-      paymentDate,
-      paymentMethod,
-      notes,
-      debtId,
-      contributorId,
-      receiverId,
-    } = await request.json();
-
-    if (!amount || !paymentMethod || (!debtId && !contributorId)) {
-      return NextResponse.json(
-        { error: "Gerekli alanlar eksik" },
-        { status: 400 }
-      );
-    }
-
-    // İşlem başlat
-    const result = await prisma.$transaction(async (tx) => {
-      let debt;
-      let contributor;
-      let actualReceiverId = receiverId;
-
-      // Borç ödemesi
-      if (debtId) {
-        debt = await tx.debt.findUnique({
-          where: { id: debtId },
-        });
-
-        if (!debt) {
-          throw new Error("Borç bulunamadı");
-        }
-
-        actualReceiverId = debt.creditorId;
-
-        // Borç durumunu güncelle
-        if (amount >= debt.amount) {
-          // Tam ödeme
-          await tx.debt.update({
-            where: { id: debtId },
-            data: {
-              status: "PAID",
-              paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
-            },
-          });
-        } else {
-          // Kısmi ödeme
-          await tx.debt.update({
-            where: { id: debtId },
-            data: {
-              amount: debt.amount - amount,
-              status: "PARTIALLY_PAID",
-            },
-          });
-        }
-
-        // Borçla ilişkili katkı sahibini bul
-        if (debt.purchaseId) {
-          contributor = await tx.purchaseContributor.findFirst({
-            where: {
-              purchaseId: debt.purchaseId,
-              userId: debt.debtorId,
-            },
-          });
-
-          if (contributor) {
-            // Katkı sahibini güncelle
-            await tx.purchaseContributor.update({
-              where: { id: contributor.id },
-              data: {
-                actualContribution: { increment: amount },
-                remainingAmount: { decrement: amount },
-                hasPaid: amount >= (contributor.remainingAmount || 0),
-                paymentDate:
-                  amount >= (contributor.remainingAmount || 0)
-                    ? new Date()
-                    : null,
-              },
-            });
-          }
-        }
-      }
-      // Katkı sahibi ödemesi
-      else if (contributorId) {
-        contributor = await tx.purchaseContributor.findUnique({
-          where: { id: contributorId },
-          include: {
-            purchase: true,
-          },
-        });
-
-        if (!contributor) {
-          throw new Error("Katkı sahibi bulunamadı");
-        }
-
-        if (!actualReceiverId) {
-          // Alacaklıyı bul (kredi veren)
-          const creditor = await tx.purchaseContributor.findFirst({
-            where: {
-              purchaseId: contributor.purchaseId,
-              isCreditor: true,
-            },
-          });
-
-          if (creditor) {
-            actualReceiverId = creditor.userId;
-          } else {
-            throw new Error("Alacaklı bulunamadı");
-          }
-        }
-
-        // Katkı sahibini güncelle
-        await tx.purchaseContributor.update({
-          where: { id: contributorId },
-          data: {
-            actualContribution: { increment: amount },
-            remainingAmount: { decrement: amount },
-            hasPaid: amount >= (contributor.remainingAmount || 0),
-            paymentDate:
-              amount >= (contributor.remainingAmount || 0) ? new Date() : null,
-          },
-        });
-
-        // İlişkili borcu bul ve güncelle
-        if (contributor.purchase?.id) {
-          debt = await tx.debt.findFirst({
-            where: {
-              purchaseId: contributor.purchase.id,
-              debtorId: contributor.userId,
-            },
-          });
-
-          if (debt) {
-            if (amount >= debt.amount) {
-              // Tam ödeme
-              await tx.debt.update({
-                where: { id: debt.id },
-                data: {
-                  status: "PAID",
-                  paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
-                },
-              });
-            } else {
-              // Kısmi ödeme
-              await tx.debt.update({
-                where: { id: debt.id },
-                data: {
-                  amount: debt.amount - amount,
-                  status: "PARTIALLY_PAID",
-                },
-              });
-            }
-          }
-        }
-      }
-
-      // Ödeme geçmişi oluştur
-      const payment = await tx.paymentHistory.create({
-        data: {
-          amount,
-          paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
-          paymentMethod,
-          notes,
-          debtId: debt?.id,
-          contributorId: contributor?.id,
-          payerId: userId,
-          receiverId: actualReceiverId,
-        },
-      });
-
-      // Bildirim oluştur
-      await tx.notification.create({
-        data: {
-          title: "Ödeme Alındı",
-          message: `${amount} TL tutarında ödeme alındı.`,
-          type: "DEBT",
-          receiverId: actualReceiverId,
-          senderId: userId,
-        },
-      });
-
-      return payment;
-    });
-
-    return NextResponse.json(result, { status: 201 });
-  } catch (error) {
-    console.error("Error creating payment:", error);
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Ödeme oluşturulurken bir hata oluştu",
+  // Örnek tarlalar oluştur
+  const field1 = await prisma.field.create({
+    data: {
+      name: "Merkez Tarla",
+      location: "Adana, Merkez",
+      size: 120,
+      status: FieldStatus.ACTIVE,
+      owners: {
+        connect: { id: owner.id },
       },
-      { status: 500 }
-    );
-  }
+      workerAssignments: {
+        create: [{ userId: worker.id }],
+      },
+    },
+  });
+
+  const field2 = await prisma.field.create({
+    data: {
+      name: "Doğu Tarla",
+      location: "Adana, Ceyhan",
+      size: 85,
+      status: FieldStatus.ACTIVE,
+      owners: {
+        connect: { id: owner.id },
+      },
+      workerAssignments: {
+        create: [{ userId: worker.id }],
+      },
+    },
+  });
+
+  console.log({ field1, field2 });
+
+  // Örnek ürünler oluştur
+  const crop1 = await prisma.crop.create({
+    data: {
+      name: "Buğday",
+      plantedDate: new Date("2023-10-15"),
+      status: CropStatus.GROWING,
+      field: {
+        connect: { id: field1.id },
+      },
+    },
+  });
+
+  const crop2 = await prisma.crop.create({
+    data: {
+      name: "Mısır",
+      plantedDate: new Date("2023-09-20"),
+      status: CropStatus.GROWING,
+      field: {
+        connect: { id: field2.id },
+      },
+    },
+  });
+
+  console.log({ crop1, crop2 });
+
+  // Örnek sulama kayıtları oluştur
+  const irrigationLog1 = await prisma.irrigationLog.create({
+    data: {
+      date: new Date("2023-11-01"),
+      amount: 5000,
+      duration: 2.5,
+      method: "Damla Sulama",
+      field: {
+        connect: { id: field1.id },
+      },
+      worker: {
+        connect: { id: worker.id },
+      },
+    },
+  });
+
+  const irrigationLog2 = await prisma.irrigationLog.create({
+    data: {
+      date: new Date("2023-10-25"),
+      amount: 4500,
+      duration: 2.0,
+      method: "Yağmurlama",
+      field: {
+        connect: { id: field2.id },
+      },
+      worker: {
+        connect: { id: worker.id },
+      },
+    },
+  });
+
+  console.log({ irrigationLog1, irrigationLog2 });
+
+  // Örnek envanter oluştur
+  const inventory1 = await prisma.inventory.create({
+    data: {
+      name: "NPK Gübre",
+      category: "FERTILIZER",
+      totalQuantity: 500,
+      unit: "KG",
+      purchaseDate: new Date("2023-09-01"),
+      status: "AVAILABLE",
+      ownerships: {
+        connect: { id: owner.id },
+      },
+    },
+  });
+
+  const inventory2 = await prisma.inventory.create({
+    data: {
+      name: "Tohum - Buğday",
+      category: "SEED",
+      totalQuantity: 200,
+      unit: "KG",
+      purchaseDate: new Date("2023-08-15"),
+      status: "AVAILABLE",
+      ownerships: {
+        connect: { id: owner.id },
+      },
+    },
+  });
+
+  console.log({ inventory1, inventory2 });
+
+  // Örnek bildirimler oluştur
+  const notification1 = await prisma.notification.create({
+    data: {
+      title: "Sulama Hatırlatması",
+      message: "Merkez Tarla için sulama zamanı yaklaşıyor.",
+      type: "IRRIGATION",
+      receiver: {
+        connect: { id: owner.id },
+      },
+      sender: {
+        connect: { id: admin.id },
+      },
+    },
+  });
+
+  const notification2 = await prisma.notification.create({
+    data: {
+      title: "Gübre Stok Uyarısı",
+      message: "NPK Gübre stoğu azalıyor. Yeniden sipariş vermeyi düşünün.",
+      type: "INVENTORY",
+      receiver: {
+        connect: { id: owner.id },
+      },
+      sender: {
+        connect: { id: admin.id },
+      },
+    },
+  });
+
+  console.log({ notification1, notification2 });
 }
+
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

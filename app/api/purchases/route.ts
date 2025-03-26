@@ -1,20 +1,22 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import type { Unit } from "@prisma/client";
+import { getSession } from "@/lib/session";
+import type { Unit, InventoryCategory } from "@prisma/client";
 
 // Tüm alışları getir
 export async function GET(request: Request) {
   try {
     // Yetkilendirme kontrolü
-    const userId = request.headers.get("x-user-id");
-    const userRole = request.headers.get("x-user-role");
-
-    if (!userId) {
+    const session = await getSession();
+    if (!session) {
       return NextResponse.json(
         { error: "Kimlik doğrulama gerekli" },
         { status: 401 }
       );
     }
+
+    const userId = session.user.id;
+    const userRole = session.user.role;
 
     // URL parametrelerini al
     const { searchParams } = new URL(request.url);
@@ -137,18 +139,20 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     // Yetkilendirme kontrolü
-    const userId = request.headers.get("x-user-id");
-    const userRole = request.headers.get("x-user-role");
-
-    if (!userId) {
+    const session = await getSession();
+    if (!session) {
       return NextResponse.json(
         { error: "Kimlik doğrulama gerekli" },
         { status: 401 }
       );
     }
 
+    const userId = session.user.id;
+    const userRole = session.user.role;
+
     const {
       product,
+      category, // Kategori alanı
       quantity,
       unit,
       unitPrice,
@@ -157,7 +161,7 @@ export async function POST(request: Request) {
       purchaseDate,
       notes,
       partners,
-      isTemplate,
+      saveAsTemplate, // Şablon olarak kaydet
       templateName,
     } = await request.json();
 
@@ -206,8 +210,8 @@ export async function POST(request: Request) {
             : undefined,
           description: notes,
           createdAt: purchaseDate ? new Date(purchaseDate) : new Date(),
-          isTemplate: isTemplate || false,
-          templateName: isTemplate ? templateName : null,
+          isTemplate: saveAsTemplate || false,
+          templateName: saveAsTemplate ? templateName || product : null,
         },
       });
 
@@ -290,7 +294,7 @@ export async function POST(request: Request) {
         const inventory = await tx.inventory.create({
           data: {
             name: product,
-            category: "OTHER", // Kategori seçimi eklenebilir
+            category: (category || "OTHER") as InventoryCategory,
             totalQuantity: allocatedQuantity,
             unit: unit as Unit,
             purchaseDate: new Date(),

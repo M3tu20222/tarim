@@ -7,6 +7,36 @@ export async function middleware(request: NextRequest) {
   const isLoginPage = request.nextUrl.pathname === "/login";
   const token = request.cookies.get("token")?.value;
 
+  // API rotaları için token kontrolü
+  if (
+    request.nextUrl.pathname.startsWith("/api/") &&
+    !request.nextUrl.pathname.startsWith("/api/auth/")
+  ) {
+    if (!token) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
+    try {
+      const decoded = await verifyToken(token);
+      const requestHeaders = new Headers(request.headers);
+      requestHeaders.set("x-user-id", decoded.id);
+      requestHeaders.set("x-user-role", decoded.role);
+
+      // Debug için konsola yazdıralım
+      console.log(`API isteği: ${request.nextUrl.pathname}`);
+      console.log(`Kullanıcı ID: ${decoded.id}, Rol: ${decoded.role}`);
+
+      return NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      });
+    } catch (error) {
+      console.error("Token doğrulama hatası:", error);
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+  }
+
   if (!token && isProtectedRoute) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
@@ -19,27 +49,6 @@ export async function middleware(request: NextRequest) {
       const response = NextResponse.redirect(new URL("/login", request.url));
       response.cookies.delete("token");
       return response;
-    }
-  }
-
-  // API rotaları için yetkilendirme (x-user-id ve x-user-role header'ları)
-  if (
-    request.nextUrl.pathname.startsWith("/api/") &&
-    !request.nextUrl.pathname.startsWith("/api/auth/")
-  ) {
-    try {
-      const decoded = await verifyToken(token!); // Token'ın varlığı zaten kontrol edildi
-      const requestHeaders = new Headers(request.headers);
-      requestHeaders.set("x-user-id", decoded.id);
-      requestHeaders.set("x-user-role", decoded.role);
-      return NextResponse.next({
-        request: {
-          headers: requestHeaders,
-        },
-      });
-    } catch (error) {
-      // API isteği ve token geçersiz.  Hata döndür.
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
   }
 

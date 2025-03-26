@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/sidebar";
 // Sheet ve SheetTitle'ı import'lardan KALDIRIN:
 // import { SheetTitle } from "@/components/ui/sheet";
-import {
+import {Calendar,
   HomeIcon,
   UsersIcon,
   ShieldIcon,
@@ -118,6 +118,7 @@ export function AppSidebar() {
       icon: CreditCard,
       badge: "5",
     },
+    { href: "/dashboard/owner/seasons", label: "Sezonlar", icon: Calendar }, // YENİ: Sezon yönetimi bağlantısı
     {
       href: "/dashboard/owner/notifications",
       label: "Bildirimler",

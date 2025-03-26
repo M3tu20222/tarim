@@ -14,6 +14,7 @@ import {
   TractorIcon,
   BellIcon,
 } from "lucide-react";
+import { UserManagement } from "@/components/users/user-management";
 
 export default function AdminDashboard() {
   return (
@@ -170,9 +171,7 @@ export default function AdminDashboard() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground">
-                  Kullanıcı tablosu burada görüntülenecek
-                </p>
+                <UserManagement />
               </CardContent>
             </Card>
           </TabsContent>

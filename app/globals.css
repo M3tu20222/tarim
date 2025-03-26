@@ -2,80 +2,107 @@
 @tailwind components;
 @tailwind utilities;
 
+body {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .cyberpunk-grid {
+    background-size: 40px 40px;
+    background-image: linear-gradient(to right, rgba(130, 71, 229, 0.1) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(130, 71, 229, 0.1) 1px, transparent 1px);
+    background-position: 0 0;
+  }
+
+  .dark .cyberpunk-grid {
+    background-image: linear-gradient(to right, rgba(149, 76, 233, 0.15) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(149, 76, 233, 0.15) 1px, transparent 1px);
+  }
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    --foreground: 0 0% 3.9%;
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 0 0% 3.9%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 263.4 70% 50.4%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 263.4 70% 50.4%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.9%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
     --radius: 0.5rem;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
     --neon-cyan: 180 100% 50%;
     --neon-purple: 280 100% 65%;
     --neon-pink: 320 100% 65%;
     --neon-blue: 210 100% 60%;
 
     /* Sidebar variables */
-    --sidebar-background: 240 10% 3.9%;
-    --sidebar-foreground: 0 0% 98%;
-    --sidebar-primary: 0 0% 98%;
-    --sidebar-primary-foreground: 240 5.9% 10%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
     --sidebar-width: 16rem;
-      /* EKLENDİ */
-      --sidebar-width-icon: 3rem;
+    /* EKLENDİ */
+    --sidebar-width-icon: 3rem;
   }
 
   .dark {
-    --background: 240 10% 3.9%;
+    --background: 0 0% 3.9%;
     --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
+    --card: 0 0% 3.9%;
     --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
+    --popover: 0 0% 3.9%;
     --popover-foreground: 0 0% 98%;
-    --primary: 263.4 70% 50.4%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 240 3.7% 15.9%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 14.9%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 14.9%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 263.4 70% 50.4%;
-
-    /* Sidebar variables */
-    --sidebar-background: 240 10% 3.9%;
-    --sidebar-foreground: 0 0% 98%;
-    --sidebar-primary: 0 0% 98%;
-    --sidebar-primary-foreground: 240 5.9% 10%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 0 0% 83.1%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 240 3.7% 15.9%;
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
-    --sidebar-width: 16rem;
-      /* EKLENDİ */
-      --sidebar-width-icon: 3rem;
   }
 }
 
@@ -83,14 +110,26 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
-    background-image: radial-gradient(circle at center, rgba(124, 58, 237, 0.1) 0%, rgba(0, 0, 0, 0) 70%);
-    background-size: 100% 100%;
-    background-position: center;
-    background-repeat: no-repeat;
   }
 }
+
+/* Dark mode için body arka planını güncelleyelim */
+
+/* Cyberpunk grid arka planını güncelleyelim */
+/* Cyberpunk grid arka planını güncelleyelim - daha belirgin yapalım */
+.cyberpunk-grid {
+  background-image: radial-gradient(circle at center, rgba(139, 92, 246, 0.2) 0%, rgba(0, 0, 0, 0) 70%),
+    linear-gradient(to right, rgba(139, 92, 246, 0.2) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(139, 92, 246, 0.2) 1px, transparent 1px);
+  background-size: 100% 100%, 40px 40px, 40px 40px;
+  background-position: center, center, center;
+  background-repeat: no-repeat, repeat, repeat;
+}
+
+/* Dark mode için grid renklerini ayarlayalım */
 
 .neon-border {
   box-shadow: 0 0 5px theme("colors.purple.500"), 0 0 10px theme("colors.purple.500");
@@ -124,18 +163,14 @@
   box-shadow: 0 0 5px theme("colors.pink.500"), 0 0 10px theme("colors.pink.500");
 }
 
-.cyberpunk-grid {
-  background-image: linear-gradient(to right, rgba(124, 58, 237, 0.1) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(124, 58, 237, 0.1) 1px, transparent 1px);
-  background-size: 20px 20px;
-}
-
 /* Animations */
 @keyframes pulse-neon {
+
   0%,
   100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.7;
   }
@@ -146,6 +181,7 @@
 }
 
 @keyframes glow-flicker {
+
   0%,
   19.999%,
   22%,
@@ -157,6 +193,7 @@
     opacity: 0.99;
     filter: drop-shadow(0 0 1px rgba(124, 58, 237, 0.5)) drop-shadow(0 0 5px rgba(124, 58, 237, 0.3));
   }
+
   20%,
   21.999%,
   63%,
@@ -199,3 +236,29 @@
   color: hsl(var(--sidebar-foreground));
 }
 
+/* Sadece ilgili kısımları güncelliyorum */
+
+/* Sidebar ve içerik alanları için şeffaflık ekleyelim */
+.bg-sidebar {
+  background-color: hsla(var(--sidebar-background), 0.85);
+  /* 85% opaklık */
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  /* Safari için eklendi */
+  /* Hafif bulanıklık ekler */
+}
+
+/* Card ve diğer içerik alanları için şeffaflık */
+.bg-card,
+.bg-background {
+  background-color: hsla(var(--card), 0.7);
+  /* 70% opaklık */
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  /* Safari için eklendi */
+}
+
+/* Tablo başlıkları ve satırları için şeffaflık */
+.bg-muted {
+  background-color: hsla(var(--muted), 0.7);
+}

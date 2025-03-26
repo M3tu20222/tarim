@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-// import { getServerSession } from "next-auth"; // Bu satırı sil
-// import { authOptions } from "../../auth/[...nextauth]/route"; // Bu satırı ve ilgili dosyayı sil.
 import * as bcrypt from "bcrypt";
-import { getSession } from "@/lib/session"; // Kendi oturum kontrol fonksiyonunu kullan
+import { headers } from "next/headers";
 
 // Get a specific user
 export async function GET(
@@ -11,20 +9,24 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    // const session = await getServerSession(authOptions); // NextAuth yerine kendi oturum kontrolünü kullan
-    const session = await getSession();
+    const headersList = await headers(); // headers() Promise döndüğü için await ekliyoruz
+    const userRole = headersList.get("x-user-role");
+    const requestingUserId = headersList.get("x-user-id");
+    const targetUserId = params.id;
 
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
+    console.log("API isteği alındı - Kullanıcı Detayı");
+    console.log("İstenen Kullanıcı ID:", targetUserId);
+    console.log("İstek Yapan Kullanıcı ID:", requestingUserId);
+    console.log("İstek Yapan Kullanıcı Rolü:", userRole);
 
     // Only allow users to view their own profile or admins to view any profile
-    if (session.user.id !== params.id && session.user.role !== "ADMIN") {
+    if (requestingUserId !== targetUserId && userRole !== "ADMIN") {
+      console.log("Yetkisiz erişim denemesi");
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: params.id },
+      where: { id: targetUserId },
       select: {
         id: true,
         name: true,
@@ -36,9 +38,11 @@ export async function GET(
     });
 
     if (!user) {
+      console.log("Kullanıcı bulunamadı");
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    console.log("Kullanıcı bulundu:", user.id);
     return NextResponse.json(user);
   } catch (error) {
     console.error("Error fetching user:", error);
@@ -55,15 +59,19 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    // const session = await getServerSession(authOptions); // NextAuth yerine kendi oturum kontrolünü kullan
-    const session = await getSession();
+    const headersList = await headers(); // await ekliyoruz
+    const userRole = headersList.get("x-user-role");
+    const requestingUserId = headersList.get("x-user-id");
+    const targetUserId = params.id;
 
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
+    console.log("API isteği alındı - Kullanıcı Güncelleme");
+    console.log("Güncellenecek Kullanıcı ID:", targetUserId);
+    console.log("İstek Yapan Kullanıcı ID:", requestingUserId);
+    console.log("İstek Yapan Kullanıcı Rolü:", userRole);
 
     // Only allow users to update their own profile or admins to update any profile
-    if (session.user.id !== params.id && session.user.role !== "ADMIN") {
+    if (requestingUserId !== targetUserId && userRole !== "ADMIN") {
+      console.log("Yetkisiz erişim denemesi");
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
@@ -76,13 +84,13 @@ export async function PUT(
     if (password) updateData.password = await bcrypt.hash(password, 10);
 
     // Only allow admins to update role and status
-    if (session.user.role === "ADMIN") {
+    if (userRole === "ADMIN") {
       if (role) updateData.role = role;
       if (status) updateData.status = status;
     }
 
     const user = await prisma.user.update({
-      where: { id: params.id },
+      where: { id: targetUserId },
       data: updateData,
       select: {
         id: true,
@@ -94,6 +102,7 @@ export async function PUT(
       },
     });
 
+    console.log("Kullanıcı güncellendi:", user.id);
     return NextResponse.json(user);
   } catch (error) {
     console.error("Error updating user:", error);
@@ -110,17 +119,33 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    // const session = await getServerSession(authOptions); // NextAuth yerine kendi oturum kontrolünü kullan
-    const session = await getSession();
+    const headersList = await headers(); // await ekliyoruz
+    const userRole = headersList.get("x-user-role");
+    const requestingUserId = headersList.get("x-user-id");
+    const targetUserId =await params.id;
 
-    if (!session || session.user.role !== "ADMIN") {
+    console.log("API isteği alındı - Kullanıcı Silme");
+    console.log("Silinecek Kullanıcı ID:", targetUserId);
+    console.log("İstek Yapan Kullanıcı ID:", requestingUserId);
+    console.log("İstek Yapan Kullanıcı Rolü:", userRole);
+
+    // Only admins can delete users
+    if (!userRole || userRole !== "ADMIN") {
+      console.log("Yetkisiz erişim denemesi");
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
+    const user = await prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!user) {
+      console.log("Kullanıcı bulunamadı:", targetUserId);
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
     await prisma.user.delete({
-      where: { id: params.id },
+      where: { id: targetUserId },
     });
 
+    console.log("Kullanıcı silindi:", targetUserId);
     return NextResponse.json({ message: "User deleted successfully" });
   } catch (error) {
     console.error("Error deleting user:", error);

@@ -5,12 +5,13 @@ import {
   useContext,
   useEffect,
   useState,
+  useCallback,
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/use-toast";
 
-export interface User {
+interface User {
   id: string;
   name: string;
   email: string;
@@ -28,7 +29,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Token'ın geçerli olup olmadığını kontrol eden yardımcı fonksiyon
-export function isTokenExpired(token: string): boolean {
+function isTokenExpired(token: string): boolean {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return true;
@@ -40,53 +41,71 @@ export function isTokenExpired(token: string): boolean {
   }
 }
 
-interface AuthProviderProps {
-  children: ReactNode;
-  initialToken?: string | null;
-}
-
-export function AuthProvider({ children, initialToken }: AuthProviderProps) {
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const { toast } = useToast();
 
-  // Sayfa yüklendiğinde localStorage'dan kullanıcı bilgilerini al ve initialToken'ı kontrol et
-  useEffect(() => {
-    let tokenToUse = initialToken;
+  const clearAuthData = useCallback(() => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    setUser(null);
+    setToken(null);
+  }, []);
 
-    if (initialToken) {
-      if (isTokenExpired(initialToken)) {
-        tokenToUse = null;
-      }
+  const logout = useCallback(async () => {
+    setIsLoading(true);
+
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+      });
+
+      clearAuthData();
+      router.push("/");
+
+      toast({
+        title: "Çıkış başarılı",
+        description: "Oturumunuz güvenli bir şekilde sonlandırıldı.",
+      });
+    } catch (error) {
+      console.error("Çıkış hatası:", error);
+      toast({
+        title: "Çıkış yapılırken bir hata oluştu",
+        description: "Lütfen tekrar deneyin.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
+  }, [clearAuthData, router, toast]);
 
-    if (!tokenToUse) {
-      const storedToken = localStorage.getItem("token");
-      const storedUser = localStorage.getItem("user");
+  // Sayfa yüklendiğinde localStorage'dan kullanıcı bilgilerini al
+  useEffect(() => {
+    const storedToken = localStorage.getItem("token");
+    const storedUser = localStorage.getItem("user");
 
-      if (storedToken && storedUser) {
-        try {
-          // Token'ın süresi dolmuş mu kontrol et
-          if (isTokenExpired(storedToken)) {
-            clearAuthData();
-          } else {
-            const userData = JSON.parse(storedUser);
-            setUser(userData);
-            setToken(storedToken);
-          }
-        } catch (error) {
-          console.error("Kullanıcı bilgisi parse edilemedi:", error);
+    if (storedToken && storedUser) {
+      try {
+        // Token'ın süresi dolmuş mu kontrol et
+        if (isTokenExpired(storedToken)) {
           clearAuthData();
+        } else {
+          const userData = JSON.parse(storedUser);
+          setUser(userData);
+          setToken(storedToken);
         }
+      } catch (error) {
+        console.error("Kullanıcı bilgisi parse edilemedi:", error);
+        clearAuthData();
       }
-    } else {
-      setToken(tokenToUse)
     }
 
     setIsLoading(false);
-  }, [initialToken]);
+  }, [clearAuthData]);
 
   // Kullanıcı aktivite takibi
   useEffect(() => {
@@ -96,15 +115,18 @@ export function AuthProvider({ children, initialToken }: AuthProviderProps) {
 
     const resetInactivityTimer = () => {
       clearTimeout(inactivityTimer);
-      inactivityTimer = setTimeout(() => {
-        toast({
-          title: "Oturum süresi doldu",
-          description:
-            "Uzun süre işlem yapmadığınız için oturumunuz sonlandırıldı.",
-          variant: "destructive",
-        });
-        logout();
-      }, 30 * 60 * 1000); // 30 dakika inaktivite süresi
+      inactivityTimer = setTimeout(
+        () => {
+          toast({
+            title: "Oturum süresi doldu",
+            description:
+              "Uzun süre işlem yapmadığınız için oturumunuz sonlandırıldı.",
+            variant: "destructive",
+          });
+          logout();
+        },
+        30 * 60 * 1000
+      ); // 30 dakika inaktivite süresi
     };
 
     // Kullanıcı aktivitelerini dinle
@@ -127,15 +149,7 @@ export function AuthProvider({ children, initialToken }: AuthProviderProps) {
         window.removeEventListener(event, resetInactivityTimer);
       });
     };
-  }, [token]);
-
-  const clearAuthData = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    setUser(null);
-    setToken(null);
-  };
+  }, [token, logout, toast]);
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
@@ -166,15 +180,18 @@ export function AuthProvider({ children, initialToken }: AuthProviderProps) {
 
       toast({
         title: "Giriş başarılı!",
-        description: `${
-          data.user.role.charAt(0).toUpperCase() + data.user.role.slice(1)
-        } rolüyle giriş yapıldı.`,
+        description: `${data.user.role.charAt(0).toUpperCase() + data.user.role.slice(1)} rolüyle giriş yapıldı.`,
         variant: "default",
       });
 
+      // Mevcut tema tercihini sakla
+      const currentTheme = document.documentElement.classList.contains("dark")
+        ? "dark"
+        : "light";
+      localStorage.setItem("theme", currentTheme);
+
       // Role göre yönlendirme
-      // const dashboardPath = `/dashboard/${data.user.role.toLowerCase()}`; // YANLIŞ
-      const dashboardPath = `/dashboard/dashboard`; // DOĞRU - Her zaman ana dashboard'a yönlendir
+      const dashboardPath = `/dashboard/${data.user.role.toLowerCase()}`;
       router.push(dashboardPath);
     } catch (error: any) {
       console.error("Giriş hatası:", error);
@@ -189,44 +206,31 @@ export function AuthProvider({ children, initialToken }: AuthProviderProps) {
     }
   };
 
-  const logout = async () => {
-    setIsLoading(true);
-
-    try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-      });
-
-      clearAuthData();
-      router.push("/");
-
-      toast({
-        title: "Çıkış başarılı",
-        description: "Oturumunuz güvenli bir şekilde sonlandırıldı.",
-      });
-    } catch (error) {
-      console.error("Çıkış hatası:", error);
-      toast({
-        title: "Çıkış yapılırken bir hata oluştu",
-        description: "Lütfen tekrar deneyin.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
-      <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
-        {children}
-      </AuthContext.Provider>
-    );
-  }
+    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
 
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error("useAuth must be used within an AuthProvider");
   }
+
+  // Tema tercihini kontrol et ve uygula
+  useEffect(() => {
+    if (context.user) {
+      // Kullanıcı giriş yaptığında, localStorage'dan tema tercihini al
+      const storedTheme = localStorage.getItem("theme");
+      if (storedTheme) {
+        // Tema tercihini document.documentElement'e uygula
+        document.documentElement.classList.remove("light", "dark");
+        document.documentElement.classList.add(storedTheme);
+      }
+    }
+  }, [context.user]);
+
   return context;
 }

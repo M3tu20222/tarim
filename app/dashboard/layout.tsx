@@ -1,8 +1,8 @@
 import type React from "react";
+import { cookies } from "next/headers";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Inter } from "next/font/google";
 import "../globals.css";
-import { cookies } from "next/headers";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/toaster";
@@ -22,14 +22,25 @@ export default async function DashboardLayout({
     ? sidebarStateCookie.value === "true"
     : true;
 
-return (
+  return (
     <html lang="tr" suppressHydrationWarning>
-      <body className={inter.className}>
-        <SidebarProvider defaultOpen={defaultOpen}>
-          <AppSidebar />
-          <SidebarInset className="cyberpunk-grid">{children}</SidebarInset>
-        </SidebarProvider>
-        <Toaster />
+      <body
+        className={`${inter.className} min-h-screen bg-background text-foreground antialiased`}
+      >
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem={false}
+          disableTransitionOnChange
+        >
+          <SidebarProvider defaultOpen={defaultOpen}>
+            <AppSidebar />
+            <SidebarInset className="bg-background text-foreground">
+              {children}
+            </SidebarInset>
+          </SidebarProvider>
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );
