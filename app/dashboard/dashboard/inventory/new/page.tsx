@@ -35,7 +35,8 @@ import {
 } from "@/components/ui/card";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { getSession } from "@/lib/session";
+// getSession'ı kaldırıyoruz
+// import { getSession } from "@/lib/session";
 
 const inventoryFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -68,27 +69,11 @@ export default function NewInventoryPage() {
   });
 
   async function onSubmit(values: z.infer<typeof inventoryFormSchema>) {
-    const session = await getSession(); // Doğrudan burada al
-
-    if (!session) {
-      toast({
-        title: "Unauthorized",
-        description: "You must be logged in to create inventory items.",
-        variant: "destructive",
-      });
-      return;
-    }
-
+    // Session kontrolünü API tarafında yapacağız
     setIsSubmitting(true);
 
     try {
-      const ownerships = [
-        {
-          userId: session.id, // session.user.id yerine session.id kullanıyoruz
-          shareQuantity: values.totalQuantity,
-        },
-      ];
-
+      // Kullanıcı bilgilerini API'den alacağız
       const response = await fetch("/api/inventory", {
         method: "POST",
         headers: {
@@ -102,12 +87,13 @@ export default function NewInventoryPage() {
           expiryDate: values.expiryDate
             ? new Date(values.expiryDate).toISOString()
             : undefined,
-          ownerships,
+          // Ownerships bilgisini API tarafında ekleyeceğiz
         }),
       });
 
       if (!response.ok) {
-        throw new Error("Failed to create inventory item");
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to create inventory item");
       }
 
       toast({
@@ -121,7 +107,10 @@ export default function NewInventoryPage() {
       console.error("Error creating inventory item:", error);
       toast({
         title: "Error",
-        description: "Failed to create inventory item. Please try again.",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to create inventory item. Please try again.",
         variant: "destructive",
       });
     } finally {
