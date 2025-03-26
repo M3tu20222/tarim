@@ -1,6 +1,5 @@
 import { verifyToken } from "./jwt";
 import { prisma } from "./prisma";
-import { cookies as nextCookies } from "next/headers";
 import { parse } from "cookie";
 
 // JWT token'ın çözülmüş hali için tip tanımı
@@ -19,26 +18,55 @@ interface RequestWithCookies {
   };
 }
 
-export async function getSession() {
-  let token: string | undefined;
-
+// App Router için getServerSideSession
+export async function getServerSideSession() {
   try {
-    // App Router için (Server Components)
-    if (typeof window === "undefined") {
-      try {
-        const cookieStore = await nextCookies();
-        token = cookieStore.get("token")?.value;
-      } catch (error) {
-        // next/headers kullanılamıyorsa, request headers'dan okuyalım
-        // Bu kısım Pages API Routes için çalışacak
-        const req = arguments[0]?.req as RequestWithCookies | undefined;
-        if (req?.headers?.cookie) {
-          const cookies = parse(req.headers.cookie);
-          token = cookies["token"];
-        }
-      }
-    } else {
-      // Client tarafı için
+    // Dinamik import kullanarak next/headers'ı yüklüyoruz
+    // Bu sayede build sırasında hata oluşmayacak
+    const { cookies } = await import("next/headers");
+    const cookieStore = await cookies(); // await eklendi
+    const token = cookieStore.get("token")?.value;
+
+    if (!token) {
+      return null;
+    }
+
+    const payload = await verifyToken(token);
+    if (!payload || !payload.id) {
+      return null;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: {
+        id: payload.id,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+      },
+    });
+
+    return user;
+  } catch (error) {
+    console.error("Server session error:", error);
+    return null;
+  }
+}
+
+// Pages API Routes için getSession
+export async function getSession(req?: RequestWithCookies) {
+  try {
+    let token: string | undefined;
+
+    // Server-side (Pages API Routes)
+    if (req?.headers?.cookie) {
+      const cookies = parse(req.headers.cookie);
+      token = cookies["token"];
+    }
+    // Client-side
+    else if (typeof window !== "undefined") {
       const cookiesObj: Record<string, string> = {};
       document.cookie.split(";").forEach((cookie) => {
         const [key, value] = cookie.trim().split("=");
@@ -70,39 +98,12 @@ export async function getSession() {
 
     return user;
   } catch (error) {
-    console.error("Session verification error:", error);
+    console.error("Session error:", error);
     return null;
   }
 }
 
-// Pages API Routes için yardımcı fonksiyon
+// Eski fonksiyonu koruyoruz, ancak yeni fonksiyonu çağırıyoruz
 export async function getSessionFromRequest(req: RequestWithCookies) {
-  try {
-    const cookies = parse(req.headers.cookie || "");
-    const token = cookies["token"];
-
-    if (!token) {
-      return null;
-    }
-
-    const payload = await verifyToken(token);
-    if (!payload || !payload.id) {
-      return null;
-    }
-
-    return prisma.user.findUnique({
-      where: {
-        id: payload.id,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-      },
-    });
-  } catch (error) {
-    console.error("Session verification error:", error);
-    return null;
-  }
+  return getSession(req);
 }

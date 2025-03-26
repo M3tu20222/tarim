@@ -35,7 +35,6 @@ import {
 } from "@/components/ui/card";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-// import { Session } from "@/types/session"; // Session type'ına gerek yok
 import { getSession } from "@/lib/session";
 
 const inventoryFormSchema = z.object({
@@ -55,7 +54,6 @@ export default function NewInventoryPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // const [session, setSession] = useState<Session>(null); // session state'ine gerek yok
 
   const form = useForm<z.infer<typeof inventoryFormSchema>>({
     resolver: zodResolver(inventoryFormSchema),
@@ -69,20 +67,10 @@ export default function NewInventoryPage() {
     },
   });
 
-  // Oturum verisini API'den al - GEREKSİZ
-  // useEffect(() => {
-  //   async function fetchSession() {
-  //     const response = await fetch("/api/session");
-  //     const data = await response.json();
-  //     setSession(data);
-  //   }
-  //   fetchSession();
-  // }, []);
-
   async function onSubmit(values: z.infer<typeof inventoryFormSchema>) {
     const session = await getSession(); // Doğrudan burada al
 
-    if (!session?.user) {
+    if (!session) {
       toast({
         title: "Unauthorized",
         description: "You must be logged in to create inventory items.",
@@ -96,7 +84,7 @@ export default function NewInventoryPage() {
     try {
       const ownerships = [
         {
-          userId: session.user.id, // Artık doğru tipte
+          userId: session.id, // session.user.id yerine session.id kullanıyoruz
           shareQuantity: values.totalQuantity,
         },
       ];
