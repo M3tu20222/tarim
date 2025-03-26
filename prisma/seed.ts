@@ -55,41 +55,50 @@ async function main() {
 
   // Örnek tarlalar oluştur
   // Önce FieldOwnership kayıtlarını oluştur
+  // Önce FieldOwnership kayıtlarını ayrı ayrı oluştur
   const field1 = await prisma.field.create({
     data: {
       name: "Merkez Tarla",
       location: "Adana, Merkez",
       size: 120,
       status: FieldStatus.ACTIVE,
-      owners: {
-        create: {
-          user: {
-            connect: { id: owner.id }
-          }
-        }
-      },
-      workerAssignments: {
-        create: [{ userId: worker.id }],
-      },
+    },
+  });
+
+  await prisma.fieldOwnership.create({
+    data: {
+      field: { connect: { id: field1.id } },
+      user: { connect: { id: owner.id } },
+    },
+  });
+
+  await prisma.fieldWorkerAssignment.create({
+    data: {
+      field: { connect: { id: field1.id } },
+      user: { connect: { id: worker.id } },
     },
   });
 
   const field2 = await prisma.field.create({
     data: {
-      name: "Doğu Tarla",
+      name: "Doğu Tarla", 
       location: "Adana, Ceyhan",
       size: 85,
       status: FieldStatus.ACTIVE,
-      owners: {
-        create: {
-          user: {
-            connect: { id: owner.id }
-          }
-        }
-      },
-      workerAssignments: {
-        create: [{ userId: worker.id }],
-      },
+    },
+  });
+
+  await prisma.fieldOwnership.create({
+    data: {
+      field: { connect: { id: field2.id } },
+      user: { connect: { id: owner.id } },
+    },
+  });
+
+  await prisma.fieldWorkerAssignment.create({
+    data: {
+      field: { connect: { id: field2.id } },
+      user: { connect: { id: worker.id } },
     },
   });
 
