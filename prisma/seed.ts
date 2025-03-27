@@ -5,16 +5,15 @@ const prisma = new PrismaClient();
 
 async function main() {
   try {
-    console.log("Seed işlemi başlıyor...");
-
-    // 1. Kullanıcıları oluştur
-    console.log("Kullanıcılar oluşturuluyor...");
+    // Kullanıcıları oluştur
     const adminPassword = await hash("admin123", 10);
     const ownerPassword = await hash("owner123", 10);
     const workerPassword = await hash("worker123", 10);
 
-    const admin = await prisma.user.create({
-      data: {
+    const admin = await prisma.user.upsert({
+      where: { email: "admin@example.com" },
+      update: {},
+      create: {
         name: "Admin User",
         email: "admin@example.com",
         password: adminPassword,
@@ -23,8 +22,10 @@ async function main() {
       },
     });
 
-    const owner = await prisma.user.create({
-      data: {
+    const owner = await prisma.user.upsert({
+      where: { email: "owner@example.com" },
+      update: {},
+      create: {
         name: "Owner User",
         email: "owner@example.com",
         password: ownerPassword,
@@ -33,8 +34,10 @@ async function main() {
       },
     });
 
-    const worker = await prisma.user.create({
-      data: {
+    const worker = await prisma.user.upsert({
+      where: { email: "worker@example.com" },
+      update: {},
+      create: {
         name: "Worker User",
         email: "worker@example.com",
         password: workerPassword,
@@ -43,14 +46,9 @@ async function main() {
       },
     });
 
-    console.log("Kullanıcılar oluşturuldu:", {
-      admin: admin.id,
-      owner: owner.id,
-      worker: worker.id,
-    });
+    console.log("Kullanıcılar oluşturuldu:", { admin, owner, worker });
 
-    // 2. Sezon oluştur
-    console.log("Sezon oluşturuluyor...");
+    // Sezon oluştur
     const season = await prisma.season.create({
       data: {
         name: "2023-2024 Sezonu",
@@ -58,46 +56,15 @@ async function main() {
         endDate: new Date("2024-08-31"),
         description: "2023-2024 Tarım Sezonu",
         isActive: true,
-        creatorId: owner.id,
+        creator: {
+          connect: { id: owner.id },
+        },
       },
     });
-    console.log("Sezon oluşturuldu:", season.id);
 
-    // 3. Tarla oluştur
-    console.log("Tarla oluşturuluyor...");
-    const field = await prisma.field.create({
-      data: {
-        name: "Örnek Tarla",
-        location: "Örnek Lokasyon",
-        size: 100,
-        status: "ACTIVE",
-        seasonId: season.id,
-      },
-    });
-    console.log("Tarla oluşturuldu:", field.id);
+    console.log("Sezon oluşturuldu:", season);
 
-    // 4. Tarla sahipliği oluştur
-    console.log("Tarla sahipliği oluşturuluyor...");
-    const fieldOwnership = await prisma.fieldOwnership.create({
-      data: {
-        fieldId: field.id,
-        userId: owner.id,
-      },
-    });
-    console.log("Tarla sahipliği oluşturuldu:", fieldOwnership.id);
-
-    // 5. İşçi atama
-    console.log("İşçi ataması yapılıyor...");
-    const workerAssignment = await prisma.fieldWorkerAssignment.create({
-      data: {
-        fieldId: field.id,
-        userId: worker.id,
-      },
-    });
-    console.log("İşçi ataması yapıldı:", workerAssignment.id);
-
-    // 6. Envanter oluştur
-    console.log("Envanter oluşturuluyor...");
+    // Envanter oluştur
     const inventory = await prisma.inventory.create({
       data: {
         name: "Örnek Gübre",
@@ -107,20 +74,45 @@ async function main() {
         status: "AVAILABLE",
       },
     });
-    console.log("Envanter oluşturuldu:", inventory.id);
+    console.log("Envanter oluşturuldu:", inventory);
 
-    // 7. Envanter sahipliği oluştur
-    console.log("Envanter sahipliği oluşturuluyor...");
-    const inventoryOwnership = await prisma.inventoryOwnership.create({
+    // Sahiplik oluştur
+    const ownership = await prisma.inventoryOwnership.create({
       data: {
         inventoryId: inventory.id,
         userId: owner.id,
         shareQuantity: 1000,
       },
     });
-    console.log("Envanter sahipliği oluşturuldu:", inventoryOwnership.id);
+    console.log("Sahiplik oluşturuldu:", ownership);
 
-    console.log("Seed işlemi başarıyla tamamlandı!");
+    // Tarla oluştur
+    const field = await prisma.field.create({
+      data: {
+        name: "Örnek Tarla",
+        location: "Örnek Lokasyon",
+        size: 100,
+        status: "ACTIVE",
+        season: {
+          connect: { id: season.id },
+        },
+        owners: {
+          create: {
+            userId: owner.id,
+          },
+        },
+      },
+    });
+    console.log("Tarla oluşturuldu:", field);
+
+    // İşçi atama
+    const workerAssignment = await prisma.fieldWorkerAssignment.create({
+      data: {
+        fieldId: field.id,
+        userId: worker.id,
+      },
+    });
+    console.log("İşçi ataması yapıldı:", workerAssignment);
   } catch (error) {
     console.error("Seed işlemi sırasında hata:", error);
     throw error;
@@ -129,10 +121,9 @@ async function main() {
 
 main()
   .catch((e) => {
-    console.error("Seed işlemi başarısız:", e);
+    console.error(e);
     process.exit(1);
   })
   .finally(async () => {
-    console.log("Veritabanı bağlantısı kapatılıyor...");
     await prisma.$disconnect();
   });
