@@ -1,5 +1,5 @@
-import { ProtectedPage } from "@/components/protected-page";
 import { UserManagement } from "@/components/users/user-management";
+import { ProtectedPage } from "@/components/protected-page";
 
 export default function AdminUsersPage() {
   return (

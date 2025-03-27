@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { UserFormData } from "@/types/user-form-data";
 import {
   Table,
   TableBody,
@@ -17,14 +16,16 @@ import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { useToast } from "@/components/ui/use-toast";
 
+import type { UserFormData } from "@/types/user-form-data";
+
 interface UserTableProps {
-  refreshTrigger: number;
-  onEditUser: (user: UserFormData) => void;
-  onDeleteUser: (user: UserFormData) => void;
+  refreshTrigger?: number;
+  onEditUser?: (user: UserFormData) => void;
+  onDeleteUser?: (user: UserFormData) => void;
 }
 
 export function UserTable({
-  refreshTrigger,
+  refreshTrigger = 0,
   onEditUser,
   onDeleteUser,
 }: UserTableProps) {
@@ -52,7 +53,16 @@ export function UserTable({
         }
 
         const data = await response.json();
-        setUsers(data);
+        // Convert API response to UserFormData
+        const users = data.map((user: any) => ({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          status: user.status,
+          createdAt: user.createdAt
+        }));
+        setUsers(users);
       } catch (err: any) {
         console.error("Kullanıcılar yüklenirken hata:", err);
         setError(err.message);
@@ -147,7 +157,9 @@ export function UserTable({
                 <TableCell className="font-medium">{user.name}</TableCell>
                 <TableCell>{user.email}</TableCell>
                 <TableCell>{getRoleBadge(user.role)}</TableCell>
-                <TableCell>{getStatusBadge(user.status)}</TableCell>
+                <TableCell>
+                  {user.status ? getStatusBadge(user.status) : "-"}
+                </TableCell>
                 <TableCell>
                   {user.createdAt
                     ? format(new Date(user.createdAt), "dd MMMM yyyy", {
@@ -157,21 +169,25 @@ export function UserTable({
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => onEditUser(user)}
-                    >
-                      <Edit2Icon className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="text-red-500 hover:text-red-700"
-                      onClick={() => onDeleteUser(user)}
-                    >
-                      <Trash2Icon className="h-4 w-4" />
-                    </Button>
+                    {onEditUser && (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => onEditUser(user)}
+                      >
+                        <Edit2Icon className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {onDeleteUser && (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="text-red-500 hover:text-red-700"
+                        onClick={() => onDeleteUser(user)}
+                      >
+                        <Trash2Icon className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>

@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/session";
 
 export async function GET(request: NextRequest) {
   try {
@@ -8,10 +7,18 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const role = searchParams.get("role");
 
-    // Oturum kontrolü
-    const session = await getSession();
-    if (!session) {
+    // Header'lardan kullanıcı bilgilerini al
+    const userId = request.headers.get("x-user-id");
+    const userRole = request.headers.get("x-user-role");
+
+    // Yetkilendirme kontrolü
+    if (!userId || !userRole) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Sadece ADMIN rolündeki kullanıcılar bu endpoint'i kullanabilir
+    if (userRole !== "ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     // Filtre oluştur
@@ -30,6 +37,8 @@ export async function GET(request: NextRequest) {
         name: true,
         email: true,
         role: true,
+        status: true,
+        createdAt: true,
       },
       orderBy: {
         name: "asc",
@@ -49,13 +58,21 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST metodu değişmedi
+// POST metodu da benzer şekilde güncellendi
 export async function POST(request: NextRequest) {
   try {
-    // Oturum kontrolü
-    const session = await getSession();
-    if (!session || session.user.role !== "ADMIN") {
+    // Header'lardan kullanıcı bilgilerini al
+    const userId = request.headers.get("x-user-id");
+    const userRole = request.headers.get("x-user-role");
+
+    // Yetkilendirme kontrolü
+    if (!userId || !userRole) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Sadece ADMIN rolündeki kullanıcılar bu endpoint'i kullanabilir
+    if (userRole !== "ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const data = await request.json();
@@ -67,6 +84,7 @@ export async function POST(request: NextRequest) {
         email: data.email,
         password: data.password, // Gerçek uygulamada şifre hash'lenmeli
         role: data.role,
+        status: data.status || "ACTIVE", // Varsayılan olarak ACTIVE
       },
     });
 
