@@ -13,7 +13,6 @@ async function main() {
     },
   });
 
-  // Instead of using connect for ownerships:
   const inventory1 = await prisma.inventory.create({
     data: {
       name: "NPK Gübre",
@@ -54,8 +53,25 @@ async function main() {
   });
 
   // If you have more inventory items, follow the same pattern
+  const field = await prisma.field.create({
+    data: {
+      name: "Ana Tarla",
+      location: "Çiftlik Merkez",
+      size: 50,
+      status: "ACTIVE",
+      // Sahiplik ilişkisi
+      owners: {
+        create: [
+          {
+            user: { connect: { id: owner.id } },
+          },
+        ],
+      },
+    },
+  });
 
-  console.log({ owner, inventory1, inventory2 });
+  console.log({ owner, inventory1, inventory2, field });
+  // Instead of using connect for ownerships:
 }
 
 main()
