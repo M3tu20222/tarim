@@ -365,13 +365,17 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
     }
 
     setIsSubmitting(true);
+
+    // Form işleme fonksiyonunda, "no-season" değerini null olarak işleyelim:
+    const seasonId = values.seasonId === "no-season" ? null : values.seasonId;
+
     try {
       const response = await fetch("/api/purchases", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(values),
+        body: JSON.stringify({ ...values, seasonId }),
       });
 
       if (!response.ok) {
@@ -621,7 +625,7 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
                   </FormControl>
                   <SelectContent>
                     {seasons.length === 0 ? (
-                      <SelectItem value="" disabled>
+                      <SelectItem value="no-season" disabled>
                         Sezon bulunamadı
                       </SelectItem>
                     ) : (

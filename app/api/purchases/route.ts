@@ -15,8 +15,8 @@ export async function GET(request: Request) {
       );
     }
 
-    const userId = session.user.id;
-    const userRole = session.user.role;
+    const userId = session.id;
+    const userRole = session.role;
 
     // URL parametrelerini al
     const { searchParams } = new URL(request.url);
@@ -147,8 +147,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const userId = session.user.id;
-    const userRole = session.user.role;
+    const userId = session.id;
+    const userRole = session.role;
 
     const {
       product,

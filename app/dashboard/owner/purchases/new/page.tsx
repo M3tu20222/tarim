@@ -29,7 +29,8 @@ export default async function NewPurchasePage({
 }: {
   searchParams: { templateId?: string };
 }) {
-  const templateId = await searchParams.templateId;
+  // Destructure templateId directly from searchParams
+  const templateId = searchParams?.templateId;
 
   return (
     <div className="flex flex-col gap-4 p-4 md:p-8">
@@ -69,12 +70,13 @@ export default async function NewPurchasePage({
         <CardHeader>
           <CardTitle>Yeni Alış Oluştur</CardTitle>
           <CardDescription>
-            {templateId
+            {templateId // templateId şimdi doğru şekilde kullanılabilir
               ? "Seçilen şablonu kullanarak yeni bir alış kaydı oluşturun."
               : "Yeni bir alış kaydı oluşturmak için aşağıdaki formu doldurun."}
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* templateId prop'unu EnhancedPurchaseForm'a geçirin */}
           <EnhancedPurchaseForm templateId={templateId} />
         </CardContent>
       </Card>

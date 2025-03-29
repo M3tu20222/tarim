@@ -102,6 +102,13 @@ export function NewFieldForm() {
           if (activeSeason) {
             setActiveSeasonId(activeSeason.id);
             form.setValue("seasonId", activeSeason.id);
+          } else if (data.length > 0) {
+            // Aktif sezon yoksa ilk sezonu seç
+            setActiveSeasonId(data[0].id);
+            form.setValue("seasonId", data[0].id);
+          } else {
+            // Hiç sezon yoksa "no-season" değerini kullan
+            form.setValue("seasonId", "no-season");
           }
         }
       } catch (error) {
@@ -115,6 +122,12 @@ export function NewFieldForm() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
     try {
+      // "no-season" değerini null olarak işle
+      const formData = {
+        ...values,
+        seasonId: values.seasonId === "no-season" ? null : values.seasonId,
+      };
+
       // Normalde burada API'ye istek atılır
       // Şimdilik simüle ediyoruz
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -331,7 +344,7 @@ export function NewFieldForm() {
                   </FormControl>
                   <SelectContent>
                     {seasons.length === 0 ? (
-                      <SelectItem value="" disabled>
+                      <SelectItem value="no-season" disabled>
                         Sezon bulunamadı
                       </SelectItem>
                     ) : (

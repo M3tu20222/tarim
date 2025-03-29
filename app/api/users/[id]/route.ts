@@ -9,7 +9,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const headersList = await headers(); // headers() Promise döndüğü için await ekliyoruz
+    const headersList = await headers();
     const userRole = headersList.get("x-user-role");
     const requestingUserId = headersList.get("x-user-id");
     const targetUserId = params.id;
@@ -19,7 +19,6 @@ export async function GET(
     console.log("İstek Yapan Kullanıcı ID:", requestingUserId);
     console.log("İstek Yapan Kullanıcı Rolü:", userRole);
 
-    // Only allow users to view their own profile or admins to view any profile
     if (requestingUserId !== targetUserId && userRole !== "ADMIN") {
       console.log("Yetkisiz erişim denemesi");
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
@@ -53,23 +52,29 @@ export async function GET(
   }
 }
 
-// Update a user
-export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+// Update a user (TEK PUT FONKSİYONU)
+export async function PUT(request: Request) {
   try {
-    const headersList = await headers(); // await ekliyoruz
+    const headersList = await headers();
     const userRole = headersList.get("x-user-role");
     const requestingUserId = headersList.get("x-user-id");
-    const targetUserId = params.id;
+
+    // URL'den ID'yi çıkar
+    const url = new URL(request.url);
+    const targetUserId = url.pathname.split("/").pop();
+
+    if (!targetUserId) {
+      return NextResponse.json(
+        { error: "User ID not provided" },
+        { status: 400 }
+      );
+    }
 
     console.log("API isteği alındı - Kullanıcı Güncelleme");
     console.log("Güncellenecek Kullanıcı ID:", targetUserId);
     console.log("İstek Yapan Kullanıcı ID:", requestingUserId);
     console.log("İstek Yapan Kullanıcı Rolü:", userRole);
 
-    // Only allow users to update their own profile or admins to update any profile
     if (requestingUserId !== targetUserId && userRole !== "ADMIN") {
       console.log("Yetkisiz erişim denemesi");
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
@@ -77,13 +82,11 @@ export async function PUT(
 
     const { name, email, password, role, status } = await request.json();
 
-    // Prepare update data
     const updateData: any = {};
     if (name) updateData.name = name;
     if (email) updateData.email = email;
     if (password) updateData.password = await bcrypt.hash(password, 10);
 
-    // Only allow admins to update role and status
     if (userRole === "ADMIN") {
       if (role) updateData.role = role;
       if (status) updateData.status = status;
@@ -119,17 +122,16 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const headersList = await headers(); // await ekliyoruz
+    const headersList = await headers();
     const userRole = headersList.get("x-user-role");
     const requestingUserId = headersList.get("x-user-id");
-    const targetUserId =await params.id;
+    const targetUserId = params.id;
 
     console.log("API isteği alındı - Kullanıcı Silme");
     console.log("Silinecek Kullanıcı ID:", targetUserId);
     console.log("İstek Yapan Kullanıcı ID:", requestingUserId);
     console.log("İstek Yapan Kullanıcı Rolü:", userRole);
 
-    // Only admins can delete users
     if (!userRole || userRole !== "ADMIN") {
       console.log("Yetkisiz erişim denemesi");
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });

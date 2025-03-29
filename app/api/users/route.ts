@@ -16,9 +16,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Sadece ADMIN rolündeki kullanıcılar bu endpoint'i kullanabilir
-    if (userRole !== "ADMIN") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    // OWNER rolündeki kullanıcıların da kullanıcı listesine erişmesine izin verelim
+
+    // GET fonksiyonundaki yetkilendirme kontrolünü şu şekilde değiştirelim:
+    // Eğer kullanıcı ADMIN veya OWNER değilse erişimi reddet
+    if (userRole !== "ADMIN" && userRole !== "OWNER") {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 403,
+      });
     }
 
     // Filtre oluştur
@@ -70,9 +75,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Sadece ADMIN rolündeki kullanıcılar bu endpoint'i kullanabilir
-    if (userRole !== "ADMIN") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    // POST fonksiyonundaki yetkilendirme kontrolünü de benzer şekilde değiştirelim:
+    if (userRole !== "ADMIN" && userRole !== "OWNER") {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 403,
+      });
     }
 
     const data = await request.json();
