@@ -13,7 +13,11 @@ export async function middleware(request: NextRequest) {
     !request.nextUrl.pathname.startsWith("/api/auth/")
   ) {
     if (!token) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      console.log("API isteği token bulunamadı:", request.nextUrl.pathname);
+      return NextResponse.json(
+        { error: "Kimlik doğrulama gerekli" },
+        { status: 401 }
+      );
     }
 
     try {
@@ -26,6 +30,10 @@ export async function middleware(request: NextRequest) {
       console.log(`API isteği: ${request.nextUrl.pathname}`);
       console.log(`Kullanıcı ID: ${decoded.id}, Rol: ${decoded.role}`);
 
+      // Önemli: Burada request.clone() kullanarak yeni bir istek oluşturuyoruz
+      // Bu, orijinal isteğin değiştirilmesini önler
+      const clonedRequest = request.clone();
+
       return NextResponse.next({
         request: {
           headers: requestHeaders,
@@ -33,7 +41,10 @@ export async function middleware(request: NextRequest) {
       });
     } catch (error) {
       console.error("Token doğrulama hatası:", error);
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Kimlik doğrulama gerekli" },
+        { status: 401 }
+      );
     }
   }
 

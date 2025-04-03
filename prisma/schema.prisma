@@ -73,7 +73,7 @@ model Field {
   status      FieldStatus @default(ACTIVE)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
-
+  
   // YENİ: Sezon ilişkisi
   season   Season? @relation(fields: [seasonId], references: [id])
   seasonId String? @db.ObjectId
@@ -84,7 +84,7 @@ model Field {
   crops             Crop[]
   irrigationLogs    IrrigationLog[]
   processingLogs    ProcessingLog[]
-  wells             Well[]
+  wells             Well[]                  // Tarla kuyuları - ilişki güncellendi
   inventoryUsages   InventoryUsage[]
   processes         Process[]
 }
@@ -94,6 +94,7 @@ model FieldOwnership {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  percentage Float   @default(0) // YENİ: Sahiplik yüzdesi
 
   // İlişkiler
   field   Field  @relation("FieldOwnerAssignments", fields: [fieldId], references: [id])
@@ -119,7 +120,7 @@ model FieldWorkerAssignment {
   @@unique([fieldId, userId])
 }
 
-// Diğer modeller (değişmeden kaldı)
+// Kuyu modeli - güncellendi
 model Well {
   id        String     @id @default(auto()) @map("_id") @db.ObjectId
   name      String
@@ -129,8 +130,9 @@ model Well {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
-  field   Field  @relation(fields: [fieldId], references: [id])
-  fieldId String @db.ObjectId
+  // İlişkiler
+  field   Field?  @relation(fields: [fieldId], references: [id])
+  fieldId String? @db.ObjectId
 }
 
 // Ürün modeli

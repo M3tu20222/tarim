@@ -34,12 +34,28 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/components/ui/use-toast";
+import { FieldOwnershipForm } from "./field-ownership-form";
 
 // Sezon tipi
 interface Season {
   id: string;
   name: string;
   isActive: boolean;
+}
+
+// Kuyu tipi
+interface Well {
+  id: string;
+  name: string;
+  depth: number;
+  capacity: number;
+  status: string;
+}
+
+// Sahiplik tipi
+interface Ownership {
+  userId: string;
+  percentage: number;
 }
 
 const formSchema = z.object({
@@ -65,7 +81,8 @@ const formSchema = z.object({
     message: "Toprak türü seçilmelidir.",
   }),
   notes: z.string().optional(),
-  seasonId: z.string().optional(), // YENİ: Sezon ID'si
+  seasonId: z.string().optional(),
+  wellId: z.string().optional(),
 });
 
 export function NewFieldForm() {
@@ -73,7 +90,9 @@ export function NewFieldForm() {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [seasons, setSeasons] = useState<Season[]>([]);
+  const [wells, setWells] = useState<Well[]>([]);
   const [activeSeasonId, setActiveSeasonId] = useState<string | null>(null);
+  const [ownerships, setOwnerships] = useState<Ownership[]>([]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -84,7 +103,8 @@ export function NewFieldForm() {
       crop: "",
       soilType: "",
       notes: "",
-      seasonId: "", // Boş başlat
+      seasonId: "",
+      wellId: "",
     },
   });
 
@@ -119,18 +139,66 @@ export function NewFieldForm() {
     fetchSeasons();
   }, [form]);
 
+  // Kuyuları getir
+  useEffect(() => {
+    const fetchWells = async () => {
+      try {
+        const response = await fetch("/api/wells");
+        if (response.ok) {
+          const data = await response.json();
+          setWells(data);
+        }
+      } catch (error) {
+        console.error("Error fetching wells:", error);
+      }
+    };
+
+    fetchWells();
+  }, []);
+
+  // Sahiplik değişikliği
+  const handleOwnershipChange = (newOwnerships: Ownership[]) => {
+    setOwnerships(newOwnerships);
+  };
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
+    // Sahiplik toplamı kontrolü
+    const totalPercentage = ownerships.reduce(
+      (sum, o) => sum + o.percentage,
+      0
+    );
+    if (totalPercentage !== 100) {
+      toast({
+        title: "Hata!",
+        description: "Sahiplik yüzdeleri toplamı %100 olmalıdır.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       // "no-season" değerini null olarak işle
       const formData = {
         ...values,
         seasonId: values.seasonId === "no-season" ? null : values.seasonId,
+        wellId: values.wellId === "no-well" ? null : values.wellId,
+        ownerships: ownerships,
       };
 
-      // Normalde burada API'ye istek atılır
-      // Şimdilik simüle ediyoruz
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // API'ye istek at
+      const response = await fetch("/api/fields", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Tarla eklenirken bir hata oluştu");
+      }
 
       toast({
         title: "Başarılı!",
@@ -139,11 +207,11 @@ export function NewFieldForm() {
 
       router.push("/dashboard/owner/fields");
       router.refresh();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Tarla ekleme hatası:", error);
       toast({
         title: "Hata!",
-        description: "Tarla eklenirken bir hata oluştu.",
+        description: error.message || "Tarla eklenirken bir hata oluştu.",
         variant: "destructive",
       });
     } finally {
@@ -329,7 +397,7 @@ export function NewFieldForm() {
             )}
           />
 
-          {/* YENİ: Sezon seçimi */}
+          {/* Sezon seçimi */}
           <FormField
             control={form.control}
             name="seasonId"
@@ -360,6 +428,33 @@ export function NewFieldForm() {
               </FormItem>
             )}
           />
+
+          {/* Kuyu seçimi */}
+          <FormField
+            control={form.control}
+            name="wellId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Bağlı Kuyu</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Kuyu seçin" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="no-well">Kuyu Yok</SelectItem>
+                    {wells.map((well) => (
+                      <SelectItem key={well.id} value={well.id}>
+                        {well.name} ({well.depth}m, {well.capacity} lt/sa)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
         </div>
 
         <FormField
@@ -378,6 +473,12 @@ export function NewFieldForm() {
               <FormMessage />
             </FormItem>
           )}
+        />
+
+        {/* Tarla sahiplikleri */}
+        <FieldOwnershipForm
+          ownerships={ownerships}
+          onChange={handleOwnershipChange}
         />
 
         <div className="flex justify-end gap-4">

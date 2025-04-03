@@ -97,35 +97,36 @@ export function AppSidebar() {
     },
   ];
 
-  const ownerLinks: LinkItem[] = [
-    { href: "/dashboard/owner", label: "Genel Bakış", icon: HomeIcon },
-    {
-      href: "/dashboard/owner/fields",
-      label: "Tarlalarım",
-      icon: MapIcon,
-      badge: "8",
-    },
-    { href: "/dashboard/owner/inventory", label: "Envanterim", icon: BoxIcon },
-    {
-      href: "/dashboard/owner/purchases",
-      label: "Alışlar",
-      icon: FileTextIcon,
-      badge: "3",
-    },
-    {
-      href: "/dashboard/owner/debts",
-      label: "Borçlar",
-      icon: CreditCard,
-      badge: "5",
-    },
-    { href: "/dashboard/owner/seasons", label: "Sezonlar", icon: Calendar }, // YENİ: Sezon yönetimi bağlantısı
-    {
-      href: "/dashboard/owner/notifications",
-      label: "Bildirimler",
-      icon: BellIcon,
-      badge: "5",
-    },
-  ];
+ const ownerLinks: LinkItem[] = [
+   { href: "/dashboard/owner", label: "Genel Bakış", icon: HomeIcon },
+   {
+     href: "/dashboard/owner/fields",
+     label: "Tarlalarım",
+     icon: MapIcon,
+     badge: "8",
+   },
+   { href: "/dashboard/owner/wells", label: "Kuyular", icon: DropletIcon }, // YENİ: Kuyu yönetimi bağlantısı
+   { href: "/dashboard/owner/inventory", label: "Envanterim", icon: BoxIcon },
+   {
+     href: "/dashboard/owner/purchases",
+     label: "Alışlar",
+     icon: FileTextIcon,
+     badge: "3",
+   },
+   {
+     href: "/dashboard/owner/debts",
+     label: "Borçlar",
+     icon: CreditCard,
+     badge: "5",
+   },
+   { href: "/dashboard/owner/seasons", label: "Sezonlar", icon: Calendar }, // YENİ: Sezon yönetimi bağlantısı
+   {
+     href: "/dashboard/owner/notifications",
+     label: "Bildirimler",
+     icon: BellIcon,
+     badge: "5",
+   },
+ ];
 
   const workerLinks: LinkItem[] = [
     // Türü belirtiyoruz

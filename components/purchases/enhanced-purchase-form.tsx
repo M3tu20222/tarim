@@ -137,6 +137,7 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
               userName: user.name,
               sharePercentage: 100,
               hasPaid: true,
+              dueDate: new Date(new Date().setDate(new Date().getDate() + 30)),
             },
           ]
         : [],
@@ -166,12 +167,17 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
   }, [quantity, unitPrice, form]);
 
   // Calculate total percentage when partners change
+  // 1. Toplam yüzde hesaplamasını düzelt
   useEffect(() => {
-    const total = partners.reduce(
-      (sum, partner) => sum + (partner.sharePercentage || 0),
-      0
-    );
-    setTotalPercentage(total);
+    const total = partners.reduce((sum, partner) => {
+      // Sayısal değere dönüştürme işlemini güçlendirelim
+      const percentage =
+        Number.parseFloat(String(partner.sharePercentage)) || 0;
+      return sum + percentage;
+    }, 0);
+
+    // Virgülden sonra 2 basamak ve sayısal değer olarak saklayalım
+    setTotalPercentage(Number(total.toFixed(2)));
   }, [partners]);
 
   // Fetch users, templates and seasons from API
@@ -309,7 +315,9 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
       userName: "",
       sharePercentage: 0,
       hasPaid: false,
+      dueDate: new Date(new Date().setDate(new Date().getDate() + 30)), // 30 gün sonrası için varsayılan vade
     });
+    // Explicit scroll removed as it might interfere with focus
   };
 
   // Distribute remaining percentage
@@ -755,7 +763,9 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
                 Toplam:{" "}
                 <span
                   className={
-                    totalPercentage === 100 ? "text-green-500" : "text-red-500"
+                    Math.abs(totalPercentage - 100) < 0.01
+                      ? "text-green-500"
+                      : "text-red-500"
                   }
                 >
                   %{totalPercentage.toFixed(2)}
@@ -764,15 +774,18 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {totalPercentage !== 100 && (
-              <Alert variant="destructive">
-                <AlertTitle>Dikkat</AlertTitle>
-                <AlertDescription>
-                  Ortaklık yüzdelerinin toplamı %100 olmalıdır. Şu anda toplam:
-                  %{totalPercentage.toFixed(2)}
-                </AlertDescription>
-              </Alert>
-            )}
+            {/* Toplam yüzde 100 değilse uyarı göster */}
+            {/* typeof kontrolü eklendi */}
+            {typeof totalPercentage === "number" &&
+              Math.abs(totalPercentage - 100) > 0.01 && (
+                <Alert variant="destructive">
+                  <AlertTitle>Dikkat</AlertTitle>
+                  <AlertDescription>
+                    Ortaklık yüzdelerinin toplamı %100 olmalıdır. Şu anda
+                    toplam: %{totalPercentage.toFixed(2)}
+                  </AlertDescription>
+                </Alert>
+              )}
 
             <div className="flex flex-wrap gap-2">
               <Button
@@ -808,10 +821,22 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
                     control={form.control}
                     name={`partners.${index}.userId`}
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className="partner-select">
                         <FormLabel>Ortak</FormLabel>
                         <Select
-                          onValueChange={field.onChange}
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            // Kullanıcı adını da güncelle
+                            const selectedUser = users.find(
+                              (u) => u.id === value
+                            );
+                            if (selectedUser) {
+                              form.setValue(
+                                `partners.${index}.userName`,
+                                selectedUser.name
+                              );
+                            }
+                          }}
                           value={field.value}
                         >
                           <FormControl>
@@ -819,7 +844,7 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
                               <SelectValue placeholder="Ortak seçin" />
                             </SelectTrigger>
                           </FormControl>
-                          <SelectContent>
+                          <SelectContent position="popper" className="z-50">
                             {users.map((user) => (
                               <SelectItem key={user.id} value={user.id}>
                                 {user.name}
@@ -843,10 +868,15 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
                             type="number"
                             min="0"
                             max="100"
-                            step="0.01"
+                            step="0.01" // Ondalık girişi destekler
+                            placeholder="Örn: 75.5" // Nokta kullanımı için ipucu
                             {...field}
+                            // Zod 'coerce' zaten string'i number'a çevirecek
                           />
                         </FormControl>
+                        <FormDescription>
+                          Ondalık için nokta (.) kullanın.
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -881,10 +911,8 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
                             <PopoverTrigger asChild>
                               <FormControl>
                                 <Button
-                                  variant={"outline"}
-                                  className={`w-full pl-3 text-left font-normal ${
-                                    !field.value ? "text-muted-foreground" : ""
-                                  }`}
+                                  variant="outline"
+                                  className="w-full pl-3 text-left font-normal"
                                 >
                                   {field.value ? (
                                     format(field.value, "PPP", { locale: tr })
@@ -896,13 +924,19 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
                               </FormControl>
                             </PopoverTrigger>
                             <PopoverContent
-                              className="w-auto p-0"
+                              className="w-auto p-0 z-[200]" // Increased z-index
                               align="start"
+                              side="bottom"
                             >
                               <Calendar
                                 mode="single"
                                 selected={field.value}
-                                onSelect={field.onChange}
+                                onSelect={(date) => {
+                                  if (date) {
+                                    field.onChange(date);
+                                    console.log("Tarih seçildi:", date);
+                                  }
+                                }}
                                 disabled={(date) => date < new Date()}
                                 initialFocus
                               />
