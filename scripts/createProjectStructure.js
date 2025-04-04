@@ -3,17 +3,9 @@ const path = require('path');
 
 // Oluşturulacak dosya ve klasör yapısı
 const projectStructure = [
-  'app/api/wells/route.ts',
-  'app/api/wells/[id]/route.ts',
-  'app/api/users/owners/route.ts',
-  'app/dashboard/owner/wells/page.tsx',
-  'components/wells/well-list.tsx',  
-  'app/dashboard/owner/wells/new/page.tsx',
-  'components/wells/well-form.tsx',
-  'components/fields/field-ownership-form.tsx',
-  'components/fields/new-field-form.tsx',
-  'app/api/fields/route.ts',
-  'app/dashboard/owner/fields/new/page.tsx'
+  'components/purchases/purchases-table.tsx',
+  'components/purchases/purchase-details.tsx',
+  'components/purchases/purchase-actions.tsx'
 ];
 
 // Boş dosya içerikleri

@@ -93,9 +93,10 @@ export function PurchaseActions({ purchase }: { purchase: any }) {
             </DropdownMenuItem>
           )}
           <DropdownMenuItem asChild>
-            <Link href={`/dashboard/purchases/${purchase.id}/edit`}>
+            {/* Düzeltme: /owner yolunu ekle */}
+            <Link href={`/dashboard/owner/purchases/${purchase.id}/edit`}>
               <Pencil className="mr-2 h-4 w-4" />
-              Edit
+              Düzenle
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem

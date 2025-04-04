@@ -199,6 +199,7 @@ export async function POST(request: Request) {
             user: {
               connect: { id: ownership.userId },
             },
+            percentage: ownership.percentage, // Sahiplik yüzdesini ekle
           })),
         },
       },

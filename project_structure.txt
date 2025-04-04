@@ -1,297 +1,310 @@
-app
- ┣ api
- ┃ ┣ auth
- ┃ ┃ ┣ login
- ┃ ┃ ┃ ┗ route.ts
- ┃ ┃ ┣ logout
- ┃ ┃ ┃ ┗ route.ts
- ┃ ┃ ┗ refresh
- ┃ ┃ ┃ ┗ route.ts
- ┃ ┣ cron
- ┃ ┃ ┗ debt-reminders
- ┃ ┃ ┃ ┗ route.ts
- ┃ ┣ debts
- ┃ ┃ ┣ reminders
- ┃ ┃ ┃ ┗ route.ts
- ┃ ┃ ┣ [id]
- ┃ ┃ ┃ ┣ pay
- ┃ ┃ ┃ ┃ ┗ route.ts
- ┃ ┃ ┃ ┗ route.ts
- ┃ ┃ ┗ route.ts
- ┃ ┣ fields
- ┃ ┃ ┣ [id]
- ┃ ┃ ┃ ┗ route.ts
- ┃ ┃ ┗ route.ts
- ┃ ┣ inventory
- ┃ ┃ ┣ categories
- ┃ ┃ ┃ ┗ route.ts
- ┃ ┃ ┣ reports
- ┃ ┃ ┃ ┗ route.ts
- ┃ ┃ ┣ [id]
- ┃ ┃ ┃ ┗ route.ts
- ┃ ┃ ┗ route.ts
- ┃ ┣ irrigation-logs
- ┃ ┃ ┗ route.ts
- ┃ ┣ notifications
- ┃ ┃ ┗ route.ts
- ┃ ┣ payments
- ┃ ┃ ┗ route.ts
- ┃ ┣ purchase-templates
- ┃ ┃ ┗ route.ts
- ┃ ┣ purchases
- ┃ ┃ ┣ [id]
- ┃ ┃ ┃ ┗ approve
- ┃ ┃ ┃ ┃ ┗ route.ts
- ┃ ┃ ┗ route.ts
- ┃ ┣ seasons
- ┃ ┃ ┣ [id]
- ┃ ┃ ┃ ┗ route.ts
- ┃ ┃ ┗ route.ts
- ┃ ┣ session
- ┃ ┃ ┗ route.ts
- ┃ ┗ users
- ┃ ┃ ┣ [id]
- ┃ ┃ ┃ ┗ route.ts
- ┃ ┃ ┗ route.ts
- ┣ auth
- ┃ ┣ layout.tsx
- ┃ ┗ page.tsx
- ┣ dashboard
- ┃ ┣ admin
- ┃ ┃ ┣ users
- ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┣ loading.tsx
- ┃ ┃ ┗ page.tsx
- ┃ ┣ dashboard
- ┃ ┃ ┣ inventory
- ┃ ┃ ┃ ┣ new
- ┃ ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┣ purchases
- ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┣ layout.tsx
- ┃ ┃ ┗ page.tsx
- ┃ ┣ owner
- ┃ ┃ ┣ debts
- ┃ ┃ ┃ ┣ new
- ┃ ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┃ ┣ pay
- ┃ ┃ ┃ ┃ ┗ [id]
- ┃ ┃ ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┃ ┣ reminders
- ┃ ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┃ ┣ [id]
- ┃ ┃ ┃ ┃ ┣ edit
- ┃ ┃ ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┣ fields
- ┃ ┃ ┃ ┣ new
- ┃ ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┣ inventory
- ┃ ┃ ┃ ┣ reports
- ┃ ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┣ notifications
- ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┣ purchases
- ┃ ┃ ┃ ┣ new
- ┃ ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┃ ┣ templates
- ┃ ┃ ┃ ┃ ┣ new
- ┃ ┃ ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┃ ┣ [id]
- ┃ ┃ ┃ ┃ ┗ approve
- ┃ ┃ ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┣ seasons
- ┃ ┃ ┃ ┣ new
- ┃ ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┃ ┣ [id]
- ┃ ┃ ┃ ┃ ┣ edit
- ┃ ┃ ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┃ ┗ page.tsx
- ┃ ┃ ┣ loading.tsx
- ┃ ┃ ┗ page.tsx
- ┃ ┣ worker
- ┃ ┃ ┣ loading.tsx
- ┃ ┃ ┗ page.tsx
- ┃ ┣ DashboardLayoutClient.tsx
- ┃ ┗ layout.tsx
- ┣ login
- ┃ ┗ page.tsx
- ┣ protected
- ┃ ┗ layout.tsx
- ┣ test-auth
- ┃ ┗ page.tsx
- ┣ favicon.ico
- ┣ globals.css
- ┣ layout.tsx
- ┗ page.tsx
- components
- ┣ dashboard
- ┃ ┣ dashboard-stats.tsx
- ┃ ┣ overview.tsx
- ┃ ┣ recent-activity.tsx
- ┃ ┣ recent-sales.tsx
- ┃ ┗ weather-widget.tsx
- ┣ debts
- ┃ ┣ debt-form.tsx
- ┃ ┣ debt-list.tsx
- ┃ ┣ debt-payment-form.tsx
- ┃ ┗ debt-reminder.tsx
- ┣ fields
- ┃ ┗ new-field-form.tsx
- ┣ inventory
- ┃ ┣ inventory-actions.tsx
- ┃ ┣ inventory-report.tsx
- ┃ ┣ inventory-table-skeleton.tsx
- ┃ ┣ inventory-table.tsx
- ┃ ┗ new-inventory-form.tsx
- ┣ payments
- ┃ ┗ payment-form.tsx
- ┣ purchases
- ┃ ┣ enhanced-purchase-form.tsx
- ┃ ┣ new-purchase-form.tsx
- ┃ ┣ purchase-actions.tsx
- ┃ ┣ purchase-approval.tsx
- ┃ ┣ purchase-template-list.tsx
- ┃ ┣ purchases-table-skeleton.tsx
- ┃ ┗ purchases-table.tsx
- ┣ seasons
- ┃ ┣ season-form.tsx
- ┃ ┗ season-list.tsx
- ┣ ui
- ┃ ┣ accordion.tsx
- ┃ ┣ alert-dialog.tsx
- ┃ ┣ alert.tsx
- ┃ ┣ aspect-ratio.tsx
- ┃ ┣ avatar.tsx
- ┃ ┣ badge.tsx
- ┃ ┣ breadcrumb.tsx
- ┃ ┣ button.tsx
- ┃ ┣ calendar.tsx
- ┃ ┣ card.tsx
- ┃ ┣ carousel.tsx
- ┃ ┣ chart.tsx
- ┃ ┣ checkbox.tsx
- ┃ ┣ collapsible.tsx
- ┃ ┣ command.tsx
- ┃ ┣ context-menu.tsx
- ┃ ┣ dialog.tsx
- ┃ ┣ drawer.tsx
- ┃ ┣ dropdown-menu.tsx
- ┃ ┣ form.tsx
- ┃ ┣ hover-card.tsx
- ┃ ┣ input-otp.tsx
- ┃ ┣ input.tsx
- ┃ ┣ label.tsx
- ┃ ┣ menubar.tsx
- ┃ ┣ navigation-menu.tsx
- ┃ ┣ pagination.tsx
- ┃ ┣ popover.tsx
- ┃ ┣ progress.tsx
- ┃ ┣ radio-group.tsx
- ┃ ┣ resizable.tsx
- ┃ ┣ scroll-area.tsx
- ┃ ┣ select.tsx
- ┃ ┣ separator.tsx
- ┃ ┣ sheet.tsx
- ┃ ┣ sidebar.tsx
- ┃ ┣ skeleton.tsx
- ┃ ┣ slider.tsx
- ┃ ┣ sonner.tsx
- ┃ ┣ switch.tsx
- ┃ ┣ table.tsx
- ┃ ┣ tabs.tsx
- ┃ ┣ textarea.tsx
- ┃ ┣ toast.tsx
- ┃ ┣ toaster.tsx
- ┃ ┣ toggle-group.tsx
- ┃ ┣ toggle.tsx
- ┃ ┣ tooltip.tsx
- ┃ ┣ use-mobile.tsx
- ┃ ┗ use-toast.ts
- ┣ users
- ┃ ┣ add-user-dialog.tsx
- ┃ ┣ delete-user-dialog.tsx
- ┃ ┣ edit-user-dialog.tsx
- ┃ ┣ user-management.tsx
- ┃ ┗ user-table.tsx
- ┣ admin-activity-chart.tsx
- ┣ admin-overview-stats.tsx
- ┣ admin-recent-users.tsx
- ┣ app-sidebar.tsx
- ┣ auth-provider.tsx
- ┣ dashboard-header.tsx
- ┣ dashboard-layout.tsx
- ┣ dashboard-nav.tsx
- ┣ date-range-picker.tsx
- ┣ fields-list.tsx
- ┣ login-form.tsx
- ┣ main-sidebar.tsx
- ┣ mobile-nav.tsx
- ┣ owner-irrigation-chart.tsx
- ┣ owner-overview-stats.tsx
- ┣ owner-recent-fields.tsx
- ┣ protected-page.tsx
- ┣ session-provider.tsx
- ┣ sidebar.tsx
- ┣ theme-provider.tsx
- ┣ theme-toggle.tsx
- ┣ user-nav.tsx
- ┣ user-table.tsx
- ┣ worker-fields-list.tsx
- ┣ worker-overview-stats.tsx
- ┣ worker-recent-tasks.tsx
- ┗ worker-tasks-chart.tsx
- hooks
- ┣ use-mobile.tsx
- ┗ use-toast.ts
- lib
- ┣ jwt.ts
- ┣ prisma.ts
- ┣ prismaClientExtension.ts
- ┣ prismaMiddleware.ts
- ┣ session.ts
- ┗ utils.ts
- prisma
- ┣ schema.prisma
- ┣ seed.ts
- ┗ tsconfig.prisma.json
- public
- ┣ file.svg
- ┣ globe.svg
- ┣ next.svg
- ┣ placeholder-logo.png
- ┣ placeholder-logo.svg
- ┣ placeholder-user.jpg
- ┣ placeholder.jpg
- ┣ placeholder.svg
- ┣ vercel.svg
- ┗ window.svg
- types
- ┣ next-auth.d.ts
- ┣ prisma-types.ts
- ┗ user-form-data.ts
-  ┣ .env
- ┣ .env.local
- ┣ .eslintrc.json
- ┣ .gitignore
- ┣ components.json
- ┣ eslint.config.mjs
- ┣ middleware.ts
- ┣ next-env.d.ts
- ┣ next.config.mjs
- ┣ next.config.ts
- ┣ package-lock.json
- ┣ package.json
- ┣ postcss.config.mjs
- ┣ project_structure.txt
- ┣ README.md
- ┣ tailwind.config.ts
- ┣ tsconfig.json
- ┗ vercel.json
+﻿.
++--.vercel
+|  +--output
+|  |  +--diagnostics
+|  |  |  +--build-diagnostics.json
+|  |  |  +--cli_traces.json
+|  |  |  +--framework.json
+|  |  |  \--trace
+|  |  +--builds.json
+|  |  \--config.json
+|  +--.env.preview.local
+|  +--project.json
+|  \--README.txt
++--app
+|  +--api
+|  |  +--auth
+|  |  |  +--login
+|  |  |  |  \--route.ts
+|  |  |  +--logout
+|  |  |  |  \--route.ts
+|  |  |  \--refresh
+|  |  |     \--route.ts
+|  |  +--cron
+|  |  |  \--debt-reminders
+|  |  |     \--route.ts
+|  |  +--debts
+|  |  |  +--reminders
+|  |  |  |  \--route.ts
+|  |  |  +--[id]
+|  |  |  \--route.ts
+|  |  +--fields
+|  |  |  +--[id]
+|  |  |  \--route.ts
+|  |  +--inventory
+|  |  |  +--categories
+|  |  |  |  \--route.ts
+|  |  |  +--reports
+|  |  |  |  \--route.ts
+|  |  |  +--[id]
+|  |  |  \--route.ts
+|  |  +--irrigation-logs
+|  |  |  \--route.ts
+|  |  +--notifications
+|  |  |  \--route.ts
+|  |  +--payments
+|  |  |  \--route.ts
+|  |  +--purchase-templates
+|  |  |  \--route.ts
+|  |  +--purchases
+|  |  |  +--[id]
+|  |  |  \--route.ts
+|  |  +--seasons
+|  |  |  +--[id]
+|  |  |  \--route.ts
+|  |  +--session
+|  |  |  \--route.ts
+|  |  +--users
+|  |  |  +--owners
+|  |  |  |  \--route.ts
+|  |  |  +--[id]
+|  |  |  \--route.ts
+|  |  \--wells
+|  |     +--[id]
+|  |     \--route.ts
+|  +--auth
+|  |  +--layout.tsx
+|  |  \--page.tsx
+|  +--dashboard
+|  |  +--admin
+|  |  |  +--users
+|  |  |  |  \--page.tsx
+|  |  |  +--loading.tsx
+|  |  |  \--page.tsx
+|  |  +--dashboard
+|  |  |  +--inventory
+|  |  |  |  +--new
+|  |  |  |  |  \--page.tsx
+|  |  |  |  \--page.tsx
+|  |  |  +--purchases
+|  |  |  |  \--page.tsx
+|  |  |  +--layout.tsx
+|  |  |  \--page.tsx
+|  |  +--owner
+|  |  |  +--debts
+|  |  |  |  +--new
+|  |  |  |  |  \--page.tsx
+|  |  |  |  +--pay
+|  |  |  |  |  \--[id]
+|  |  |  |  +--reminders
+|  |  |  |  |  \--page.tsx
+|  |  |  |  +--[id]
+|  |  |  |  \--page.tsx
+|  |  |  +--fields
+|  |  |  |  +--new
+|  |  |  |  |  \--page.tsx
+|  |  |  |  \--page.tsx
+|  |  |  +--inventory
+|  |  |  |  +--reports
+|  |  |  |  |  \--page.tsx
+|  |  |  |  \--page.tsx
+|  |  |  +--notifications
+|  |  |  |  \--page.tsx
+|  |  |  +--purchases
+|  |  |  |  +--new
+|  |  |  |  |  \--page.tsx
+|  |  |  |  +--templates
+|  |  |  |  |  +--new
+|  |  |  |  |  |  \--page.tsx
+|  |  |  |  |  \--page.tsx
+|  |  |  |  +--[id]
+|  |  |  |  \--page.tsx
+|  |  |  +--seasons
+|  |  |  |  +--new
+|  |  |  |  |  \--page.tsx
+|  |  |  |  +--[id]
+|  |  |  |  \--page.tsx
+|  |  |  +--wells
+|  |  |  |  +--new
+|  |  |  |  |  \--page.tsx
+|  |  |  |  \--page.tsx
+|  |  |  +--loading.tsx
+|  |  |  \--page.tsx
+|  |  +--worker
+|  |  |  +--loading.tsx
+|  |  |  \--page.tsx
+|  |  +--DashboardLayoutClient.tsx
+|  |  \--layout.tsx
+|  +--login
+|  |  \--page.tsx
+|  +--protected
+|  |  \--layout.tsx
+|  +--test-auth
+|  |  \--page.tsx
+|  +--favicon.ico
+|  +--globals.css
+|  +--layout.tsx
+|  \--page.tsx
++--components
+|  +--dashboard
+|  |  +--dashboard-stats.tsx
+|  |  +--overview.tsx
+|  |  +--recent-activity.tsx
+|  |  +--recent-sales.tsx
+|  |  \--weather-widget.tsx
+|  +--debts
+|  |  +--debt-form.tsx
+|  |  +--debt-list.tsx
+|  |  +--debt-payment-form.tsx
+|  |  \--debt-reminder.tsx
+|  +--fields
+|  |  +--field-ownership-form.tsx
+|  |  \--new-field-form.tsx
+|  +--inventory
+|  |  +--inventory-actions.tsx
+|  |  +--inventory-report.tsx
+|  |  +--inventory-table-skeleton.tsx
+|  |  +--inventory-table.tsx
+|  |  \--new-inventory-form.tsx
+|  +--payments
+|  |  \--payment-form.tsx
+|  +--purchases
+|  |  +--edit-purchase-form.tsx
+|  |  +--enhanced-purchase-form.tsx
+|  |  +--new-purchase-form.tsx
+|  |  +--purchase-actions.tsx
+|  |  +--purchase-approval.tsx
+|  |  +--purchase-details.tsx
+|  |  +--purchase-template-list.tsx
+|  |  +--purchases-table-skeleton.tsx
+|  |  \--purchases-table.tsx
+|  +--seasons
+|  |  +--season-form.tsx
+|  |  \--season-list.tsx
+|  +--ui
+|  |  +--accordion.tsx
+|  |  +--alert-dialog.tsx
+|  |  +--alert.tsx
+|  |  +--aspect-ratio.tsx
+|  |  +--avatar.tsx
+|  |  +--badge.tsx
+|  |  +--breadcrumb.tsx
+|  |  +--button.tsx
+|  |  +--calendar.tsx
+|  |  +--card.tsx
+|  |  +--carousel.tsx
+|  |  +--chart.tsx
+|  |  +--checkbox.tsx
+|  |  +--collapsible.tsx
+|  |  +--command.tsx
+|  |  +--context-menu.tsx
+|  |  +--dialog.tsx
+|  |  +--drawer.tsx
+|  |  +--dropdown-menu.tsx
+|  |  +--form.tsx
+|  |  +--hover-card.tsx
+|  |  +--input-otp.tsx
+|  |  +--input.tsx
+|  |  +--label.tsx
+|  |  +--menubar.tsx
+|  |  +--navigation-menu.tsx
+|  |  +--pagination.tsx
+|  |  +--popover.tsx
+|  |  +--progress.tsx
+|  |  +--radio-group.tsx
+|  |  +--resizable.tsx
+|  |  +--scroll-area.tsx
+|  |  +--select.tsx
+|  |  +--separator.tsx
+|  |  +--sheet.tsx
+|  |  +--sidebar.tsx
+|  |  +--skeleton.tsx
+|  |  +--slider.tsx
+|  |  +--sonner.tsx
+|  |  +--switch.tsx
+|  |  +--table.tsx
+|  |  +--tabs.tsx
+|  |  +--textarea.tsx
+|  |  +--toast.tsx
+|  |  +--toaster.tsx
+|  |  +--toggle-group.tsx
+|  |  +--toggle.tsx
+|  |  +--tooltip.tsx
+|  |  +--use-mobile.tsx
+|  |  \--use-toast.ts
+|  +--users
+|  |  +--add-user-dialog.tsx
+|  |  +--delete-user-dialog.tsx
+|  |  +--edit-user-dialog.tsx
+|  |  +--user-management.tsx
+|  |  \--user-table.tsx
+|  +--wells
+|  |  +--well-form.tsx
+|  |  \--well-list.tsx
+|  +--admin-activity-chart.tsx
+|  +--admin-overview-stats.tsx
+|  +--admin-recent-users.tsx
+|  +--app-sidebar.tsx
+|  +--auth-provider.tsx
+|  +--dashboard-header.tsx
+|  +--dashboard-layout.tsx
+|  +--dashboard-nav.tsx
+|  +--date-range-picker.tsx
+|  +--fields-list.tsx
+|  +--login-form.tsx
+|  +--main-sidebar.tsx
+|  +--mobile-nav.tsx
+|  +--owner-irrigation-chart.tsx
+|  +--owner-overview-stats.tsx
+|  +--owner-recent-fields.tsx
+|  +--protected-page.tsx
+|  +--session-provider.tsx
+|  +--sidebar.tsx
+|  +--theme-provider.tsx
+|  +--theme-toggle.tsx
+|  +--user-nav.tsx
+|  +--user-table.tsx
+|  +--worker-fields-list.tsx
+|  +--worker-overview-stats.tsx
+|  +--worker-recent-tasks.tsx
+|  \--worker-tasks-chart.tsx
++--hooks
+|  +--use-mobile.tsx
+|  \--use-toast.ts
++--lib
+|  +--jwt.ts
+|  +--prisma.ts
+|  +--prismaClientExtension.ts
+|  +--prismaMiddleware.ts
+|  +--session.ts
+|  \--utils.ts
++--prisma
+|  +--schema.prisma
+|  +--seed.ts
+|  \--tsconfig.prisma.json
++--public
+|  +--file.svg
+|  +--globe.svg
+|  +--next.svg
+|  +--placeholder-logo.png
+|  +--placeholder-logo.svg
+|  +--placeholder-user.jpg
+|  +--placeholder.jpg
+|  +--placeholder.svg
+|  +--vercel.svg
+|  \--window.svg
++--scripts
+|  \--createProjectStructure.js
++--types
+|  +--next-auth.d.ts
+|  +--prisma-types.ts
+|  \--user-form-data.ts
++--.env
++--.env.local
++--.eslintrc.json
++--.gitignore
++--components.json
++--eslint.config.mjs
++--generate_tree.ps1
++--middleware.ts
++--next-env.d.ts
++--next.config.mjs
++--next.config.ts
++--package-lock.json
++--package.json
++--postcss.config.mjs
++--project_structure.txt
++--README.md
++--tailwind.config.ts
++--tsconfig.json
+\--vercel.json
