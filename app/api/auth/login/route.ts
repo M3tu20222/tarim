@@ -8,7 +8,7 @@ import { signToken } from "@/lib/jwt";
 export async function POST(request: Request) {
   try {
     const { email, password } = await request.json();
-    console.log("Login isteği:", { email, password });
+    
 
     if (!email || !password) {
       return NextResponse.json(
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     const user = await prisma.user.findUnique({
       where: { email },
     });
-    console.log("Kullanıcı bulundu:", user ? "Evet" : "Hayır");
+    
 
     if (!user) {
       return NextResponse.json(
@@ -41,9 +41,9 @@ export async function POST(request: Request) {
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
-    console.log("Şifre doğrulama sonucu:", isPasswordValid);
+    
     if (!isPasswordValid) {
-      console.log("Veritabanındaki şifre:", user.password);
+      
       return NextResponse.json(
         { success: false, message: "Şifre hatalı" },
         { status: 401 }

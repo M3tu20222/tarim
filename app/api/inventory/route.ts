@@ -1,64 +1,70 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import type { InventoryCategory, InventoryStatus, Unit } from "@prisma/client";
 
 // Tüm envanter öğelerini getir
 export async function GET(request: Request) {
   try {
-    // Yetkilendirme kontrolü
     const userId = request.headers.get("x-user-id");
     const userRole = request.headers.get("x-user-role");
 
-    if (!userId) {
+    if (!userId || !userRole) {
       return NextResponse.json(
-        { error: "Kimlik doğrulama gerekli" },
+        { error: "Kullanıcı ID'si veya rolü eksik" },
         { status: 401 }
       );
     }
 
-    let inventory;
+    // URL parametrelerini al
+    const { searchParams } = new URL(request.url);
+    const category = searchParams.get("category");
+    const status = searchParams.get("status");
+    const showAll = searchParams.get("showAll") === "true"; // Tüm envanterleri gösterme parametresi
 
-    // Admin tüm envanterleri görebilir, diğer kullanıcılar sadece kendi payı olanları
-    if (userRole === "ADMIN") {
-      inventory = await prisma.inventory.findMany({
-        include: {
-          ownerships: {
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true,
-                },
-              },
-            },
-          },
-        },
-      });
-    } else {
-      // Kullanıcının payı olan envanterleri getir
-      inventory = await prisma.inventory.findMany({
-        where: {
-          ownerships: {
-            some: {
-              userId: userId,
-            },
-          },
-        },
-        include: {
-          ownerships: {
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true,
-                },
-              },
-            },
-          },
-        },
-      });
+    // Filtre oluştur
+    const filter: any = {};
+    if (category) {
+      filter.category = category;
     }
+    if (status) {
+      filter.status = status;
+    }
+
+    // Eğer showAll parametresi yoksa veya false ise, sadece kullanıcının sahip olduğu envanterleri getir
+    if (!showAll && userRole !== "ADMIN") {
+      filter.ownerships = {
+        some: {
+          userId: userId,
+        },
+      };
+    }
+
+    // Envanter öğelerini getir
+    const inventory = await prisma.inventory.findMany({
+      where: filter,
+      include: {
+        ownerships: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+        inventoryTransactions: {
+          take: 5,
+          orderBy: {
+            date: "desc",
+          },
+        },
+      },
+      orderBy: {
+        updatedAt: "desc",
+      },
+    });
 
     return NextResponse.json(inventory);
   } catch (error) {
@@ -70,16 +76,17 @@ export async function GET(request: Request) {
   }
 }
 
+// Diğer metodlar aynı kalabilir...
+
 // Yeni envanter öğesi oluştur
 export async function POST(request: Request) {
   try {
-    // Yetkilendirme kontrolü
     const userId = request.headers.get("x-user-id");
     const userRole = request.headers.get("x-user-role");
 
-    if (!userId) {
+    if (!userId || !userRole) {
       return NextResponse.json(
-        { error: "Kimlik doğrulama gerekli" },
+        { error: "Kullanıcı ID'si veya rolü eksik" },
         { status: 401 }
       );
     }
@@ -97,15 +104,14 @@ export async function POST(request: Request) {
       category,
       totalQuantity,
       unit,
+      status,
       purchaseDate,
       expiryDate,
-      status,
       notes,
-      ownerships,
     } = await request.json();
 
     // Veri doğrulama
-    if (!name || !category || !totalQuantity || !unit) {
+    if (!name || !category || totalQuantity === undefined || !unit || !status) {
       return NextResponse.json(
         { error: "Gerekli alanlar eksik" },
         { status: 400 }
@@ -116,36 +122,32 @@ export async function POST(request: Request) {
     const inventory = await prisma.inventory.create({
       data: {
         name,
-        category,
-        totalQuantity,
-        unit,
-        purchaseDate: purchaseDate ? new Date(purchaseDate) : undefined,
-        expiryDate: expiryDate ? new Date(expiryDate) : undefined,
-        status: status || "AVAILABLE",
+        category: category as InventoryCategory,
+        totalQuantity: Number(totalQuantity),
+        unit: unit as Unit,
+        status: status as InventoryStatus,
+        purchaseDate: purchaseDate ? new Date(purchaseDate) : null,
+        expiryDate: expiryDate ? new Date(expiryDate) : null,
         notes,
         ownerships: {
-          create: ownerships.map((ownership: any) => ({
-            userId: ownership.userId,
-            shareQuantity: ownership.shareQuantity,
-          })),
+          create: {
+            userId,
+            shareQuantity: Number(totalQuantity),
+          },
         },
-      },
-      include: {
-        ownerships: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
+        inventoryTransactions: {
+          create: {
+            type: "PURCHASE",
+            quantity: Number(totalQuantity),
+            date: new Date(),
+            notes: `${name} envanteri oluşturuldu`,
+            userId,
           },
         },
       },
     });
 
-    return NextResponse.json(inventory, { status: 201 });
+    return NextResponse.json(inventory);
   } catch (error) {
     console.error("Error creating inventory:", error);
     return NextResponse.json(

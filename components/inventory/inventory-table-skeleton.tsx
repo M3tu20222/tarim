@@ -1,3 +1,4 @@
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -6,7 +7,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Skeleton } from "@/components/ui/skeleton";
 
 export function InventoryTableSkeleton() {
   return (
@@ -14,43 +14,44 @@ export function InventoryTableSkeleton() {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Category</TableHead>
-            <TableHead>Quantity</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Owners</TableHead>
-            <TableHead>Last Updated</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
+            <TableHead>Ürün Adı</TableHead>
+            <TableHead>Kategori</TableHead>
+            <TableHead>Miktar</TableHead>
+            <TableHead>Sahiplik Yüzdesi</TableHead>
+            <TableHead>Durum</TableHead>
+            <TableHead>Son Güncelleme</TableHead>
+            <TableHead className="text-right">İşlemler</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {Array(5)
-            .fill(0)
-            .map((_, i) => (
-              <TableRow key={i}>
-                <TableCell>
-                  <Skeleton className="h-4 w-[120px]" />
-                </TableCell>
-                <TableCell>
-                  <Skeleton className="h-4 w-[80px]" />
-                </TableCell>
-                <TableCell>
-                  <Skeleton className="h-4 w-[60px]" />
-                </TableCell>
-                <TableCell>
-                  <Skeleton className="h-4 w-[80px]" />
-                </TableCell>
-                <TableCell>
-                  <Skeleton className="h-4 w-[100px]" />
-                </TableCell>
-                <TableCell>
-                  <Skeleton className="h-4 w-[80px]" />
-                </TableCell>
-                <TableCell className="text-right">
-                  <Skeleton className="h-8 w-8 rounded-full ml-auto" />
-                </TableCell>
-              </TableRow>
-            ))}
+          {Array.from({ length: 5 }).map((_, index) => (
+            <TableRow key={index}>
+              <TableCell>
+                <Skeleton className="h-4 w-[150px]" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-[100px]" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-[80px]" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-[80px]" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-[100px]" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-[120px]" />
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex justify-end gap-2">
+                  <Skeleton className="h-8 w-8" />
+                  <Skeleton className="h-8 w-8" />
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
         </TableBody>
       </Table>
     </div>

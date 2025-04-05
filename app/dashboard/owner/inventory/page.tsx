@@ -3,8 +3,8 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { PlusIcon } from "lucide-react";
 import { Suspense } from "react";
-import { InventoryTable } from "@/components/inventory/inventory-table";
-import { InventoryTableSkeleton } from "@/components/inventory/inventory-table-skeleton";
+import { InventoryTable } from "@/components/inventory/inventory-table"; // Düzeltilmiş import
+import { InventoryTableSkeleton } from "@/components/inventory/inventory-table-skeleton"; // Düzeltilmiş import
 
 export const metadata: Metadata = {
   title: "Envanter Yönetimi | Tarım Yönetim Sistemi",

@@ -39,6 +39,11 @@ model User {
   inventoryTransactions InventoryTransaction[]
   seasons               Season[]                @relation("SeasonCreator") // YENİ: Sezon oluşturucu ilişkisi
   purchaseApprovals     PurchaseApproval[]      // YENİ: Alış onayları
+  
+  // YENİ: Ekipman ilişkileri
+  equipmentOwnerships   EquipmentOwnership[]    // Sahip olunan ekipmanlar
+  equipmentUsages       EquipmentUsage[]        // Kullanılan ekipmanlar
+  fieldOwnerExpenses    FieldOwnerExpense[]     // Tarla sahibi giderleri
 }
 
 // YENİ: Sezon Modeli
@@ -61,6 +66,9 @@ model Season {
   inventoryTransactions InventoryTransaction[] // Envanter işlemleri
   processes Process[] // İşlemler
   irrigationLogs IrrigationLog[] // Sulama kayıtları
+  
+  // YENİ: Tarla giderleri
+  fieldExpenses FieldExpense[]
 }
 
 // Tarla Modeli
@@ -87,6 +95,9 @@ model Field {
   wells             Well[]                  // Tarla kuyuları - ilişki güncellendi
   inventoryUsages   InventoryUsage[]
   processes         Process[]
+  
+  // YENİ: Tarla giderleri
+  fieldExpenses     FieldExpense[]
 }
 
 // Tarla Sahipliği Modeli
@@ -101,6 +112,9 @@ model FieldOwnership {
   fieldId String @db.ObjectId
   user    User   @relation("UserOwnedFields", fields: [userId], references: [id])
   userId  String @db.ObjectId
+
+  // YENİ: Tarla sahibi giderleri
+  ownerExpenses FieldOwnerExpense[]
 
   @@unique([fieldId, userId])
 }
@@ -397,25 +411,37 @@ model InventoryUsage {
   createdAt    DateTime  @default(now())
 }
 
-// İşlemler (Tarla, Sulama, vb.)
+// İşlemler (Tarla, Sulama, vb.) - Güncellendi
 model Process {
-  id              String           @id @default(auto()) @map("_id") @db.ObjectId
-  type            ProcessType
-  field           Field            @relation(fields: [fieldId], references: [id])
-  fieldId         String           @db.ObjectId
-  worker          User             @relation(fields: [workerId], references: [id])
-  workerId        String           @db.ObjectId
-  date            DateTime
-  description     String?
+  id                String           @id @default(auto()) @map("_id") @db.ObjectId
+  type              ProcessType
+  field             Field            @relation(fields: [fieldId], references: [id])
+  fieldId           String           @db.ObjectId
+  worker            User             @relation(fields: [workerId], references: [id])
+  workerId          String           @db.ObjectId
+  date              DateTime
+  description       String?
+  
+  // YENİ: Parçalı işleme alanları
+  totalArea         Float            // Tarlanın toplam alanı (dekar/dönüm)
+  processedArea     Float            // İşlenen alan (dekar/dönüm)
+  processedPercentage Float           // İşlenen alan yüzdesi (0-100)
   
   // YENİ: Sezon ilişkisi
-  season   Season? @relation(fields: [seasonId], references: [id])
-  seasonId String? @db.ObjectId
+  season            Season?          @relation(fields: [seasonId], references: [id])
+  seasonId          String?          @db.ObjectId
   
-  inventoryUsages InventoryUsage[]
+  // İlişkiler
+  inventoryUsages   InventoryUsage[]
+  equipmentUsages   EquipmentUsage[] // YENİ: Ekipman kullanımları
+  processCosts      ProcessCost[]    // YENİ: İşlem maliyetleri
+  notifications     Notification[]   // YENİ: Bildirimler
+  
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 }
 
-// Bildirimler
+// Bildirimler - Güncellendi
 model Notification {
   id        String           @id @default(auto()) @map("_id") @db.ObjectId
   title     String
@@ -430,6 +456,122 @@ model Notification {
   receiverId String  @db.ObjectId
   sender     User?   @relation("NotificationsSent", fields: [senderId], references: [id])
   senderId   String? @db.ObjectId
+  
+  // YENİ: İşlem ilişkisi
+  process    Process? @relation(fields: [processId], references: [id])
+  processId  String?  @db.ObjectId
+}
+
+// YENİ: Tarım Aleti/Ekipman Modeli
+model Equipment {
+  id                    String                @id @default(auto()) @map("_id") @db.ObjectId
+  name                  String                // Ekipman adı (Mibzer, Kültivatör, Diskaro vb.)
+  type                  EquipmentType         // Ekipman tipi (SEEDING, TILLAGE, SPRAYING vb.)
+  fuelConsumptionPerDecare Float               // Dekar başına yakıt tüketimi (litre)
+  description           String?               // Açıklama
+  status                EquipmentStatus       @default(ACTIVE)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  // İlişkiler
+  ownerships            EquipmentOwnership[]  // Ekipman sahiplikleri
+  capabilities          EquipmentCapability[] // Ekipman yetenekleri
+  usages                EquipmentUsage[]      // Ekipman kullanımları
+}
+
+// YENİ: Ekipman Sahipliği Modeli
+model EquipmentOwnership {
+  id                    String                @id @default(auto()) @map("_id") @db.ObjectId
+  equipment             Equipment             @relation(fields: [equipmentId], references: [id])
+  equipmentId           String                @db.ObjectId
+  user                  User                  @relation(fields: [userId], references: [id])
+  userId                String                @db.ObjectId
+  ownershipPercentage   Float                 // Sahiplik yüzdesi
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@unique([equipmentId, userId])
+}
+
+// YENİ: Ekipman Yetenek Modeli
+model EquipmentCapability {
+  id                    String                @id @default(auto()) @map("_id") @db.ObjectId
+  equipment             Equipment             @relation(fields: [equipmentId], references: [id])
+  equipmentId           String                @db.ObjectId
+  inventoryCategory     InventoryCategory     // Hangi envanter kategorisini kullanabilir
+  canUse                Boolean               @default(true)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@unique([equipmentId, inventoryCategory])
+}
+
+// YENİ: Ekipman Kullanım Modeli
+model EquipmentUsage {
+  id                    String                @id @default(auto()) @map("_id") @db.ObjectId
+  process               Process               @relation(fields: [processId], references: [id])
+  processId             String                @db.ObjectId
+  equipment             Equipment             @relation(fields: [equipmentId], references: [id])
+  equipmentId           String                @db.ObjectId
+  user                  User                  @relation(fields: [userId], references: [id])
+  userId                String                @db.ObjectId
+  areaProcessed         Float                 // İşlenen alan (dekar/dönüm)
+  processedPercentage   Float                 // İşlenen alan yüzdesi (0-100)
+  fuelConsumed          Float                 // Tüketilen yakıt (litre)
+  unit                  Unit                  // Birim (DECARE/DONUM)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+}
+
+// YENİ: İşlem Maliyeti Modeli
+model ProcessCost {
+  id                    String                @id @default(auto()) @map("_id") @db.ObjectId
+  process               Process               @relation(fields: [processId], references: [id])
+  processId             String                @db.ObjectId
+  laborCost             Float                 // İşçilik maliyeti
+  equipmentCost         Float                 // Ekipman kullanım maliyeti
+  inventoryCost         Float                 // Kullanılan envanter maliyeti
+  fuelCost              Float                 // Yakıt maliyeti
+  totalCost             Float                 // Toplam maliyet
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  
+  // İlişkiler
+  fieldExpenses         FieldExpense[]        // Tarla giderleri
+  ownerExpenses         FieldOwnerExpense[]   // Tarla sahibi giderleri
+}
+
+// YENİ: Tarla Gideri Modeli
+model FieldExpense {
+  id                    String                @id @default(auto()) @map("_id") @db.ObjectId
+  field                 Field                 @relation(fields: [fieldId], references: [id])
+  fieldId               String                @db.ObjectId
+  season                Season                @relation(fields: [seasonId], references: [id])
+  seasonId              String                @db.ObjectId
+  processCost           ProcessCost           @relation(fields: [processCostId], references: [id])
+  processCostId         String                @db.ObjectId
+  totalCost             Float                 // Toplam maliyet
+  periodStart           DateTime              // Dönem başlangıcı
+  periodEnd             DateTime              // Dönem sonu
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+}
+
+// YENİ: Tarla Sahibi Gideri Modeli
+model FieldOwnerExpense {
+  id                    String                @id @default(auto()) @map("_id") @db.ObjectId
+  fieldOwnership        FieldOwnership        @relation(fields: [fieldOwnershipId], references: [id])
+  fieldOwnershipId      String                @db.ObjectId
+  processCost           ProcessCost           @relation(fields: [processCostId], references: [id])
+  processCostId         String                @db.ObjectId
+  user                  User                  @relation(fields: [userId], references: [id])
+  userId                String                @db.ObjectId
+  amount                Float                 // Tutar
+  percentage            Float                 // Sahiplik yüzdesine göre hesaplanan oran
+  periodStart           DateTime              // Dönem başlangıcı
+  periodEnd             DateTime              // Dönem sonu
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
 }
 
 // Enum'lar
@@ -535,6 +677,7 @@ enum NotificationType {
   DEBT
   APPROVAL // YENİ: Onay bildirimi
   REMINDER // YENİ: Hatırlatma bildirimi
+  FIELD_PROCESSING // YENİ: Tarla işleme bildirimi
   OTHER
 }
 
@@ -554,6 +697,23 @@ enum ApprovalStatus {
   CANCELLED
 }
 
+// YENİ: Ekipman Tipi Enum
+enum EquipmentType {
+  SEEDING               // Ekim (Mibzer)
+  TILLAGE               // Toprak işleme (Kültivatör, Diskaro)
+  SPRAYING              // İlaçlama
+  FERTILIZING           // Gübreleme
+  HARVESTING            // Hasat
+  OTHER                 // Diğer
+}
+
+// YENİ: Ekipman Durumu Enum
+enum EquipmentStatus {
+  ACTIVE                // Aktif
+  MAINTENANCE           // Bakımda
+  INACTIVE              // Pasif
+}
+
 enum Unit {
   KG
   TON
@@ -564,6 +724,9 @@ enum Unit {
   PAKET
   METRE
   METREKARE
+  DECARE                // Dekar (1000 m²)
+  DONUM                 // Dönüm (1000 m²) - Aynı anlama gelir
+  HECTARE               // Hektar (10000 m²)
   DIGER
 }
 

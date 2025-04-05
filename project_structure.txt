@@ -308,3 +308,4 @@
 +--tailwind.config.ts
 +--tsconfig.json
 \--vercel.json
+//powershell -ExecutionPolicy Bypass -File .\generate_tree.ps1

@@ -1,4 +1,6 @@
-import { prisma } from "@/lib/prisma";
+"use client";
+
+import { useState, useEffect } from "react";
 import { formatDate } from "@/lib/utils";
 import type { InventoryCategory, InventoryStatus } from "@prisma/client";
 import {
@@ -12,7 +14,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Edit, Eye } from "lucide-react";
+import { Edit, Eye, Filter, Search } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/components/ui/use-toast";
+import { Card, CardContent } from "@/components/ui/card";
+import { useAuth } from "@/components/auth-provider";
 
 // Kategori enum değerlerini Türkçe etiketlere dönüştür
 function getCategoryLabel(category: InventoryCategory): string {
@@ -38,41 +45,84 @@ function getStatusLabel(status: InventoryStatus): string {
   return labels[status] || status;
 }
 
-export async function InventoryTable() {
-  try {
-    // Null totalQuantity değerlerini filtrelemek için farklı bir yaklaşım kullanalım
-    const inventory = await prisma.inventory.findMany({
-      where: {
-        // Burada null değerleri filtrelemek için gte kullanıyoruz
-        // Bu, totalQuantity'nin en az 0 olduğu kayıtları getirir
-        totalQuantity: {
-          gte: 0,
-        },
-      },
-      include: {
-        ownerships: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-          },
-        },
-        inventoryTransactions: {
-          take: 1,
-          orderBy: {
-            date: "desc",
-          },
-        },
-      },
-      orderBy: {
-        updatedAt: "desc",
-      },
-    });
+export function InventoryTable() {
+  const [inventory, setInventory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAll, setShowAll] = useState(false);
+  const { toast } = useToast();
+  const { user } = useAuth();
 
-    return (
+  useEffect(() => {
+    fetchInventory();
+  }, [showAll]);
+
+  const fetchInventory = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/inventory?showAll=${showAll}`);
+      if (!response.ok) {
+        throw new Error("Envanter verileri alınamadı");
+      }
+      const data = await response.json();
+      setInventory(data);
+    } catch (error) {
+      console.error("Error fetching inventory:", error);
+      toast({
+        title: "Hata",
+        description: "Envanter verileri yüklenirken bir hata oluştu.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Kullanıcının sahiplik yüzdesini hesapla
+  const calculateOwnershipPercentage = (item: any) => {
+    if (!user || !item.ownerships || item.ownerships.length === 0) return "0%";
+
+    const userOwnership = item.ownerships.find(
+      (o: any) => o.user.id === user.id
+    );
+    if (!userOwnership) return "0%";
+
+    const totalQuantity = item.totalQuantity || 1;
+    const percentage = (userOwnership.shareQuantity / totalQuantity) * 100;
+
+    return `${percentage.toFixed(2)}%`;
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="show-all"
+                checked={showAll}
+                onCheckedChange={setShowAll}
+              />
+              <Label htmlFor="show-all">
+                {showAll
+                  ? "Tüm Envanterleri Göster"
+                  : "Sadece Kendi Envanterlerimi Göster"}
+              </Label>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm">
+                <Filter className="h-4 w-4 mr-2" />
+                Filtrele
+              </Button>
+              <Button variant="outline" size="sm">
+                <Search className="h-4 w-4 mr-2" />
+                Ara
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -80,15 +130,22 @@ export async function InventoryTable() {
               <TableHead>Ürün Adı</TableHead>
               <TableHead>Kategori</TableHead>
               <TableHead>Miktar</TableHead>
+              <TableHead>Sahiplik Yüzdesi</TableHead>
               <TableHead>Durum</TableHead>
               <TableHead>Son Güncelleme</TableHead>
               <TableHead className="text-right">İşlemler</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {inventory.length === 0 ? (
+            {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
+                  Envanter yükleniyor...
+                </TableCell>
+              </TableRow>
+            ) : inventory.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="h-24 text-center">
                   Henüz envanter kaydı bulunmuyor.
                 </TableCell>
               </TableRow>
@@ -100,6 +157,7 @@ export async function InventoryTable() {
                   <TableCell>
                     {item.totalQuantity} {item.unit}
                   </TableCell>
+                  <TableCell>{calculateOwnershipPercentage(item)}</TableCell>
                   <TableCell>
                     <Badge
                       variant="outline"
@@ -139,18 +197,6 @@ export async function InventoryTable() {
           </TableBody>
         </Table>
       </div>
-    );
-  } catch (error) {
-    console.error("Error fetching inventory:", error);
-    return (
-      <div className="rounded-md border p-8 text-center">
-        <p className="text-red-500 mb-2">
-          Envanter verileri yüklenirken bir hata oluştu.
-        </p>
-        <p className="text-sm text-muted-foreground">
-          Lütfen daha sonra tekrar deneyin veya yöneticinize başvurun.
-        </p>
-      </div>
-    );
-  }
+    </div>
+  );
 }

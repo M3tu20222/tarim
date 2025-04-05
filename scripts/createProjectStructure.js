@@ -2,10 +2,23 @@ const fs = require('fs');
 const path = require('path');
 
 // Oluşturulacak dosya ve klasör yapısı
-const projectStructure = [
-  'components/purchases/purchases-table.tsx',
-  'components/purchases/purchase-details.tsx',
-  'components/purchases/purchase-actions.tsx'
+const projectStructure =[
+  'prisma/schema.prisma',
+  'app/api/equipment/route.ts',
+  'app/api/equipment/[id]/route.ts',
+  'app/api/processes/route.ts',
+  'app/api/processes/[id]/route.ts',
+  'components/equipment/equipment-form.tsx',
+  'components/equipment/equipment-table.tsx',
+  'components/processes/process-form.tsx',
+  'components/processes/process-table.tsx',
+  'app/dashboard/owner/equipment/page.tsx',
+  'app/dashboard/owner/equipment/new/page.tsx',
+  'app/dashboard/owner/equipment/[id]/page.tsx',
+  'app/dashboard/owner/equipment/[id]/edit/page.tsx',
+  'app/dashboard/owner/processes/page.tsx',
+  'app/dashboard/owner/processes/new/page.tsx',
+  'components/app-sidebar.tsx'
 ];
 
 // Boş dosya içerikleri
