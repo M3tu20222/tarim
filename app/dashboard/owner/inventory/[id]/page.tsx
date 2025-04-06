@@ -11,11 +11,12 @@ import { Progress } from "@/components/ui/progress";
 export default async function InventoryDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
   try {
     const inventory = await prisma.inventory.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         ownerships: {
           include: {

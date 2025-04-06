@@ -39,8 +39,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { InventorySelector } from "@/components/inventory/inventory-selector";
 import { useAuth } from "@/components/auth-provider";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-// Form şeması
+// Sezon tipi tanımı
+interface Season {
+  id: string;
+  name: string;
+  isActive: boolean;
+}
+
+// Partner schema for validation
 const formSchema = z.object({
   fieldId: z.string({
     required_error: "Tarla seçilmelidir.",
@@ -97,10 +105,15 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fields, setFields] = useState<any[]>([]);
   const [workers, setWorkers] = useState<any[]>([]);
+  const [owners, setOwners] = useState<any[]>([]);
   const [equipment, setEquipment] = useState<any[]>([]);
   const [selectedField, setSelectedField] = useState<any>(null);
   const [selectedEquipment, setSelectedEquipment] = useState<any>(null);
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+  const [fuelAvailabilityError, setFuelAvailabilityError] = useState<
+    string | null
+  >(null); // Hata mesajı için state
+  const [error, setError] = useState<string | null>(null);
 
   // Form oluştur
   const form = useForm<z.infer<typeof formSchema>>({
@@ -133,6 +146,13 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
         if (workersResponse.ok) {
           const workersData = await workersResponse.json();
           setWorkers(workersData);
+        }
+
+        // Sahipleri getir
+        const ownersResponse = await fetch("/api/users/owners");
+        if (ownersResponse.ok) {
+          const ownersData = await ownersResponse.json();
+          setOwners(ownersData);
         }
 
         // Ekipmanları getir
@@ -203,7 +223,62 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
       ),
     };
 
+    // 1. Yakıt kontrolü
+    if (selectedEquipment && selectedField) {
+      const fuelNeeded =
+        (selectedEquipment.fuelConsumptionPerDecare *
+          selectedField.size *
+          values.processedPercentage) /
+        100;
+
+      const fuelCategory = "FUEL"; // Yakıt kategorisini belirle
+      const fieldOwners = selectedField.owners;
+
+      let hasEnoughFuel = false;
+      let fuelAvailabilityMessage = "";
+
+      for (const owner of fieldOwners) {
+        const ownerInventoryResponse = await fetch(
+          `/api/inventory?category=${fuelCategory}&userId=${owner.userId}`,
+          {
+            headers: {
+              "x-user-id": user?.id || "",
+              "x-user-role": user?.role || "",
+            },
+          }
+        );
+
+        if (!ownerInventoryResponse.ok) {
+          console.error("Error fetching owner inventory");
+          continue; // Hata durumunda bir sonraki ortağa geç
+        }
+
+        const ownerInventory = await ownerInventoryResponse.json();
+        const totalFuel = ownerInventory.reduce(
+          (sum: number, item: any) => sum + item.totalQuantity,
+          0
+        );
+
+        if (totalFuel >= fuelNeeded) {
+          hasEnoughFuel = true;
+          break; // Yeterli yakıt varsa döngüden çık
+        } else {
+          fuelAvailabilityMessage = `Sahip ${owner.user.name}'in envanterinde yeterli yakıt bulunmuyor.`;
+        }
+      }
+
+      if (!hasEnoughFuel) {
+        setFuelAvailabilityError(
+          fuelAvailabilityMessage ||
+            "Tarlanın sahiplerinin envanterinde yeterli yakıt bulunmuyor."
+        );
+        return; // Formu göndermeyi durdur
+      }
+    }
+
     setIsSubmitting(true);
+    setError(null); // Hata durumunu sıfırla
+
     try {
       const url = initialData
         ? `/api/processes/${initialData.id}`
@@ -246,6 +321,13 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {fuelAvailabilityError && (
+          <Alert variant="destructive">
+            <AlertTitle>Hata</AlertTitle>
+            <AlertDescription>{fuelAvailabilityError}</AlertDescription>
+          </Alert>
+        )}
+
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <FormField
             control={form.control}
@@ -330,7 +412,7 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
                       mode="single"
                       selected={field.value}
                       onSelect={field.onChange}
-                      initialFocus
+                      // initialFocus is deprecated
                     />
                   </PopoverContent>
                 </Popover>
@@ -351,15 +433,45 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Çalışan seçin" />
+                      <SelectValue placeholder="İşlemi yapan kişiyi seçin" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {workers.map((worker) => (
-                      <SelectItem key={worker.id} value={worker.id}>
-                        {worker.name}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="placeholder" disabled>
+                      Kişi seçin
+                    </SelectItem>
+                    {workers.length > 0 && (
+                      <>
+                        <SelectItem
+                          value="workers-group"
+                          disabled
+                          className="font-semibold"
+                        >
+                          Çalışanlar
+                        </SelectItem>
+                        {workers.map((worker) => (
+                          <SelectItem key={worker.id} value={worker.id}>
+                            {worker.name}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                    {owners.length > 0 && (
+                      <>
+                        <SelectItem
+                          value="owners-group"
+                          disabled
+                          className="font-semibold"
+                        >
+                          Sahipler
+                        </SelectItem>
+                        {owners.map((owner) => (
+                          <SelectItem key={owner.id} value={owner.id}>
+                            {owner.name}
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -492,6 +604,7 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
                         selectedId={item.inventoryId}
                         label="Envanter"
                         required={true}
+                        category="FUEL" // Yakıt kategorisini filtrele
                       />
                     </div>
                     <div className="flex items-end gap-2">

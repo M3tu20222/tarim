@@ -111,25 +111,15 @@ export function EquipmentForm({ initialData }: EquipmentFormProps) {
     };
 
     fetchUsers();
+  }, []);
 
-    // initialData geldiğinde sahiplik bilgilerini ayarla
-    if (initialData?.ownerships) {
-      setOwnerships(initialData.ownerships.map((o: any) => ({
-        userId: o.userId,
-        ownershipPercentage: o.ownershipPercentage || 0, // NaN veya undefined kontrolü
-      })));
-    }
-  }, [initialData]); // initialData değiştiğinde çalıştır
-
-  // Sahiplik yüzdelerini hesapla ve yuvarla
+  // Sahiplik yüzdelerini hesapla
   useEffect(() => {
     const total = ownerships.reduce(
-      (sum, ownership) => sum + (ownership.ownershipPercentage || 0), // NaN veya undefined durumunu ele al
+      (sum, ownership) => sum + ownership.ownershipPercentage,
       0
     );
-    // Hassasiyet sorunlarını önlemek için 2 ondalık basamağa yuvarla
-    const roundedTotal = Math.round(total * 100) / 100;
-    setTotalPercentage(roundedTotal);
+    setTotalPercentage(total);
   }, [ownerships]);
 
   // Sahiplik ekle
@@ -158,14 +148,14 @@ export function EquipmentForm({ initialData }: EquipmentFormProps) {
 
   // Form gönderimi
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    // Sahiplik toplamı 100 olmalı (küçük toleransla kontrol et)
-    if (Math.abs(totalPercentage - 100) > 0.01) {
+    // Sahiplik toplamı 100 olmalı
+    if (totalPercentage !== 100) {
       toast({
         title: "Hata",
-        description: `Sahiplik yüzdelerinin toplamı %100 olmalıdır. Şu anki toplam: %${totalPercentage}`,
+        description: "Sahiplik yüzdelerinin toplamı %100 olmalıdır.",
         variant: "destructive",
       });
-      return; // Hata durumunda fonksiyondan çık
+      return;
     }
 
     setIsSubmitting(true);
@@ -182,7 +172,7 @@ export function EquipmentForm({ initialData }: EquipmentFormProps) {
         },
         body: JSON.stringify({
           ...values,
-          ownerships, // Sahiplik bilgilerini de gönder
+          ownerships,
         }),
       });
 
@@ -194,7 +184,7 @@ export function EquipmentForm({ initialData }: EquipmentFormProps) {
             : "Ekipman başarıyla eklendi.",
         });
         router.push("/dashboard/owner/equipment");
-        router.refresh(); // Sayfayı yenileyerek güncel verileri göster
+        router.refresh();
       } else {
         const error = await response.json();
         throw new Error(error.error || "Bir hata oluştu");
@@ -381,10 +371,10 @@ export function EquipmentForm({ initialData }: EquipmentFormProps) {
                 Toplam:{" "}
                 <span
                   className={
-                    Math.abs(totalPercentage - 100) <= 0.01 ? "text-green-500" : "text-red-500"
+                    totalPercentage === 100 ? "text-green-500" : "text-red-500"
                   }
                 >
-                  %{totalPercentage} {/* Yuvarlanmış değeri göster */}
+                  %{totalPercentage}
                 </span>
               </div>
             </CardTitle>
@@ -401,15 +391,14 @@ export function EquipmentForm({ initialData }: EquipmentFormProps) {
                       type="number"
                       min="0"
                       max="100"
-                      step="0.1" // Ondalık girişe izin ver
+                      step="1"
                       value={
                         ownerships.find((o) => o.userId === user.id)
                           ?.ownershipPercentage || 0
                       }
-                      onChange={(e) => {
-                        const value = parseFloat(e.target.value);
-                        addOwnership(user.id, isNaN(value) ? 0 : value); // NaN kontrolü ekle
-                      }}
+                      onChange={(e) =>
+                        addOwnership(user.id, Number(e.target.value))
+                      }
                       className="text-right"
                     />
                   </div>
@@ -419,12 +408,12 @@ export function EquipmentForm({ initialData }: EquipmentFormProps) {
                 </div>
               ))}
 
-              {/* Hata mesajı zaten onSubmit içinde gösteriliyor, burada tekrar göstermeye gerek yok veya koşulu güncelleyebiliriz */}
-              {/* {Math.abs(totalPercentage - 100) > 0.01 && (
+              {totalPercentage !== 100 && (
                 <p className="text-sm text-red-500">
-                  Sahiplik yüzdelerinin toplamı %100 olmalıdır. Şu anki toplam: %{totalPercentage}
+                  Sahiplik yüzdelerinin toplamı %100 olmalıdır. Şu anki toplam:
+                  %{totalPercentage}
                 </p>
-              )} */}
+              )}
             </div>
           </CardContent>
         </Card>

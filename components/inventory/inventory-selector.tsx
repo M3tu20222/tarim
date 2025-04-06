@@ -26,7 +26,7 @@ interface InventorySelectorProps {
   selectedId?: string;
   label?: string;
   required?: boolean;
-  category?: string;
+  category?: string; // Kategori filtresi için eklendi
 }
 
 export function InventorySelector({
@@ -44,7 +44,7 @@ export function InventorySelector({
 
   useEffect(() => {
     fetchInventory();
-  }, [category]);
+  }, [category]); // Kategori değiştiğinde yeniden yükle
 
   const fetchInventory = async () => {
     try {

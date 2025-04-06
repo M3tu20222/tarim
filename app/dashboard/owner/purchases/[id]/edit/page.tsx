@@ -26,10 +26,11 @@ import { ArrowLeft } from "lucide-react";
 export async function generateMetadata({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }): Promise<Metadata> {
+  const { id } = await params;
   return {
-    title: `Alış Düzenle #${params.id.substring(0, 6)} | Tarım Yönetim Sistemi`,
+    title: `Alış Düzenle #${id.substring(0, 6)} | Tarım Yönetim Sistemi`,
     description: "Mevcut bir alış kaydını düzenleme sayfası",
   };
 }
@@ -37,37 +38,31 @@ export async function generateMetadata({
 export default async function EditPurchasePage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const purchaseId = params.id;
+  const { id: purchaseId } = await params;
 
   if (!purchaseId) {
     notFound();
   }
 
-  // Alış kaydını tüm ilişkili verilerle birlikte al (edit form için gerekli)
   const purchase = await prisma.purchase.findUnique({
     where: { id: purchaseId },
     include: {
       contributors: {
         include: {
           user: {
-            select: { id: true, name: true }, // Sadece gerekli kullanıcı bilgilerini seçin
+            select: { id: true, name: true },
           },
         },
       },
-      season: true, // Sezon bilgisi de forma gerekebilir
+      season: true,
     },
   });
 
   if (!purchase) {
     notFound();
   }
-
-  // Purchase nesnesini Client Component'e göndermeden önce serileştirilebilir hale getirin
-  // Date nesneleri gibi serileştirilemeyen verileri string'e dönüştürün.
-  // Ancak burada Prisma'dan gelen veri genellikle zaten serileştirilebilir olmalı.
-  // Eğer sorun yaşarsanız bu adımı tekrar değerlendirin.
 
   return (
     <div className="flex flex-col gap-4 p-4 md:p-8">
@@ -104,7 +99,6 @@ export default async function EditPurchasePage({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* purchase prop'unu EditPurchaseForm'a geçin */}
           <EditPurchaseForm purchase={purchase} />
         </CardContent>
       </Card>

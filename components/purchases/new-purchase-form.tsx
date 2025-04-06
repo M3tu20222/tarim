@@ -691,13 +691,13 @@ export function NewPurchaseForm() {
                       name={`partners.${index}.dueDate`}
                       render={({ field }) => (
                         <FormItem className="flex flex-col">
-                          <FormLabel>Vade Tarihi</FormLabel>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <FormControl>
-                                <Button
-                                  variant={"outline"}
-                                  className={`w-full pl-3 text-left font-normal ${
+                        <FormLabel>Vade Tarihi</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            {/* FormControl kaldırıldı */}
+                            <Button
+                              variant={"outline"}
+                              className={`w-full pl-3 text-left font-normal ${
                                     !field.value ? "text-muted-foreground" : ""
                                   }`}
                                 >
@@ -706,12 +706,12 @@ export function NewPurchaseForm() {
                                   ) : (
                                     <span>Tarih seçin</span>
                                   )}
-                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                </Button>
-                              </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent
-                              className="w-auto p-0"
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            {/* FormControl kaldırıldı */}
+                          </PopoverTrigger>
+                          <PopoverContent
+                            className="w-auto p-0"
                               align="start"
                             >
                               <Calendar

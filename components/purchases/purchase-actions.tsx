@@ -79,24 +79,23 @@ export function PurchaseActions({ purchase }: { purchase: any }) {
           <DropdownMenuLabel>Actions</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
-            <Link href={`/dashboard/purchases/${purchase.id}`}>
+            <Link href={`/dashboard/owner/purchases/${purchase.id}`}>
               <Eye className="mr-2 h-4 w-4" />
               View Details
             </Link>
           </DropdownMenuItem>
           {hasPendingDebts && (
             <DropdownMenuItem asChild>
-              <Link href={`/dashboard/purchases/${purchase.id}/pay-debt`}>
+              <Link href={`/dashboard/owner/purchases/${purchase.id}/pay-debt`}>
                 <CreditCard className="mr-2 h-4 w-4" />
                 Pay Debt
               </Link>
             </DropdownMenuItem>
           )}
           <DropdownMenuItem asChild>
-            {/* Düzeltme: /owner yolunu ekle */}
             <Link href={`/dashboard/owner/purchases/${purchase.id}/edit`}>
               <Pencil className="mr-2 h-4 w-4" />
-              Düzenle
+              Edit
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem

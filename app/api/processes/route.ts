@@ -133,8 +133,8 @@ export async function POST(request: Request) {
       date,
       description,
       processedPercentage,
-      equipmentUsages,
-      inventoryUsages,
+      equipmentId, // Ekipman ID'si
+      inventoryItems,
       seasonId,
     } = await request.json();
 
@@ -149,6 +149,13 @@ export async function POST(request: Request) {
     // Tarla bilgilerini al
     const field = await prisma.field.findUnique({
       where: { id: fieldId },
+      include: {
+        owners: {
+          include: {
+            user: true
+          }
+        }
+      }
     });
 
     if (!field) {
@@ -174,6 +181,67 @@ export async function POST(request: Request) {
       }
     }
 
+    // 1. Ekipman bilgisini al
+    let equipment: { id: string; fuelConsumptionPerDecare: number } | null = null;
+    if (equipmentId) {
+      equipment = await prisma.equipment.findUnique({
+        where: { id: equipmentId },
+      });
+
+      if (!equipment) {
+        return NextResponse.json(
+          { error: "Ekipman bulunamadı" },
+          { status: 404 }
+        );
+      }
+    }
+
+    // 2. Yakıt kontrolü
+    if (equipment && equipment.fuelConsumptionPerDecare) {
+      const fuelNeeded = equipment.fuelConsumptionPerDecare * processedArea;
+      const fuelCategory = "FUEL"; // Yakıt kategorisini belirle
+      const fieldOwners = field.owners;
+
+      let hasEnoughFuel = false;
+      let fuelAvailabilityMessage = "";
+
+      for (const owner of fieldOwners) {
+        const ownerInventory = await prisma.inventory.findMany({
+          where: {
+            category: fuelCategory,
+            ownerships: {
+              some: {
+                userId: owner.userId,
+              },
+            },
+          },
+        });
+
+        const totalFuel = ownerInventory.reduce(
+          (sum: number, item: any) => sum + item.totalQuantity,
+          0
+        );
+
+        if (totalFuel >= fuelNeeded) {
+          hasEnoughFuel = true;
+          break; // Yeterli yakıt varsa döngüden çık
+        } else {
+          fuelAvailabilityMessage = `Sahip ${owner.user.name}'in envanterinde yeterli yakıt bulunmuyor.`;
+        }
+      }
+
+      if (!hasEnoughFuel) {
+        return NextResponse.json(
+          {
+            error:
+              fuelAvailabilityMessage ||
+              "Tarlanın sahiplerinin envanterinde yeterli yakıt bulunmuyor.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     // Transaction ile işlem oluştur
     const result = await prisma.$transaction(async (tx) => {
       // 1. İşlem kaydı oluştur
@@ -193,42 +261,29 @@ export async function POST(request: Request) {
 
       // 2. Ekipman kullanımlarını kaydet
       const equipmentUsageRecords = [];
-      if (equipmentUsages && equipmentUsages.length > 0) {
-        for (const usage of equipmentUsages) {
-          // Ekipman bilgilerini al
-          const equipment = await tx.equipment.findUnique({
-            where: { id: usage.equipmentId },
-          });
+      if (equipmentId) {
+        // Ekipman kullanımını kaydet
+        const equipmentUsage = await tx.equipmentUsage.create({
+          data: {
+            processId: process.id,
+            equipmentId: equipmentId,
+            userId: userId, // Kullanıcı ID'si eklendi
+            areaProcessed: processedArea,
+            processedPercentage,
+            fuelConsumed: equipment && equipment.fuelConsumptionPerDecare
+              ? processedArea * equipment.fuelConsumptionPerDecare
+              : 0,
+            unit: "DECARE" as Unit,
+          },
+        });
 
-          if (!equipment) {
-            throw new Error(`Ekipman bulunamadı: ${usage.equipmentId}`);
-          }
-
-          // Yakıt tüketimini hesapla
-          const fuelConsumed =
-            processedArea * equipment.fuelConsumptionPerDecare;
-
-          // Ekipman kullanımını kaydet
-          const equipmentUsage = await tx.equipmentUsage.create({
-            data: {
-              processId: process.id,
-              equipmentId: usage.equipmentId,
-              userId: userId, // Kullanıcı ID'si eklendi
-              areaProcessed: processedArea,
-              processedPercentage,
-              fuelConsumed,
-              unit: (usage.unit || "DECARE") as Unit,
-            },
-          });
-
-          equipmentUsageRecords.push(equipmentUsage);
-        }
+        equipmentUsageRecords.push(equipmentUsage);
       }
 
       // 3. Envanter kullanımlarını kaydet
       const inventoryUsageRecords = [];
-      if (inventoryUsages && inventoryUsages.length > 0) {
-        for (const usage of inventoryUsages) {
+      if (inventoryItems && inventoryItems.length > 0) {
+        for (const usage of inventoryItems) {
           // Envanter bilgilerini al
           const inventory = await tx.inventory.findUnique({
             where: { id: usage.inventoryId },
@@ -385,7 +440,7 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(result);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error creating process:", error);
     return NextResponse.json(
       {
