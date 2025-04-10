@@ -39,8 +39,12 @@ export function FieldOwnershipForm({
   const { toast } = useToast();
   const [owners, setOwners] = useState<Owner[]>([]);
   const [loading, setLoading] = useState(true);
-  const [localOwnerships, setLocalOwnerships] =
-    useState<Ownership[]>(ownerships);
+  const [localOwnerships, setLocalOwnerships] = useState<Ownership[]>([]);
+
+  // Prop'tan gelen ownerships değiştiğinde local state'i güncelle
+  useEffect(() => {
+    setLocalOwnerships(ownerships);
+  }, [ownerships]);
 
   // Owner kullanıcıları getir
   useEffect(() => {

@@ -32,3 +32,4 @@ export interface InventoryCategoryType {
   name: string;
   description?: string;
 }
+

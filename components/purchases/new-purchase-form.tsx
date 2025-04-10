@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useFieldArray } from "react-hook-form";
 import * as z from "zod";
 import { CalendarIcon, Plus, Trash, Loader2 } from "lucide-react";
-import { format } from "date-fns";
+import { format, startOfDay } from "date-fns";
 import { tr } from "date-fns/locale";
 
 import { Button } from "@/components/ui/button";
@@ -334,10 +334,9 @@ export function NewPurchaseForm() {
                   </FormControl>
                   <SelectContent>
                     <SelectItem value="FERTILIZER">Gübre</SelectItem>
-                    <SelectItem value="FEED">Besleme</SelectItem>
+                    <SelectItem value="SEED">Tohum</SelectItem>
                     <SelectItem value="PESTICIDE">İlaç</SelectItem>
                     <SelectItem value="FUEL">Yakıt</SelectItem>
-                    <SelectItem value="SEED">Tohum</SelectItem>
                     <SelectItem value="EQUIPMENT">Ekipman</SelectItem>
                     <SelectItem value="OTHER">Diğer</SelectItem>
                   </SelectContent>
@@ -691,35 +690,31 @@ export function NewPurchaseForm() {
                       name={`partners.${index}.dueDate`}
                       render={({ field }) => (
                         <FormItem className="flex flex-col">
-                        <FormLabel>Vade Tarihi</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            {/* FormControl kaldırıldı */}
-                            <Button
-                              variant={"outline"}
-                              className={`w-full pl-3 text-left font-normal ${
-                                    !field.value ? "text-muted-foreground" : ""
-                                  }`}
-                                >
-                                  {field.value ? (
-                                    format(field.value, "PPP", { locale: tr })
-                                  ) : (
-                                    <span>Tarih seçin</span>
-                                  )}
+                          <FormLabel>Vade Tarihi</FormLabel>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant={"outline"}
+                                className={`w-full pl-3 text-left font-normal ${
+                                  !field.value ? "text-muted-foreground" : ""
+                                }`}
+                              >
+                                {field.value ? (
+                                  format(field.value, "PPP", { locale: tr }) // locale={tr} geri eklendi
+                                ) : (
+                                  <span>Tarih seçin</span>
+                                )}
                                 <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                               </Button>
-                            {/* FormControl kaldırıldı */}
-                          </PopoverTrigger>
-                          <PopoverContent
-                            className="w-auto p-0"
-                              align="start"
-                            >
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
                               <Calendar
                                 mode="single"
-                                selected={field.value}
+                                // selected={field.value} // selected prop'u geçici olarak kaldırıldı
                                 onSelect={field.onChange}
-                                disabled={(date) => date < new Date()}
-                                initialFocus
+                                disabled={(date) =>
+                                  date < startOfDay(new Date())
+                                }
                               />
                             </PopoverContent>
                           </Popover>

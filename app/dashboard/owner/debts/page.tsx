@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Bell, PlusIcon, Filter, ArrowUpDown } from "lucide-react";
+import { Bell, PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/prisma";
@@ -127,20 +127,6 @@ export default async function DebtsPage() {
             </h3>
             <p className="text-2xl font-bold">{overdueDebts} adet</p>
           </div>
-        </div>
-      </div>
-
-      {/* Filtre ve sıralama kontrolleri */}
-      <div className="flex flex-col sm:flex-row gap-4 mb-6">
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm">
-            <Filter className="mr-2 h-4 w-4" />
-            Filtrele
-          </Button>
-          <Button variant="outline" size="sm">
-            <ArrowUpDown className="mr-2 h-4 w-4" />
-            Sırala
-          </Button>
         </div>
       </div>
 

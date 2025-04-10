@@ -38,18 +38,18 @@ model User {
   paymentsReceived      PaymentHistory[]        @relation("PaymentsReceived")
   inventoryTransactions InventoryTransaction[]
   seasons               Season[]                @relation("SeasonCreator") // YENİ: Sezon oluşturucu ilişkisi
-  purchaseApprovals     PurchaseApproval[]      // YENİ: Alış onayları
-  
+  purchaseApprovals     PurchaseApproval[] // YENİ: Alış onayları
+
   // YENİ: Ekipman ilişkileri
-  equipmentOwnerships   EquipmentOwnership[]    // Sahip olunan ekipmanlar
-  equipmentUsages       EquipmentUsage[]        // Kullanılan ekipmanlar
-  fieldOwnerExpenses    FieldOwnerExpense[]     // Tarla sahibi giderleri
+  equipmentOwnerships EquipmentOwnership[] // Sahip olunan ekipmanlar
+  equipmentUsages     EquipmentUsage[] // Kullanılan ekipmanlar
+  fieldOwnerExpenses  FieldOwnerExpense[] // Tarla sahibi giderleri
 }
 
 // YENİ: Sezon Modeli
 model Season {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  name        String   // Örn: "2023-2024 Kış Sezonu"
+  name        String // Örn: "2023-2024 Kış Sezonu"
   startDate   DateTime
   endDate     DateTime
   description String?
@@ -58,54 +58,60 @@ model Season {
   updatedAt   DateTime @updatedAt
 
   // İlişkiler
-  creator   User    @relation("SeasonCreator", fields: [creatorId], references: [id])
-  creatorId String  @db.ObjectId
-  fields    Field[] // Tarlalar
-  crops     Crop[]  // Ekinler
-  purchases Purchase[] // Alışlar
+  creator               User                   @relation("SeasonCreator", fields: [creatorId], references: [id])
+  creatorId             String                 @db.ObjectId
+  fields                Field[] // Tarlalar
+  crops                 Crop[] // Ekinler
+  purchases             Purchase[] // Alışlar
   inventoryTransactions InventoryTransaction[] // Envanter işlemleri
-  processes Process[] // İşlemler
-  irrigationLogs IrrigationLog[] // Sulama kayıtları
-  
+  processes             Process[] // İşlemler
+  irrigationLogs        IrrigationLog[] // Sulama kayıtları
+
   // YENİ: Tarla giderleri
   fieldExpenses FieldExpense[]
 }
 
 // Tarla Modeli
 model Field {
-  id          String      @id @default(auto()) @map("_id") @db.ObjectId
-  name        String
-  location    String
-  size        Float // Dönüm cinsinden
-  coordinates String? // Opsiyonel GPS koordinatları
-  status      FieldStatus @default(ACTIVE)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  
-  // YENİ: Sezon ilişkisi
-  season   Season? @relation(fields: [seasonId], references: [id])
-  seasonId String? @db.ObjectId
-
-  // İlişkiler
-  owners            FieldOwnership[]        @relation("FieldOwnerAssignments") // Tarla sahipleri
-  workerAssignments FieldWorkerAssignment[] @relation("FieldWorkerAssignments") // Tarla işçileri
+  id                String                  @id @default(auto()) @map("_id") @db.ObjectId
+  name              String
+  location          String
+  size              Float
+  coordinates       String?
+  status            String
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  seasonId          String?                 @db.ObjectId
+  season            Season?                 @relation(fields: [seasonId], references: [id])
+  owners            FieldOwnership[]        @relation("FieldOwnerAssignments") // İlişki ismi eklendi
+  workerAssignments FieldWorkerAssignment[] @relation("FieldWorkerAssignments")
   crops             Crop[]
+  // wells             Well[]                @relation("FieldWells") // Kaldırıldı: Explicit join model kullanılacak
+  fieldWells        FieldWell[] // Eklendi: Explicit join model ilişkisi
   irrigationLogs    IrrigationLog[]
   processingLogs    ProcessingLog[]
-  wells             Well[]                  // Tarla kuyuları - ilişki güncellendi
-  inventoryUsages   InventoryUsage[]
-  processes         Process[]
-  
+  processCosts      ProcessCost[]           @relation("FieldProcessCosts") // İlişki ismi eklendi
+
+  // İlişkiler
+  // owners            FieldOwnership[]        @relation("FieldOwnerAssignments") // Tarla sahipleri
+  // workerAssignments FieldWorkerAssignment[] @relation("FieldWorkerAssignments") // Tarla işçileri
+  // crops             Crop[]
+  // irrigationLogs    IrrigationLog[]
+  // processingLogs    ProcessingLog[]
+  // wells             Well[]                  // Tarla kuyuları - ilişki güncellendi
+  inventoryUsages InventoryUsage[]
+  processes       Process[]
+
   // YENİ: Tarla giderleri
-  fieldExpenses     FieldExpense[]
+  fieldExpenses FieldExpense[]
 }
 
 // Tarla Sahipliği Modeli
 model FieldOwnership {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  percentage Float   @default(0) // YENİ: Sahiplik yüzdesi
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  percentage Float    @default(0) // YENİ: Sahiplik yüzdesi
 
   // İlişkiler
   field   Field  @relation("FieldOwnerAssignments", fields: [fieldId], references: [id])
@@ -134,19 +140,33 @@ model FieldWorkerAssignment {
   @@unique([fieldId, userId])
 }
 
+// YENİ: Field ve Well için Explicit Join Modeli
+model FieldWell {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  field     Field    @relation(fields: [fieldId], references: [id])
+  fieldId   String   @db.ObjectId
+  well      Well     @relation(fields: [wellId], references: [id])
+  wellId    String   @db.ObjectId
+  createdAt DateTime @default(now())
+
+  @@unique([fieldId, wellId])
+}
+
 // Kuyu modeli - güncellendi
 model Well {
-  id        String     @id @default(auto()) @map("_id") @db.ObjectId
-  name      String
-  depth     Float // Metre cinsinden
-  capacity  Float // Litre/saat cinsinden
-  status    WellStatus @default(ACTIVE)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id         String      @id @default(auto()) @map("_id") @db.ObjectId
+  name       String
+  depth      Float
+  capacity   Float
+  status     String
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  // fields    Field[]  @relation("FieldWells") // Kaldırıldı: Explicit join model kullanılacak
+  fieldWells FieldWell[] // Eklendi: Explicit join model ilişkisi
 
   // İlişkiler
-  field   Field?  @relation(fields: [fieldId], references: [id])
-  fieldId String? @db.ObjectId
+  // field   Field?  @relation(fields: [fieldId], references: [id])
+  // fieldId String? @db.ObjectId // Kaldırıldı
 }
 
 // Ürün modeli
@@ -185,10 +205,10 @@ model IrrigationLog {
   seasonId String? @db.ObjectId
 
   // İlişkiler
-  field     Field  @relation(fields: [fieldId], references: [id])
-  fieldId   String @db.ObjectId
-  worker    User   @relation(fields: [workerId], references: [id]) // Yeni ilişki
-  workerId  String @db.ObjectId // Yeni alan
+  field    Field  @relation(fields: [fieldId], references: [id])
+  fieldId  String @db.ObjectId
+  worker   User   @relation(fields: [workerId], references: [id]) // Yeni ilişki
+  workerId String @db.ObjectId // Yeni alan
 }
 
 // Tarla işleme kaydı modeli
@@ -222,8 +242,8 @@ model Inventory {
   updatedAt     DateTime          @updatedAt
 
   // İlişkiler
-  ownerships          InventoryOwnership[]
-  usages              InventoryUsage[]
+  ownerships            InventoryOwnership[]
+  usages                InventoryUsage[]
   inventoryTransactions InventoryTransaction[] // YENİ
 }
 
@@ -241,69 +261,69 @@ model InventoryOwnership {
 
 // Alış Modeli
 model Purchase {
-  id            String            @id @default(auto()) @map("_id") @db.ObjectId
-  product       String
-  category      ProductCategory   @default(FERTILIZER) // YENİ: Ürün kategorisi
-  quantity      Float
-  unit          Unit              @default(KG) // Birim alanını ekleyelim
-  unitPrice     Float
-  totalCost     Float
-  paymentMethod PaymentMethod
-  dueDate       DateTime? // Ödeme vadesi (ör: 3 ay sonra)
-  description   String?
-  createdAt     DateTime          @default(now())
-  isTemplate    Boolean           @default(false) // YENİ: Şablon mu?
-  templateName  String?           // YENİ: Şablon adı
-  approvalStatus ApprovalStatus   @default(PENDING) // YENİ: Onay durumu
-  approvalRequired Boolean        @default(true) // YENİ: Onay gerekli mi?
-  approvalThreshold Float         @default(1000) // YENİ: Onay eşiği (TL)
+  id                String          @id @default(auto()) @map("_id") @db.ObjectId
+  product           String
+  category          ProductCategory @default(FERTILIZER) // YENİ: Ürün kategorisi
+  quantity          Float
+  unit              Unit            @default(KG) // Birim alanını ekleyelim
+  unitPrice         Float
+  totalCost         Float
+  paymentMethod     PaymentMethod
+  dueDate           DateTime? // Ödeme vadesi (ör: 3 ay sonra)
+  description       String?
+  createdAt         DateTime        @default(now())
+  isTemplate        Boolean         @default(false) // YENİ: Şablon mu?
+  templateName      String? // YENİ: Şablon adı
+  approvalStatus    ApprovalStatus  @default(PENDING) // YENİ: Onay durumu
+  approvalRequired  Boolean         @default(true) // YENİ: Onay gerekli mi?
+  approvalThreshold Float           @default(1000) // YENİ: Onay eşiği (TL)
 
   // YENİ: Sezon ilişkisi
   season   Season? @relation(fields: [seasonId], references: [id])
   seasonId String? @db.ObjectId
 
   // İlişkiler
-  contributors         PurchaseContributor[]
-  debts                Debt[]                @relation("PurchaseDebts")
-  invoices             Invoice[]             @relation("PurchaseInvoices")
+  contributors          PurchaseContributor[]
+  debts                 Debt[]                 @relation("PurchaseDebts")
+  invoices              Invoice[]              @relation("PurchaseInvoices")
   inventoryTransactions InventoryTransaction[] // YENİ
-  approvals            PurchaseApproval[]    // YENİ: Onaylar
+  approvals             PurchaseApproval[] // YENİ: Onaylar
 }
 
 // YENİ: Alış Onay Modeli
 model PurchaseApproval {
-  id            String         @id @default(auto()) @map("_id") @db.ObjectId
-  purchase      Purchase       @relation(fields: [purchaseId], references: [id])
-  purchaseId    String         @db.ObjectId
-  approver      User           @relation(fields: [approverId], references: [id])
-  approverId    String         @db.ObjectId
-  status        ApprovalStatus @default(PENDING)
-  comment       String?
-  approvedAt    DateTime?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id         String         @id @default(auto()) @map("_id") @db.ObjectId
+  purchase   Purchase       @relation(fields: [purchaseId], references: [id])
+  purchaseId String         @db.ObjectId
+  approver   User           @relation(fields: [approverId], references: [id])
+  approverId String         @db.ObjectId
+  status     ApprovalStatus @default(PENDING)
+  comment    String?
+  approvedAt DateTime?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
 }
 
 // Alış Katılımcıları (Genişletilmiş)
 model PurchaseContributor {
-  id                 String    @id @default(auto()) @map("_id") @db.ObjectId
-  purchase           Purchase  @relation(fields: [purchaseId], references: [id])
-  purchaseId         String    @db.ObjectId
-  user               User      @relation(fields: [userId], references: [id])
-  userId             String    @db.ObjectId
-  sharePercentage    Float     // Ortaklık yüzdesi (ör: 50.0)
-  contribution       Float     // Bu kullanıcının payı (ör: 26000 TL)
-  expectedContribution Float    // YENİ: Beklenen katkı (hesaplanmış)
-  actualContribution Float     @default(0) // YENİ: Gerçekte ödenen miktar
-  remainingAmount    Float?    // YENİ: Kalan borç miktarı
-  hasPaid            Boolean   @default(false) // Ödeme yaptı mı?
-  paymentDate        DateTime? // Ödeme tarihi
-  isCreditor         Boolean   // Kredi veren mi? (true ise borcun sahibi)
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  id                   String    @id @default(auto()) @map("_id") @db.ObjectId
+  purchase             Purchase  @relation(fields: [purchaseId], references: [id])
+  purchaseId           String    @db.ObjectId
+  user                 User      @relation(fields: [userId], references: [id])
+  userId               String    @db.ObjectId
+  sharePercentage      Float // Ortaklık yüzdesi (ör: 50.0)
+  contribution         Float // Bu kullanıcının payı (ör: 26000 TL)
+  expectedContribution Float // YENİ: Beklenen katkı (hesaplanmış)
+  actualContribution   Float     @default(0) // YENİ: Gerçekte ödenen miktar
+  remainingAmount      Float? // YENİ: Kalan borç miktarı
+  hasPaid              Boolean   @default(false) // Ödeme yaptı mı?
+  paymentDate          DateTime? // Ödeme tarihi
+  isCreditor           Boolean // Kredi veren mi? (true ise borcun sahibi)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   // İlişkiler
-  paymentHistory     PaymentHistory[] // YENİ
+  paymentHistory PaymentHistory[] // YENİ
 }
 
 // YENİ: Ödeme Geçmişi Modeli
@@ -316,62 +336,62 @@ model PaymentHistory {
   createdAt     DateTime      @default(now())
 
   // İlişkiler
-  debt          Debt?         @relation(fields: [debtId], references: [id])
-  debtId        String?       @db.ObjectId
+  debt          Debt?               @relation(fields: [debtId], references: [id])
+  debtId        String?             @db.ObjectId
   contributor   PurchaseContributor @relation(fields: [contributorId], references: [id])
-  contributorId String        @db.ObjectId
-  payer         User          @relation("PaymentsMade", fields: [payerId], references: [id])
-  payerId       String        @db.ObjectId
-  receiver      User          @relation("PaymentsReceived", fields: [receiverId], references: [id])
-  receiverId    String        @db.ObjectId
+  contributorId String              @db.ObjectId
+  payer         User                @relation("PaymentsMade", fields: [payerId], references: [id])
+  payerId       String              @db.ObjectId
+  receiver      User                @relation("PaymentsReceived", fields: [receiverId], references: [id])
+  receiverId    String              @db.ObjectId
 }
 
 // YENİ: Envanter İşlemleri Modeli
 model InventoryTransaction {
-  id            String           @id @default(auto()) @map("_id") @db.ObjectId
-  type          TransactionType
-  quantity      Float
-  date          DateTime
-  notes         String?
-  createdAt     DateTime         @default(now())
+  id        String          @id @default(auto()) @map("_id") @db.ObjectId
+  type      TransactionType
+  quantity  Float
+  date      DateTime
+  notes     String?
+  createdAt DateTime        @default(now())
 
   // YENİ: Sezon ilişkisi
   season   Season? @relation(fields: [seasonId], references: [id])
   seasonId String? @db.ObjectId
 
   // İlişkiler
-  inventory     Inventory        @relation(fields: [inventoryId], references: [id])
-  inventoryId   String           @db.ObjectId
-  purchase      Purchase?        @relation(fields: [purchaseId], references: [id])
-  purchaseId    String?          @db.ObjectId
-  user          User             @relation(fields: [userId], references: [id])
-  userId        String           @db.ObjectId
+  inventory   Inventory @relation(fields: [inventoryId], references: [id])
+  inventoryId String    @db.ObjectId
+  purchase    Purchase? @relation(fields: [purchaseId], references: [id])
+  purchaseId  String?   @db.ObjectId
+  user        User      @relation(fields: [userId], references: [id])
+  userId      String    @db.ObjectId
 }
 
 // Borç Modeli (Genişletilmiş)
 model Debt {
-  id          String     @id @default(auto()) @map("_id") @db.ObjectId
-  amount      Float
-  dueDate     DateTime
-  status      DebtStatus @default(PENDING)
-  description String?
-  createdAt   DateTime   @default(now())
-  paymentDate DateTime?
-  reminderSent Boolean   @default(false) // YENİ: Hatırlatma gönderildi mi?
+  id               String     @id @default(auto()) @map("_id") @db.ObjectId
+  amount           Float
+  dueDate          DateTime
+  status           DebtStatus @default(PENDING)
+  description      String?
+  createdAt        DateTime   @default(now())
+  paymentDate      DateTime?
+  reminderSent     Boolean    @default(false) // YENİ: Hatırlatma gönderildi mi?
   lastReminderDate DateTime? // YENİ: Son hatırlatma tarihi
 
   // Borç nedeni (alış, fatura vb.)
-  reason      String?
+  reason String?
 
   // İlişkiler
-  creditor       User            @relation("DebtsGiven", fields: [creditorId], references: [id])
-  creditorId     String          @db.ObjectId
-  debtor         User            @relation("DebtsTaken", fields: [debtorId], references: [id])
-  debtorId       String          @db.ObjectId
-  invoice        Invoice?        @relation("DebtInvoice", fields: [invoiceId], references: [id])
-  invoiceId      String?         @db.ObjectId
-  purchase       Purchase?       @relation("PurchaseDebts", fields: [purchaseId], references: [id])
-  purchaseId     String?         @db.ObjectId
+  creditor       User             @relation("DebtsGiven", fields: [creditorId], references: [id])
+  creditorId     String           @db.ObjectId
+  debtor         User             @relation("DebtsTaken", fields: [debtorId], references: [id])
+  debtorId       String           @db.ObjectId
+  invoice        Invoice?         @relation("DebtInvoice", fields: [invoiceId], references: [id])
+  invoiceId      String?          @db.ObjectId
+  purchase       Purchase?        @relation("PurchaseDebts", fields: [purchaseId], references: [id])
+  purchaseId     String?          @db.ObjectId
   paymentHistory PaymentHistory[] // YENİ
 }
 
@@ -413,32 +433,32 @@ model InventoryUsage {
 
 // İşlemler (Tarla, Sulama, vb.) - Güncellendi
 model Process {
-  id                String           @id @default(auto()) @map("_id") @db.ObjectId
-  type              ProcessType
-  field             Field            @relation(fields: [fieldId], references: [id])
-  fieldId           String           @db.ObjectId
-  worker            User             @relation(fields: [workerId], references: [id])
-  workerId          String           @db.ObjectId
-  date              DateTime
-  description       String?
-  
+  id          String      @id @default(auto()) @map("_id") @db.ObjectId
+  type        ProcessType
+  field       Field       @relation(fields: [fieldId], references: [id])
+  fieldId     String      @db.ObjectId
+  worker      User        @relation(fields: [workerId], references: [id])
+  workerId    String      @db.ObjectId
+  date        DateTime
+  description String?
+
   // YENİ: Parçalı işleme alanları
-  totalArea         Float            // Tarlanın toplam alanı (dekar/dönüm)
-  processedArea     Float            // İşlenen alan (dekar/dönüm)
-  processedPercentage Float           // İşlenen alan yüzdesi (0-100)
-  
+  totalArea           Float // Tarlanın toplam alanı (dekar/dönüm)
+  processedArea       Float // İşlenen alan (dekar/dönüm)
+  processedPercentage Float // İşlenen alan yüzdesi (0-100)
+
   // YENİ: Sezon ilişkisi
-  season            Season?          @relation(fields: [seasonId], references: [id])
-  seasonId          String?          @db.ObjectId
-  
+  season   Season? @relation(fields: [seasonId], references: [id])
+  seasonId String? @db.ObjectId
+
   // İlişkiler
-  inventoryUsages   InventoryUsage[]
-  equipmentUsages   EquipmentUsage[] // YENİ: Ekipman kullanımları
-  processCosts      ProcessCost[]    // YENİ: İşlem maliyetleri
-  notifications     Notification[]   // YENİ: Bildirimler
-  
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
+  inventoryUsages InventoryUsage[]
+  equipmentUsages EquipmentUsage[] // YENİ: Ekipman kullanımları
+  processCosts    ProcessCost[] // YENİ: İşlem maliyetleri
+  notifications   Notification[] // YENİ: Bildirimler
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Bildirimler - Güncellendi
@@ -456,122 +476,124 @@ model Notification {
   receiverId String  @db.ObjectId
   sender     User?   @relation("NotificationsSent", fields: [senderId], references: [id])
   senderId   String? @db.ObjectId
-  
+
   // YENİ: İşlem ilişkisi
-  process    Process? @relation(fields: [processId], references: [id])
-  processId  String?  @db.ObjectId
+  process   Process? @relation(fields: [processId], references: [id])
+  processId String?  @db.ObjectId
 }
 
 // YENİ: Tarım Aleti/Ekipman Modeli
 model Equipment {
-  id                    String                @id @default(auto()) @map("_id") @db.ObjectId
-  name                  String                // Ekipman adı (Mibzer, Kültivatör, Diskaro vb.)
-  type                  EquipmentType         // Ekipman tipi (SEEDING, TILLAGE, SPRAYING vb.)
-  fuelConsumptionPerDecare Float               // Dekar başına yakıt tüketimi (litre)
-  description           String?               // Açıklama
-  status                EquipmentStatus       @default(ACTIVE)
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
+  id                       String          @id @default(auto()) @map("_id") @db.ObjectId
+  name                     String // Ekipman adı (Mibzer, Kültivatör, Diskaro vb.)
+  type                     EquipmentType // Ekipman tipi (SEEDING, TILLAGE, SPRAYING vb.)
+  fuelConsumptionPerDecare Float // Dekar başına yakıt tüketimi (litre)
+  description              String? // Açıklama
+  status                   EquipmentStatus @default(ACTIVE)
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
 
   // İlişkiler
-  ownerships            EquipmentOwnership[]  // Ekipman sahiplikleri
-  capabilities          EquipmentCapability[] // Ekipman yetenekleri
-  usages                EquipmentUsage[]      // Ekipman kullanımları
+  ownerships   EquipmentOwnership[] // Ekipman sahiplikleri
+  capabilities EquipmentCapability[] // Ekipman yetenekleri
+  usages       EquipmentUsage[] // Ekipman kullanımları
 }
 
 // YENİ: Ekipman Sahipliği Modeli
 model EquipmentOwnership {
-  id                    String                @id @default(auto()) @map("_id") @db.ObjectId
-  equipment             Equipment             @relation(fields: [equipmentId], references: [id])
-  equipmentId           String                @db.ObjectId
-  user                  User                  @relation(fields: [userId], references: [id])
-  userId                String                @db.ObjectId
-  ownershipPercentage   Float                 // Sahiplik yüzdesi
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
+  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  equipment           Equipment @relation(fields: [equipmentId], references: [id])
+  equipmentId         String    @db.ObjectId
+  user                User      @relation(fields: [userId], references: [id])
+  userId              String    @db.ObjectId
+  ownershipPercentage Float // Sahiplik yüzdesi
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@unique([equipmentId, userId])
 }
 
 // YENİ: Ekipman Yetenek Modeli
 model EquipmentCapability {
-  id                    String                @id @default(auto()) @map("_id") @db.ObjectId
-  equipment             Equipment             @relation(fields: [equipmentId], references: [id])
-  equipmentId           String                @db.ObjectId
-  inventoryCategory     InventoryCategory     // Hangi envanter kategorisini kullanabilir
-  canUse                Boolean               @default(true)
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
+  id                String            @id @default(auto()) @map("_id") @db.ObjectId
+  equipment         Equipment         @relation(fields: [equipmentId], references: [id])
+  equipmentId       String            @db.ObjectId
+  inventoryCategory InventoryCategory // Hangi envanter kategorisini kullanabilir
+  canUse            Boolean           @default(true)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   @@unique([equipmentId, inventoryCategory])
 }
 
 // YENİ: Ekipman Kullanım Modeli
 model EquipmentUsage {
-  id                    String                @id @default(auto()) @map("_id") @db.ObjectId
-  process               Process               @relation(fields: [processId], references: [id])
-  processId             String                @db.ObjectId
-  equipment             Equipment             @relation(fields: [equipmentId], references: [id])
-  equipmentId           String                @db.ObjectId
-  user                  User                  @relation(fields: [userId], references: [id])
-  userId                String                @db.ObjectId
-  areaProcessed         Float                 // İşlenen alan (dekar/dönüm)
-  processedPercentage   Float                 // İşlenen alan yüzdesi (0-100)
-  fuelConsumed          Float                 // Tüketilen yakıt (litre)
-  unit                  Unit                  // Birim (DECARE/DONUM)
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
+  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  process             Process   @relation(fields: [processId], references: [id])
+  processId           String    @db.ObjectId
+  equipment           Equipment @relation(fields: [equipmentId], references: [id])
+  equipmentId         String    @db.ObjectId
+  user                User      @relation(fields: [userId], references: [id])
+  userId              String    @db.ObjectId
+  areaProcessed       Float // İşlenen alan (dekar/dönüm)
+  processedPercentage Float // İşlenen alan yüzdesi (0-100)
+  fuelConsumed        Float // Tüketilen yakıt (litre)
+  unit                Unit // Birim (DECARE/DONUM)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 }
 
 // YENİ: İşlem Maliyeti Modeli
 model ProcessCost {
-  id                    String                @id @default(auto()) @map("_id") @db.ObjectId
-  process               Process               @relation(fields: [processId], references: [id])
-  processId             String                @db.ObjectId
-  laborCost             Float                 // İşçilik maliyeti
-  equipmentCost         Float                 // Ekipman kullanım maliyeti
-  inventoryCost         Float                 // Kullanılan envanter maliyeti
-  fuelCost              Float                 // Yakıt maliyeti
-  totalCost             Float                 // Toplam maliyet
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
-  
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  process       Process  @relation(fields: [processId], references: [id])
+  processId     String   @db.ObjectId
+  laborCost     Float // İşçilik maliyeti
+  equipmentCost Float // Ekipman kullanım maliyeti
+  inventoryCost Float // Kullanılan envanter maliyeti
+  fuelCost      Float // Yakıt maliyeti
+  totalCost     Float // Toplam maliyet
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
   // İlişkiler
-  fieldExpenses         FieldExpense[]        // Tarla giderleri
-  ownerExpenses         FieldOwnerExpense[]   // Tarla sahibi giderleri
+  field         Field               @relation("FieldProcessCosts", fields: [fieldId], references: [id]) // Karşı ilişki eklendi
+  fieldId       String              @db.ObjectId // Karşı ilişki için alan eklendi
+  fieldExpenses FieldExpense[] // Tarla giderleri
+  ownerExpenses FieldOwnerExpense[] // Tarla sahibi giderleri
 }
 
 // YENİ: Tarla Gideri Modeli
 model FieldExpense {
-  id                    String                @id @default(auto()) @map("_id") @db.ObjectId
-  field                 Field                 @relation(fields: [fieldId], references: [id])
-  fieldId               String                @db.ObjectId
-  season                Season                @relation(fields: [seasonId], references: [id])
-  seasonId              String                @db.ObjectId
-  processCost           ProcessCost           @relation(fields: [processCostId], references: [id])
-  processCostId         String                @db.ObjectId
-  totalCost             Float                 // Toplam maliyet
-  periodStart           DateTime              // Dönem başlangıcı
-  periodEnd             DateTime              // Dönem sonu
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  field         Field       @relation(fields: [fieldId], references: [id])
+  fieldId       String      @db.ObjectId
+  season        Season      @relation(fields: [seasonId], references: [id])
+  seasonId      String      @db.ObjectId
+  processCost   ProcessCost @relation(fields: [processCostId], references: [id])
+  processCostId String      @db.ObjectId
+  totalCost     Float // Toplam maliyet
+  periodStart   DateTime // Dönem başlangıcı
+  periodEnd     DateTime // Dönem sonu
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 }
 
 // YENİ: Tarla Sahibi Gideri Modeli
 model FieldOwnerExpense {
-  id                    String                @id @default(auto()) @map("_id") @db.ObjectId
-  fieldOwnership        FieldOwnership        @relation(fields: [fieldOwnershipId], references: [id])
-  fieldOwnershipId      String                @db.ObjectId
-  processCost           ProcessCost           @relation(fields: [processCostId], references: [id])
-  processCostId         String                @db.ObjectId
-  user                  User                  @relation(fields: [userId], references: [id])
-  userId                String                @db.ObjectId
-  amount                Float                 // Tutar
-  percentage            Float                 // Sahiplik yüzdesine göre hesaplanan oran
-  periodStart           DateTime              // Dönem başlangıcı
-  periodEnd             DateTime              // Dönem sonu
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
+  id               String         @id @default(auto()) @map("_id") @db.ObjectId
+  fieldOwnership   FieldOwnership @relation(fields: [fieldOwnershipId], references: [id])
+  fieldOwnershipId String         @db.ObjectId
+  processCost      ProcessCost    @relation(fields: [processCostId], references: [id])
+  processCostId    String         @db.ObjectId
+  user             User           @relation(fields: [userId], references: [id])
+  userId           String         @db.ObjectId
+  amount           Float // Tutar
+  percentage       Float // Sahiplik yüzdesine göre hesaplanan oran
+  periodStart      DateTime // Dönem başlangıcı
+  periodEnd        DateTime // Dönem sonu
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 }
 
 // Enum'lar
@@ -616,12 +638,12 @@ enum InventoryCategory {
 // YENİ: Ürün Kategorisi Enum
 enum ProductCategory {
   FERTILIZER // Gübre
-  FEED       // Besleme
-  PESTICIDE  // İlaç
-  FUEL       // Yakıt
-  SEED       // Tohum
-  EQUIPMENT  // Ekipman
-  OTHER      // Diğer
+  FEED // Besleme
+  PESTICIDE // İlaç
+  FUEL // Yakıt
+  SEED // Tohum
+  EQUIPMENT // Ekipman
+  OTHER // Diğer
 }
 
 enum InventoryStatus {
@@ -699,19 +721,19 @@ enum ApprovalStatus {
 
 // YENİ: Ekipman Tipi Enum
 enum EquipmentType {
-  SEEDING               // Ekim (Mibzer)
-  TILLAGE               // Toprak işleme (Kültivatör, Diskaro)
-  SPRAYING              // İlaçlama
-  FERTILIZING           // Gübreleme
-  HARVESTING            // Hasat
-  OTHER                 // Diğer
+  SEEDING // Ekim (Mibzer)
+  TILLAGE // Toprak işleme (Kültivatör, Diskaro)
+  SPRAYING // İlaçlama
+  FERTILIZING // Gübreleme
+  HARVESTING // Hasat
+  OTHER // Diğer
 }
 
 // YENİ: Ekipman Durumu Enum
 enum EquipmentStatus {
-  ACTIVE                // Aktif
-  MAINTENANCE           // Bakımda
-  INACTIVE              // Pasif
+  ACTIVE // Aktif
+  MAINTENANCE // Bakımda
+  INACTIVE // Pasif
 }
 
 enum Unit {
@@ -724,9 +746,8 @@ enum Unit {
   PAKET
   METRE
   METREKARE
-  DECARE                // Dekar (1000 m²)
-  DONUM                 // Dönüm (1000 m²) - Aynı anlama gelir
-  HECTARE               // Hektar (10000 m²)
+  DECARE // Dekar (1000 m²)
+  DONUM // Dönüm (1000 m²) - Aynı anlama gelir
+  HECTARE // Hektar (10000 m²)
   DIGER
 }
-

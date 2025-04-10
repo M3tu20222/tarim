@@ -6,16 +6,12 @@ export const hashPasswordMiddleware: Prisma.Middleware = async (
   params,
   next
 ) => {
-  console.log("Middleware tetiklendi!");
-  console.log("Model:", params.model);
-  console.log("Action:", params.action);
-  console.log("Args:", params.args);
+ 
 
   if (params.model === "User" && params.action === "create") {
     const user = params.args.data;
     console.log("User data (create):", user); // Create için
     if (user.password) {
-      console.log("Password mevcut, hash'leniyor...");
       const saltRounds = 10;
       const hashedPassword = await bcrypt.hash(user.password, saltRounds);
       params.args.data.password = hashedPassword;

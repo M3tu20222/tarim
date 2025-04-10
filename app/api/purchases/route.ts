@@ -209,148 +209,164 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Ürün adına göre kategoriyi belirle
+    let determinedCategory: InventoryCategory | ProductCategory = "FERTILIZER"; // Varsayılan
+    if (data.product && data.product.toLowerCase() === 'mazot') {
+      determinedCategory = "FUEL";
+    }
+    // Gelecekte başka kategoriler için de koşullar eklenebilir
+    // else if (data.product.toLowerCase().includes('tohum')) {
+    //   determinedCategory = "SEED";
+    // }
+
     // Transaction kullanarak tüm işlemleri atomik olarak gerçekleştir
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. Alış kaydını oluştur
-      const purchase = await tx.purchase.create({
-        data: {
-          product: data.product,
-          category: (data.category || "FERTILIZER") as ProductCategory,
-          quantity: Number.parseFloat(data.quantity),
-          unit: data.unit as Unit,
-          unitPrice: Number.parseFloat(data.unitPrice),
-          totalCost: Number.parseFloat(data.totalCost),
-          paymentMethod: data.paymentMethod as PaymentMethod,
-          description: data.notes || "",
-          isTemplate: data.isTemplate || false,
-          templateName: data.templateName || null,
-          seasonId: data.seasonId === "no-season" ? null : data.seasonId,
-          approvalRequired: data.approvalRequired || false,
-          approvalThreshold: data.approvalThreshold
-            ? Number.parseFloat(data.approvalThreshold)
-            : 1000,
-        },
-      });
-
-      // 2. Katılımcıları ve envanter kayıtlarını oluştur
-      const contributors = [];
-      const inventories = [];
-      const inventoryOwnerships = [];
-      const inventoryTransactions = [];
-      const debts = [];
-
-      for (const partner of data.partners) {
-        // Ortaklık payını hesapla
-        const sharePercentage = Number.parseFloat(partner.sharePercentage);
-        const contribution =
-          (Number.parseFloat(data.totalCost) * sharePercentage) / 100;
-        const allocatedQuantity =
-          (Number.parseFloat(data.quantity) * sharePercentage) / 100;
-
-        // Katılımcı kaydını oluştur
-        const contributor = await tx.purchaseContributor.create({
+    const result = await prisma.$transaction(
+      async (tx) => {
+        // 1. Alış kaydını oluştur
+        const purchase = await tx.purchase.create({
           data: {
-            purchaseId: purchase.id,
-            userId: partner.userId,
-            sharePercentage: sharePercentage,
-            contribution: contribution,
-            expectedContribution: contribution,
-            actualContribution: partner.hasPaid ? contribution : 0,
-            remainingAmount: partner.hasPaid ? 0 : contribution,
-            hasPaid: partner.hasPaid || false,
-            paymentDate: partner.hasPaid
-              ? new Date()
-              : partner.dueDate
-                ? new Date(partner.dueDate)
-                : null,
-            isCreditor: partner.userId === userId, // Alışı yapan kişi kredi veren
-          },
-        });
-
-        contributors.push(contributor);
-
-        // Envanter kaydını oluştur
-        const inventory = await tx.inventory.create({
-          data: {
-            name: data.product,
-            category: (data.category || "FERTILIZER") as InventoryCategory,
-            totalQuantity: allocatedQuantity,
+            product: data.product,
+            category: determinedCategory as ProductCategory, // Belirlenen kategoriyi kullan
+            quantity: Number.parseFloat(data.quantity),
             unit: data.unit as Unit,
-            purchaseDate: new Date(),
-            status: "AVAILABLE",
-            notes: `${purchase.id} numaralı alıştan tahsis edildi`,
-          },
-        });
-
-        inventories.push(inventory);
-
-        // Envanter sahipliği kaydını oluştur
-        const ownership = await tx.inventoryOwnership.create({
-          data: {
-            inventoryId: inventory.id,
-            userId: partner.userId,
-            shareQuantity: allocatedQuantity,
-          },
-        });
-
-        inventoryOwnerships.push(ownership);
-
-        // Envanter işlemi kaydını oluştur
-        const transaction = await tx.inventoryTransaction.create({
-          data: {
-            type: "PURCHASE" as TransactionType,
-            quantity: allocatedQuantity,
-            date: new Date(),
-            notes: `${data.product} alışı`,
-            inventoryId: inventory.id,
-            purchaseId: purchase.id,
-            userId: partner.userId,
+            unitPrice: Number.parseFloat(data.unitPrice),
+            totalCost: Number.parseFloat(data.totalCost),
+            paymentMethod: data.paymentMethod as PaymentMethod,
+            description: data.notes || "",
+            isTemplate: data.isTemplate || false,
+            templateName: data.templateName || null,
             seasonId: data.seasonId === "no-season" ? null : data.seasonId,
+            approvalRequired: data.approvalRequired || false,
+            approvalThreshold: data.approvalThreshold
+              ? Number.parseFloat(data.approvalThreshold)
+              : 1000,
           },
         });
 
-        inventoryTransactions.push(transaction);
+        // 2. Katılımcıları ve envanter kayıtlarını oluştur
+        const contributors = [];
+        const inventories = [];
+        const inventoryOwnerships = [];
+        const inventoryTransactions = [];
+        const debts = [];
 
-        // Ödeme yapmadıysa ve kredi veren değilse borç oluştur
-        if (!partner.hasPaid && partner.userId !== userId) {
-          const debt = await tx.debt.create({
+        for (const partner of data.partners) {
+          // Ortaklık payını hesapla
+          const sharePercentage = Number.parseFloat(partner.sharePercentage);
+          const contribution =
+            (Number.parseFloat(data.totalCost) * sharePercentage) / 100;
+          const allocatedQuantity =
+            (Number.parseFloat(data.quantity) * sharePercentage) / 100;
+
+          // Katılımcı kaydını oluştur
+          const contributor = await tx.purchaseContributor.create({
             data: {
-              amount: contribution,
-              dueDate: partner.dueDate
-                ? new Date(partner.dueDate)
-                : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-              status: "PENDING",
-              description: `${data.product} alışı için borç`,
-              creditorId: userId,
-              debtorId: partner.userId,
               purchaseId: purchase.id,
+              userId: partner.userId,
+              sharePercentage: sharePercentage,
+              contribution: contribution,
+              expectedContribution: contribution,
+              actualContribution: partner.hasPaid ? contribution : 0,
+              remainingAmount: partner.hasPaid ? 0 : contribution,
+              hasPaid: partner.hasPaid || false,
+              paymentDate: partner.hasPaid
+                ? new Date()
+                : partner.dueDate
+                  ? new Date(partner.dueDate)
+                  : null,
+              isCreditor: partner.userId === userId, // Alışı yapan kişi kredi veren
             },
           });
 
-          debts.push(debt);
+          contributors.push(contributor);
 
-          // Borç bildirimi oluştur
-          await tx.notification.create({
+          // Envanter kaydını oluştur
+          const inventory = await tx.inventory.create({
             data: {
-              title: "Yeni Borç",
-              message: `${data.product} alışı için ${contribution.toFixed(2)} TL tutarında borcunuz bulunmaktadır.`,
-              type: "DEBT",
-              receiverId: partner.userId,
-              senderId: userId,
+              name: data.product,
+              category: determinedCategory as InventoryCategory, // Belirlenen kategoriyi kullan
+              totalQuantity: allocatedQuantity,
+              unit: data.unit as Unit,
+              purchaseDate: new Date(),
+              status: "AVAILABLE",
+              notes: `${purchase.id} numaralı alıştan tahsis edildi`,
             },
           });
-        }
-      }
 
-      return {
-        purchase,
-        contributors,
-        inventories,
-        inventoryOwnerships,
-        inventoryTransactions,
-        debts,
-      };
-    });
+          inventories.push(inventory);
+
+          // Envanter sahipliği kaydını oluştur
+          const ownership = await tx.inventoryOwnership.create({
+            data: {
+              inventoryId: inventory.id,
+              userId: partner.userId,
+              shareQuantity: allocatedQuantity,
+            },
+          });
+
+          inventoryOwnerships.push(ownership);
+
+          // Envanter işlemi kaydını oluştur
+          const transaction = await tx.inventoryTransaction.create({
+            data: {
+              type: "PURCHASE" as TransactionType,
+              quantity: allocatedQuantity,
+              date: new Date(),
+              notes: `${data.product} alışı`,
+              inventoryId: inventory.id,
+              purchaseId: purchase.id,
+              userId: partner.userId,
+              seasonId: data.seasonId === "no-season" ? null : data.seasonId,
+            },
+          });
+
+          inventoryTransactions.push(transaction);
+
+          // Ödeme yapmadıysa ve kredi veren değilse borç oluştur
+          if (!partner.hasPaid && partner.userId !== userId) {
+            const debt = await tx.debt.create({
+              data: {
+                amount: contribution,
+                dueDate: partner.dueDate
+                  ? new Date(partner.dueDate)
+                  : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                status: "PENDING",
+                description: `${data.product} alışı için borç`,
+                creditorId: userId,
+                debtorId: partner.userId,
+                purchaseId: purchase.id,
+              },
+            });
+
+            debts.push(debt);
+
+            // Borç bildirimi oluştur
+            await tx.notification.create({
+              data: {
+                title: "Yeni Borç",
+                message: `${data.product} alışı için ${contribution.toFixed(2)} TL tutarında borcunuz bulunmaktadır.`,
+                type: "DEBT",
+                receiverId: partner.userId,
+                senderId: userId,
+              },
+            });
+          }
+        }
+
+        return {
+          purchase,
+          contributors,
+          inventories,
+          inventoryOwnerships,
+          inventoryTransactions,
+          debts,
+        };
+      },
+      {
+        maxWait: 10000, // 10 saniye bekleme süresi
+        timeout: 30000, // 30 saniye zaman aşımı
+      }
+    );
 
     return NextResponse.json(result, { status: 201 });
   } catch (error: any) {

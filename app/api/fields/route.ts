@@ -18,6 +18,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const activeOnly = searchParams.get("active") === "true";
     const seasonId = searchParams.get("seasonId");
+    const ownerId = searchParams.get("ownerId");
+    const wellId = searchParams.get("wellId");
+    const processType = searchParams.get("processType");
+    const searchTerm = searchParams.get("search");
 
     // Filtre oluştur
     const filter: any = {};
@@ -26,6 +30,44 @@ export async function GET(request: Request) {
     }
     if (seasonId) {
       filter.seasonId = seasonId;
+    }
+    if (ownerId) {
+      filter.owners = {
+        some: {
+          userId: ownerId,
+        },
+      };
+    }
+    // Güncellendi: Filtreleme fieldWells üzerinden yapılıyor
+    if (wellId) {
+      filter.fieldWells = {
+        some: {
+          wellId: wellId,
+        },
+      };
+    }
+    if (processType) {
+      filter.processingLogs = {
+        some: {
+          processType,
+        },
+      };
+    }
+    if (searchTerm) {
+      filter.OR = [
+        {
+          name: {
+            contains: searchTerm,
+            mode: "insensitive",
+          },
+        },
+        {
+          location: {
+            contains: searchTerm,
+            mode: "insensitive",
+          },
+        },
+      ];
     }
 
     // Kullanıcı rolüne göre tarlaları getir
@@ -47,7 +89,18 @@ export async function GET(request: Request) {
             },
           },
           season: true,
-          wells: true,
+          // Güncellendi: wells -> fieldWells
+          fieldWells: { 
+            include: {
+              well: true,
+            },
+          },
+          processingLogs: {
+            take: 5,
+            orderBy: {
+              date: "desc",
+            },
+          },
         },
         orderBy: {
           createdAt: "desc",
@@ -81,7 +134,18 @@ export async function GET(request: Request) {
             },
           },
           season: true,
-          wells: true,
+          // Güncellendi: wells -> fieldWells
+          fieldWells: { 
+            include: {
+              well: true,
+            },
+          },
+          processingLogs: {
+            take: 5,
+            orderBy: {
+              date: "desc",
+            },
+          },
         },
         orderBy: {
           createdAt: "desc",
@@ -205,14 +269,12 @@ export async function POST(request: Request) {
       },
     });
 
-    // Kuyu bağlantısı varsa güncelle
+    // Kuyu bağlantısı varsa FieldWell kaydı oluştur
     if (wellId) {
-      await prisma.well.update({
-        where: { id: wellId },
+      await prisma.fieldWell.create({
         data: {
-          field: {
-            connect: { id: field.id },
-          },
+          field: { connect: { id: field.id } },
+          well: { connect: { id: wellId } },
         },
       });
     }

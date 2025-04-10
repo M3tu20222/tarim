@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -25,6 +25,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
+// import { MultiSelect } from "@/components/ui/multi-select"; // Kaldırıldı
+import { Checkbox } from "@/components/ui/checkbox"; // Tekrar eklendi
+// import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"; // Kaldırıldı
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+  SheetClose, // Eklendi
+  SheetFooter, // Eklendi
+} from "@/components/ui/sheet"; // Eklendi
+import { Badge } from "@/components/ui/badge"; // Eklendi
+import { ScrollArea } from "@/components/ui/scroll-area"; // Eklendi
 
 // Form şeması
 const formSchema = z.object({
@@ -40,6 +55,8 @@ const formSchema = z.object({
   status: z.string().min(1, {
     message: "Durum seçilmelidir.",
   }),
+  // Geri Alındı: fieldId -> fieldIds (dizi)
+  fieldIds: z.array(z.string()).optional(),
 });
 
 // Props tipi
@@ -52,6 +69,7 @@ export function WellForm({ wellId, defaultValues }: WellFormProps = {}) {
   const router = useRouter();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [fields, setFields] = useState<any[]>([]);
 
   // Form oluştur
   const form = useForm<z.infer<typeof formSchema>>({
@@ -61,8 +79,38 @@ export function WellForm({ wellId, defaultValues }: WellFormProps = {}) {
       depth: 0,
       capacity: 0,
       status: "ACTIVE",
+      // Geri Alındı: fieldId -> fieldIds
+      fieldIds: [],
     },
   });
+
+  // Tarlaları getir
+  useEffect(() => {
+    const fetchFields = async () => {
+      try {
+        const response = await fetch("/api/fields");
+        if (response.ok) {
+          const data = await response.json();
+          setFields(data);
+        } else {
+          toast({
+            title: "Hata",
+            description: "Tarlalar yüklenirken bir hata oluştu.",
+            variant: "destructive",
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching fields:", error);
+        toast({
+          title: "Hata",
+          description: "Tarlalar yüklenirken bir hata oluştu.",
+          variant: "destructive",
+        });
+      }
+    };
+
+    fetchFields();
+  }, [toast]);
 
   // Form gönderimi
   async function onSubmit(values: z.infer<typeof formSchema>) {
@@ -176,6 +224,99 @@ export function WellForm({ wellId, defaultValues }: WellFormProps = {}) {
             )}
           />
         </div>
+
+        {/* fieldIds FormField - Çoklu Seçim (Checkbox + Sheet) */}
+        <FormField
+          control={form.control}
+          name="fieldIds" // fieldIds (dizi) kullanılıyor
+          render={({ field }) => (
+            <FormItem className="flex flex-col">
+              <FormLabel>Tarlalar</FormLabel> {/* Çoğul etiket */}
+              <Sheet>
+                <SheetTrigger asChild>
+                  <FormControl>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      {/* Seçili tarlaları Badge olarak göster */}
+                      {field.value && field.value.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {field.value.map((fieldId) => {
+                            const selectedField = fields.find(
+                              (f) => f.id === fieldId
+                            );
+                            return selectedField ? (
+                              <Badge key={fieldId} variant="secondary">
+                                {selectedField.name}
+                              </Badge>
+                            ) : null;
+                          })}
+                        </div>
+                      ) : (
+                        <span>Tarlaları Seç</span> // Varsayılan metin
+                      )}
+                    </Button>
+                  </FormControl>
+                </SheetTrigger>
+                <SheetContent className="flex flex-col">
+                  <SheetHeader>
+                    <SheetTitle>Tarlaları Seç</SheetTitle>
+                    <SheetDescription>
+                      Bu kuyuya bağlamak istediğiniz tarlaları seçin.
+                    </SheetDescription>
+                  </SheetHeader>
+                  <ScrollArea className="flex-grow">
+                    {/* Çoklu seçim için Checkbox kullan */}
+                    <div className="space-y-2 p-4">
+                      {fields.map((item) => (
+                        <FormField
+                          key={item.id}
+                          control={form.control}
+                          name="fieldIds" // fieldIds dizisini hedefle
+                          render={({ field: fieldControl }) => { // Çakışmayı önlemek için farklı isim
+                            return (
+                              <FormItem
+                                key={item.id}
+                                className="flex flex-row items-start space-x-3 space-y-0"
+                              >
+                                <FormControl>
+                                  <Checkbox
+                                    checked={fieldControl.value?.includes(item.id)}
+                                    onCheckedChange={(checked) => {
+                                      const currentValue = fieldControl.value || [];
+                                      return checked
+                                        ? fieldControl.onChange([...currentValue, item.id])
+                                        : fieldControl.onChange(
+                                            currentValue.filter(
+                                              (value) => value !== item.id
+                                            )
+                                          );
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormLabel className="font-normal">
+                                  {item.name}
+                                </FormLabel>
+                              </FormItem>
+                            );
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </ScrollArea>
+                  <SheetFooter>
+                    <SheetClose asChild>
+                      <Button type="button">Kapat</Button>
+                    </SheetClose>
+                  </SheetFooter>
+                </SheetContent>
+              </Sheet>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        {/* /fieldIds FormField */}
 
         <div className="flex justify-end gap-4">
           <Button

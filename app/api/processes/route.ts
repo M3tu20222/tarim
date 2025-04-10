@@ -152,10 +152,10 @@ export async function POST(request: Request) {
       include: {
         owners: {
           include: {
-            user: true
-          }
-        }
-      }
+            user: true,
+          },
+        },
+      },
     });
 
     if (!field) {
@@ -182,7 +182,8 @@ export async function POST(request: Request) {
     }
 
     // 1. Ekipman bilgisini al
-    let equipment: { id: string; fuelConsumptionPerDecare: number } | null = null;
+    let equipment: { id: string; fuelConsumptionPerDecare: number } | null =
+      null;
     if (equipmentId) {
       equipment = await prisma.equipment.findUnique({
         where: { id: equipmentId },
@@ -270,9 +271,10 @@ export async function POST(request: Request) {
             userId: userId, // Kullanıcı ID'si eklendi
             areaProcessed: processedArea,
             processedPercentage,
-            fuelConsumed: equipment && equipment.fuelConsumptionPerDecare
-              ? processedArea * equipment.fuelConsumptionPerDecare
-              : 0,
+            fuelConsumed:
+              equipment && equipment.fuelConsumptionPerDecare
+                ? processedArea * equipment.fuelConsumptionPerDecare
+                : 0,
             unit: "DECARE" as Unit,
           },
         });
@@ -316,6 +318,85 @@ export async function POST(request: Request) {
           });
 
           inventoryUsageRecords.push(inventoryUsage);
+        }
+      }
+
+      // Ekipman kullanımı varsa ve yakıt tüketimi hesaplanmışsa, yakıt envanterinden düşüm yap
+      if (equipmentId && equipment && equipment.fuelConsumptionPerDecare > 0) {
+        const fuelNeeded = equipment.fuelConsumptionPerDecare * processedArea;
+
+        // Tarla sahiplerinin yakıt envanterini bul
+        const fieldOwners = await tx.fieldOwnership.findMany({
+          where: { fieldId },
+          include: {
+            user: true,
+          },
+        });
+
+        let fuelInventoryFound = false;
+
+        // Her tarla sahibinin envanterini kontrol et
+        for (const owner of fieldOwners) {
+          // Yakıt kategorisindeki envanterleri bul
+          const fuelInventories = await tx.inventory.findMany({
+            where: {
+              category: "FUEL",
+              ownerships: {
+                some: {
+                  userId: owner.userId,
+                },
+              },
+              totalQuantity: { gt: 0 }, // Sadece miktarı 0'dan büyük olanları al
+            },
+            orderBy: { createdAt: "asc" }, // Önce eski envanterleri kullan
+          });
+
+          let remainingFuelNeeded = fuelNeeded;
+
+          // Bulunan yakıt envanterlerinden düşüm yap
+          for (const inventory of fuelInventories) {
+            if (remainingFuelNeeded <= 0) break;
+
+            const usageAmount = Math.min(
+              inventory.totalQuantity,
+              remainingFuelNeeded
+            );
+
+            // Envanter kullanımını kaydet
+            await tx.inventoryUsage.create({
+              data: {
+                processId: process.id,
+                inventoryId: inventory.id,
+                usedQuantity: usageAmount,
+                usageType: "PROCESSING",
+                usedById: owner.userId,
+                fieldId,
+              },
+            });
+
+            // Envanter miktarını güncelle
+            await tx.inventory.update({
+              where: { id: inventory.id },
+              data: {
+                totalQuantity: {
+                  decrement: usageAmount,
+                },
+              },
+            });
+
+            remainingFuelNeeded -= usageAmount;
+            fuelInventoryFound = true;
+          }
+
+          // Eğer bu sahipten yeterli yakıt düşümü yapıldıysa, diğer sahiplere geçme
+          if (remainingFuelNeeded <= 0) break;
+        }
+
+        // Eğer hiç yakıt envanteri bulunamadıysa veya yeterli değilse uyarı ver
+        if (!fuelInventoryFound) {
+          throw new Error(
+            "Tarla sahiplerinin envanterinde yeterli yakıt bulunamadı."
+          );
         }
       }
 
@@ -437,6 +518,8 @@ export async function POST(request: Request) {
         processCost,
         fieldExpense,
       };
+    }, {
+      timeout: 10000, // Zaman aşımını 10 saniyeye çıkar
     });
 
     return NextResponse.json(result);

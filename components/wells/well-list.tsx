@@ -44,10 +44,10 @@ interface Well {
   depth: number;
   capacity: number;
   status: string;
-  field?: {
+  fields?: {
     id: string;
     name: string;
-  };
+  }[];
 }
 
 export function WellList() {
@@ -172,7 +172,7 @@ export function WellList() {
                 <TableHead>Derinlik (m)</TableHead>
                 <TableHead>Kapasite (lt/sa)</TableHead>
                 <TableHead>Durum</TableHead>
-                <TableHead>Bağlı Tarla</TableHead>
+                <TableHead>Bağlı Tarlalar</TableHead>
                 <TableHead className="w-[100px]">İşlemler</TableHead>
               </TableRow>
             </TableHeader>
@@ -183,7 +183,13 @@ export function WellList() {
                   <TableCell>{well.depth}</TableCell>
                   <TableCell>{well.capacity}</TableCell>
                   <TableCell>{formatStatus(well.status)}</TableCell>
-                  <TableCell>{well.field?.name || "-"}</TableCell>
+                  <TableCell>
+                    {well.fields?.map((field) => (
+                      <div key={field.id} className="text-xs">
+                        {field.name}
+                      </div>
+                    )) || "-"}
+                  </TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

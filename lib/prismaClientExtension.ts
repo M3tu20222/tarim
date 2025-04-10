@@ -50,7 +50,6 @@ export const extendedPrismaClient = new PrismaClient().$extends({
             saltRounds
           );
           args.create.password = hashedPassword;
-          console.log("Hash'lenmiş şifre (create):", hashedPassword); // EKLENDİ
         }
         if (args.update.password && typeof args.update.password === "string") {
           console.log("Password (update) güncelleniyor, hash'leniyor..."); // EKLENDİ

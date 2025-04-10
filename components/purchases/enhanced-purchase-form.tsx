@@ -45,7 +45,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { Unit } from "@prisma/client";
+import { Unit, InventoryCategory } from "@prisma/client";
 import { useAuth } from "@/components/auth-provider";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -58,6 +58,7 @@ interface Season {
 
 // Partner schema for validation
 const partnerSchema = z.object({
+  id: z.string().optional(),
   userId: z.string({
     required_error: "Ortak seçilmelidir",
   }),
@@ -73,6 +74,9 @@ const partnerSchema = z.object({
 const formSchema = z.object({
   product: z.string().min(2, {
     message: "Ürün adı en az 2 karakter olmalıdır.",
+  }),
+  category: z.nativeEnum(InventoryCategory, {
+    required_error: "Lütfen bir ürün kategorisi seçin.",
   }),
   quantity: z.coerce.number().positive({
     message: "Miktar pozitif bir sayı olmalıdır.",
@@ -120,6 +124,7 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
     resolver: zodResolver(formSchema),
     defaultValues: {
       product: "",
+      category: InventoryCategory.FERTILIZER, // Varsayılan kategori
       quantity: 0,
       unit: Unit.KG,
       unitPrice: 0,
@@ -317,7 +322,14 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
       hasPaid: false,
       dueDate: new Date(new Date().setDate(new Date().getDate() + 30)), // 30 gün sonrası için varsayılan vade
     });
-    // Explicit scroll removed as it might interfere with focus
+
+    // Yeni eklenen ortağın görünür olması için daha güvenilir bir yöntem
+    setTimeout(() => {
+      window.scrollTo({
+        top: document.body.scrollHeight,
+        behavior: "smooth",
+      });
+    }, 100);
   };
 
   // Distribute remaining percentage
@@ -460,6 +472,35 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
                     {...field}
                   />
                 </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="category"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Ürün Kategorisi</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Kategori seçin" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="FERTILIZER">Gübre</SelectItem>
+                    <SelectItem value="SEED">Tohum</SelectItem>
+                    <SelectItem value="PESTICIDE">İlaç</SelectItem>
+                    <SelectItem value="FUEL">Yakıt</SelectItem>
+                    <SelectItem value="EQUIPMENT">Ekipman</SelectItem>
+                    <SelectItem value="OTHER">Diğer</SelectItem>
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}
@@ -924,7 +965,7 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
                               </FormControl>
                             </PopoverTrigger>
                             <PopoverContent
-                              className="w-auto p-0 z-[200]" // Increased z-index
+                              className="w-auto p-0 z-[100]"
                               align="start"
                               side="bottom"
                             >

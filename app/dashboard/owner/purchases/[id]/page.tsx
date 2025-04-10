@@ -7,9 +7,7 @@ export default async function PurchaseDetailsPage({
 }: {
   params: { id: string };
 }) {
-  // Await the params object
-  const awaitedParams = await params;
-  const purchaseId = awaitedParams.id;
+  const purchaseId = params.id;
 
   if (!purchaseId) {
     notFound();

@@ -1,5 +1,7 @@
 "use client";
 
+import type React from "react";
+
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -34,7 +36,6 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/components/ui/use-toast";
-import { FieldOwnershipForm } from "./field-ownership-form";
 
 // Sezon tipi
 interface Season {
@@ -89,6 +90,30 @@ const formSchema = z.object({
 interface NewFieldFormProps {
   initialData?: any;
 }
+
+// Tarla sahiplikleri için form bileşeni
+interface FieldOwnershipFormProps {
+  ownerships: Ownership[];
+  onChange: (ownerships: Ownership[]) => void;
+}
+
+const FieldOwnershipForm: React.FC<FieldOwnershipFormProps> = ({
+  ownerships,
+  onChange,
+}) => {
+  // Burada sahiplik formunu oluşturabilirsiniz
+  // Örnek olarak basit bir metin gösterimi yapalım
+  return (
+    <div>
+      <h3>Tarla Sahiplikleri</h3>
+      {/* Sahiplik form elemanları buraya gelecek */}
+      <p>
+        Sahiplik formunu burada oluşturabilirsiniz. Şu an sadece örnek bir metin
+        bulunmaktadır.
+      </p>
+    </div>
+  );
+};
 
 export function NewFieldForm({ initialData }: NewFieldFormProps = {}) {
   const router = useRouter();
@@ -237,36 +262,6 @@ export function NewFieldForm({ initialData }: NewFieldFormProps = {}) {
       setIsSubmitting(false);
     }
   }
-
-  // Başlangıç değerlerini ayarla - initialData varsa
-  useEffect(() => {
-    if (initialData) {
-      // Tarih alanlarını ayarla
-      if (initialData.crops && initialData.crops.length > 0) {
-        const crop = initialData.crops[0];
-        form.setValue("crop", crop.name);
-        form.setValue("plantingDate", new Date(crop.plantedDate));
-        form.setValue(
-          "expectedHarvestDate",
-          new Date(crop.harvestDate || Date.now())
-        );
-      }
-
-      // Sahiplik bilgilerini ayarla
-      if (initialData.ownerships && initialData.ownerships.length > 0) {
-        setOwnerships(initialData.ownerships);
-      }
-
-      // Diğer alanları ayarla
-      form.setValue("name", initialData.name);
-      form.setValue("location", initialData.location);
-      form.setValue("size", initialData.size);
-      form.setValue("soilType", initialData.soilType || "");
-      form.setValue("notes", initialData.notes || "");
-      form.setValue("seasonId", initialData.seasonId || "");
-      form.setValue("wellId", initialData.wellId || "");
-    }
-  }, [initialData, form]);
 
   return (
     <Form {...form}>
@@ -453,7 +448,10 @@ export function NewFieldForm({ initialData }: NewFieldFormProps = {}) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Sezon</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Sezon seçin" />
@@ -471,33 +469,6 @@ export function NewFieldForm({ initialData }: NewFieldFormProps = {}) {
                         </SelectItem>
                       ))
                     )}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Kuyu seçimi */}
-          <FormField
-            control={form.control}
-            name="wellId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Bağlı Kuyu</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Kuyu seçin" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="no-well">Kuyu Yok</SelectItem>
-                    {wells.map((well) => (
-                      <SelectItem key={well.id} value={well.id}>
-                        {well.name} ({well.depth}m, {well.capacity} lt/sa)
-                      </SelectItem>
-                    ))}
                   </SelectContent>
                 </Select>
                 <FormMessage />

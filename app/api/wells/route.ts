@@ -24,21 +24,31 @@ export async function GET(request: Request) {
     if (activeOnly) {
       filter.status = "ACTIVE";
     }
+    // Güncellendi: Filtreleme fieldWells üzerinden yapılıyor
     if (fieldId) {
-      filter.fieldId = fieldId;
+      filter.fieldWells = {
+        some: {
+          fieldId: fieldId,
+        },
+      };
     }
 
     // Kuyuları getir
     const wells = await prisma.well.findMany({
       where: filter,
+      // Güncellendi: fieldWells ve içindeki field dahil ediliyor
       include: {
-        field: {
-          select: {
-            id: true,
-            name: true,
+        fieldWells: { 
+          include: {
+            field: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
-      },
+      }, // Fazladan kapanış parantezi kaldırıldı
       orderBy: {
         createdAt: "desc",
       },
@@ -75,7 +85,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const { name, depth, capacity, status, fieldId } = await request.json();
+    // Geri Alındı: fieldId -> fieldIds
+    const { name, depth, capacity, status, fieldIds } = await request.json();
 
     // Veri doğrulama
     if (!name || !depth || !capacity) {
@@ -92,8 +103,11 @@ export async function POST(request: Request) {
         depth,
         capacity,
         status: status || "ACTIVE",
-        field: {
-          connect: fieldId ? { id: fieldId } : undefined,
+        // Güncellendi: Explicit join modeli için fieldWells.create kullanılıyor
+        fieldWells: {
+          create: fieldIds?.map((id: string) => ({
+            field: { connect: { id } },
+          })) || [], // fieldIds varsa FieldWell kayıtları oluştur
         },
       },
     });
