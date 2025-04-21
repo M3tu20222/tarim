@@ -35,10 +35,18 @@ export default async function EditFieldPage({
     const field = await prisma.field.findUnique({
       where: { id },
       include: {
-        owners: true,
+        owners: { // FieldOwnership üzerinden user bilgilerini çekmek için
+          include: {
+            user: true, // Sahip kullanıcı bilgilerini dahil et
+          },
+        },
         season: true,
         crops: true,
-        wells: true,
+        fieldWells: { // Doğru ilişki: FieldWell ara modeli
+          include: {
+            well: true, // İlişkili Well modelini dahil et
+          },
+        },
       },
     });
 
@@ -48,12 +56,32 @@ export default async function EditFieldPage({
 
     const formattedField = {
       ...field,
-      ownerships: field.owners.map((owner) => ({
-        userId: owner.userId,
-        percentage: owner.percentage,
-      })),
-      wellId: field.wells && field.wells.length > 0 ? field.wells[0].id : "",
+      // ownerships: field.owners.map((owner) => ({ // Bu kısım NewFieldForm'a taşınabilir veya API'den gelen veri doğrudan kullanılabilir
+      //   userId: owner.userId,
+      //   percentage: owner.percentage,
+      // })),
+      // wellIds: field.fieldWells.map((fw) => fw.wellId), // Birden fazla kuyu olabileceği için wellIds dizisi
+      // wellId: field.fieldWells && field.fieldWells.length > 0 ? field.fieldWells[0].wellId : "", // İlk kuyuyu almak yerine multi-select kullanılacaksa bu satır kaldırılabilir
     };
+
+     // Form için başlangıç verilerini hazırla
+     const initialDataForForm = {
+      ...formattedField,
+       name: field.name,
+       location: field.location,
+       size: field.size,
+       coordinates: field.coordinates ?? "",
+       status: field.status,
+       seasonId: field.seasonId ?? "",
+       ownerships: field.owners.map((owner) => ({
+         userId: owner.userId,
+         percentage: owner.percentage,
+         // Opsiyonel: Kullanıcı adını da ekleyebiliriz
+         // userName: owner.user.name
+       })),
+       wellIds: field.fieldWells.map((fw) => fw.wellId), // Kuyu ID'lerini dizi olarak al
+     };
+
 
     return (
       <div className="flex flex-col gap-4 p-4 md:p-8">
@@ -75,7 +103,8 @@ export default async function EditFieldPage({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <NewFieldForm initialData={formattedField} />
+            {/* <NewFieldForm initialData={formattedField} /> */}
+            <NewFieldForm initialData={initialDataForForm} />
           </CardContent>
         </Card>
       </div>

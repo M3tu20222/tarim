@@ -1,110 +1,94 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server"; // NextRequest import edildi
 import { prisma } from "@/lib/prisma";
-import type { ProcessType, Unit } from "@prisma/client";
+import { getServerSideSession } from "@/lib/session";
+import type { ProcessType, Role } from "@prisma/client";
+// import { calculateProcessCosts } from "@/lib/cost-calculation"; // Maliyet hesaplama fonksiyonunu import et (varsayımsal) - Kaldırıldı
+// import { createNotification } from "@/lib/notification-service"; // Bildirim servisini import et (varsayımsal) - Kaldırıldı
 
-// Tüm işlemleri getir
-export async function GET(request: Request) {
+// Tüm işlemleri getir (Rol bazlı filtreleme ve sorgu parametreleri ile)
+export async function GET(request: NextRequest) { // Request yerine NextRequest kullanıldı
   try {
-    const userId = request.headers.get("x-user-id");
-    const userRole = request.headers.get("x-user-role");
+    const session = await getServerSideSession();
+    const { searchParams } = new URL(request.url); // Sorgu parametrelerini al
+    const searchTerm = searchParams.get("search");
+    const typeFilter = searchParams.get("type") as ProcessType | null;
+    // Diğer filtreler (fieldId, dateRange vb.) buraya eklenebilir
 
-    if (!userId || !userRole) {
+    if (!session || !session.id || !session.role) {
       return NextResponse.json(
-        { error: "Kullanıcı ID'si veya rolü eksik" },
+        { error: "Kimlik doğrulama gerekli" },
         { status: 401 }
       );
     }
+    const userId = session.id;
+    const userRole = session.role as Role;
 
-    // URL parametrelerini al
-    const { searchParams } = new URL(request.url);
-    const type = searchParams.get("type");
-    const fieldId = searchParams.get("fieldId");
-    const seasonId = searchParams.get("seasonId");
-    const startDate = searchParams.get("startDate");
-    const endDate = searchParams.get("endDate");
+    console.log(`API isteği (/api/processes): Kullanıcı ID: ${userId}, Rol: ${userRole}, Search: ${searchTerm}, Type: ${typeFilter}`);
 
-    // Filtre oluştur
-    const filter: any = {};
-    if (type) {
-      filter.type = type;
-    }
-    if (fieldId) {
-      filter.fieldId = fieldId;
-    }
-    if (seasonId) {
-      filter.seasonId = seasonId;
-    }
-    if (startDate && endDate) {
-      filter.date = {
-        gte: new Date(startDate),
-        lte: new Date(endDate),
-      };
-    }
+    let whereClause: any = {}; // any tipine çevrildi
 
-    // Kullanıcı rolüne göre filtreleme
+    // Rol Bazlı Ana Filtreleme
     if (userRole === "WORKER") {
-      // İşçiler sadece kendi yaptıkları işlemleri görebilir
-      filter.workerId = userId;
-    } else if (userRole === "OWNER") {
-      // Sahipler kendi tarlalarındaki işlemleri görebilir
-      filter.OR = [
-        { workerId: userId }, // Kendi yaptığı işlemler
-        {
-          field: {
-            owners: {
-              some: {
-                userId: userId,
-              },
-            },
-          },
-        }, // Sahip olduğu tarlalardaki işlemler
+      // İşçi sadece kendisine atanmış işlemleri görür
+       whereClause.workerId = userId;
+    } else if (userRole !== "ADMIN" && userRole !== "OWNER") { // OWNER da tümünü görmeli
+      // Diğer roller (eğer varsa) yetkisiz kabul edilir
+       return NextResponse.json({ error: "Yetkisiz erişim" }, { status: 403 });
+    }
+    // ADMIN ve OWNER tüm işlemleri görür (ek filtre yok)
+
+    // Sorgu Parametrelerine Göre Ek Filtreleme
+    if (searchTerm) {
+      whereClause.OR = [
+        { field: { name: { contains: searchTerm, mode: 'insensitive' } } },
+        { worker: { name: { contains: searchTerm, mode: 'insensitive' } } },
+        { description: { contains: searchTerm, mode: 'insensitive' } },
+        // Arama yapılacak diğer alanlar eklenebilir (örn: işlem tipi etiketi)
       ];
     }
-    // Admin tüm işlemleri görebilir
 
-    // İşlemleri getir
+    if (typeFilter) {
+      whereClause.type = typeFilter;
+    }
+
+     // Diğer filtreler buraya eklenebilir (örn: fieldId, date range)
+    // const fieldIdFilter = searchParams.get("fieldId");
+    // if (fieldIdFilter) {
+    //   whereClause.fieldId = fieldIdFilter;
+    // }
+    // const startDate = searchParams.get("startDate");
+    // const endDate = searchParams.get("endDate");
+    // if (startDate && endDate) {
+    //   whereClause.date = { gte: new Date(startDate), lte: new Date(endDate) };
+    // }
+
+
     const processes = await prisma.process.findMany({
-      where: filter,
+      where: whereClause, // Birleştirilmiş filtreler
       include: {
-        field: {
+        field: { select: { id: true, name: true } }, // Sadece tarla adı ve id'si
+        worker: { select: { id: true, name: true } }, // Sadece işçi adı ve id'si
+        processCosts: { // Maliyetleri hesaplamak için gerekli
           select: {
-            id: true,
-            name: true,
-            location: true,
-            size: true,
-          },
+            totalCost: true
+          }
         },
-        worker: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-        season: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        equipmentUsages: {
-          include: {
-            equipment: true,
-          },
-        },
-        inventoryUsages: {
-          include: {
-            inventory: true,
-          },
-        },
-        processCosts: true,
+        // Diğer gerekli include'lar eklenebilir
       },
       orderBy: {
-        date: "desc",
+        date: "desc", // En son işlemleri başta göster
       },
     });
 
+    // İstemci tarafında maliyet hesaplaması yapılıyorsa bu adıma gerek yok.
+    // Eğer sunucuda hesaplanması gerekiyorsa:
+    // const processesWithTotalCost = processes.map(p => ({
+    //   ...p,
+    //   totalCost: p.processCosts.reduce((sum, cost) => sum + (cost.totalCost || 0), 0)
+    // }));
+
     return NextResponse.json(processes);
+
   } catch (error) {
     console.error("Error fetching processes:", error);
     return NextResponse.json(
@@ -114,423 +98,199 @@ export async function GET(request: Request) {
   }
 }
 
+
 // Yeni işlem oluştur
 export async function POST(request: Request) {
   try {
-    const userId = request.headers.get("x-user-id");
-    const userRole = request.headers.get("x-user-role");
+    const session = await getServerSideSession();
 
-    if (!userId || !userRole) {
+    if (!session || !session.id || !session.role) {
       return NextResponse.json(
-        { error: "Kullanıcı ID'si veya rolü eksik" },
+        { error: "Kimlik doğrulama gerekli" },
         { status: 401 }
       );
     }
+    const userId = session.id;
+    const userRole = session.role as Role;
 
+    const body = await request.json();
     const {
       fieldId,
+      workerId,
+      seasonId,
       type,
       date,
       description,
+      processedArea,
       processedPercentage,
-      equipmentId, // Ekipman ID'si
-      inventoryItems,
-      seasonId,
-    } = await request.json();
+      equipmentUsages, // [{ equipmentId: string, usageDuration: number, cost: number }]
+      inventoryUsages, // [{ inventoryId: string, quantityUsed: number, cost: number }]
+      // Diğer potansiyel alanlar...
+    } = body;
 
     // Veri doğrulama
-    if (!fieldId || !type || !date || processedPercentage === undefined) {
+    if (!fieldId || !workerId || !seasonId || !type || !date || processedArea == null || processedPercentage == null) {
       return NextResponse.json(
-        { error: "Gerekli alanlar eksik" },
+        { error: "Gerekli alanlar eksik: fieldId, workerId, seasonId, type, date, processedArea, processedPercentage zorunludur." },
         { status: 400 }
       );
     }
 
-    // Tarla bilgilerini al
-    const field = await prisma.field.findUnique({
-      where: { id: fieldId },
-      include: {
-        owners: {
-          include: {
-            user: true,
-          },
-        },
-      },
-    });
-
-    if (!field) {
-      return NextResponse.json({ error: "Tarla bulunamadı" }, { status: 404 });
-    }
-
-    // İşlenen alan hesapla
-    const totalArea = field.size;
-    const processedArea = (totalArea * processedPercentage) / 100;
-
-    // Aktif sezonu bul
-    let activeSeason;
-    if (!seasonId) {
-      activeSeason = await prisma.season.findFirst({
-        where: { isActive: true },
-      });
-
-      if (!activeSeason) {
-        return NextResponse.json(
-          { error: "Aktif sezon bulunamadı. Lütfen bir sezon seçin." },
-          { status: 400 }
-        );
-      }
-    }
-
-    // 1. Ekipman bilgisini al
-    let equipment: { id: string; fuelConsumptionPerDecare: number } | null =
-      null;
-    if (equipmentId) {
-      equipment = await prisma.equipment.findUnique({
-        where: { id: equipmentId },
-      });
-
-      if (!equipment) {
-        return NextResponse.json(
-          { error: "Ekipman bulunamadı" },
-          { status: 404 }
-        );
-      }
-    }
-
-    // 2. Yakıt kontrolü
-    if (equipment && equipment.fuelConsumptionPerDecare) {
-      const fuelNeeded = equipment.fuelConsumptionPerDecare * processedArea;
-      const fuelCategory = "FUEL"; // Yakıt kategorisini belirle
-      const fieldOwners = field.owners;
-
-      let hasEnoughFuel = false;
-      let fuelAvailabilityMessage = "";
-
-      for (const owner of fieldOwners) {
-        const ownerInventory = await prisma.inventory.findMany({
-          where: {
-            category: fuelCategory,
-            ownerships: {
-              some: {
-                userId: owner.userId,
-              },
-            },
-          },
-        });
-
-        const totalFuel = ownerInventory.reduce(
-          (sum: number, item: any) => sum + item.totalQuantity,
-          0
-        );
-
-        if (totalFuel >= fuelNeeded) {
-          hasEnoughFuel = true;
-          break; // Yeterli yakıt varsa döngüden çık
-        } else {
-          fuelAvailabilityMessage = `Sahip ${owner.user.name}'in envanterinde yeterli yakıt bulunmuyor.`;
-        }
-      }
-
-      if (!hasEnoughFuel) {
-        return NextResponse.json(
-          {
-            error:
-              fuelAvailabilityMessage ||
-              "Tarlanın sahiplerinin envanterinde yeterli yakıt bulunmuyor.",
-          },
-          { status: 400 }
-        );
-      }
-    }
-
-    // Transaction ile işlem oluştur
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. İşlem kaydı oluştur
-      const process = await tx.process.create({
-        data: {
-          fieldId,
-          workerId: userId,
-          seasonId: seasonId || activeSeason!.id,
-          type: type as ProcessType,
-          date: new Date(date),
-          description,
-          totalArea,
-          processedArea,
-          processedPercentage,
-        },
-      });
-
-      // 2. Ekipman kullanımlarını kaydet
-      const equipmentUsageRecords = [];
-      if (equipmentId) {
-        // Ekipman kullanımını kaydet
-        const equipmentUsage = await tx.equipmentUsage.create({
-          data: {
-            processId: process.id,
-            equipmentId: equipmentId,
-            userId: userId, // Kullanıcı ID'si eklendi
-            areaProcessed: processedArea,
-            processedPercentage,
-            fuelConsumed:
-              equipment && equipment.fuelConsumptionPerDecare
-                ? processedArea * equipment.fuelConsumptionPerDecare
-                : 0,
-            unit: "DECARE" as Unit,
-          },
-        });
-
-        equipmentUsageRecords.push(equipmentUsage);
-      }
-
-      // 3. Envanter kullanımlarını kaydet
-      const inventoryUsageRecords = [];
-      if (inventoryItems && inventoryItems.length > 0) {
-        for (const usage of inventoryItems) {
-          // Envanter bilgilerini al
-          const inventory = await tx.inventory.findUnique({
-            where: { id: usage.inventoryId },
-          });
-
-          if (!inventory) {
-            throw new Error(`Envanter bulunamadı: ${usage.inventoryId}`);
-          }
-
-          // Envanter kullanımını kaydet
-          const inventoryUsage = await tx.inventoryUsage.create({
-            data: {
-              processId: process.id,
-              inventoryId: usage.inventoryId,
-              usedQuantity: usage.quantity,
-              usageType: "PROCESSING",
-              usedById: userId,
-              fieldId,
-            },
-          });
-
-          // Envanter miktarını güncelle
-          await tx.inventory.update({
-            where: { id: usage.inventoryId },
-            data: {
-              totalQuantity: {
-                decrement: usage.quantity,
-              },
-            },
-          });
-
-          inventoryUsageRecords.push(inventoryUsage);
-        }
-      }
-
-      // Ekipman kullanımı varsa ve yakıt tüketimi hesaplanmışsa, yakıt envanterinden düşüm yap
-      if (equipmentId && equipment && equipment.fuelConsumptionPerDecare > 0) {
-        const fuelNeeded = equipment.fuelConsumptionPerDecare * processedArea;
-
-        // Tarla sahiplerinin yakıt envanterini bul
-        const fieldOwners = await tx.fieldOwnership.findMany({
-          where: { fieldId },
-          include: {
-            user: true,
-          },
-        });
-
-        let fuelInventoryFound = false;
-
-        // Her tarla sahibinin envanterini kontrol et
-        for (const owner of fieldOwners) {
-          // Yakıt kategorisindeki envanterleri bul
-          const fuelInventories = await tx.inventory.findMany({
+    // Yetki Kontrolü: İşlemi kim oluşturabilir?
+    // 1. Admin her zaman oluşturabilir.
+    // 2. Owner, kendi tarlası için oluşturabilir.
+    // 3. Worker, kendisine atanmış bir işlem oluşturabilir (belki bu senaryo istenmiyordur, genelde Owner/Admin atar)
+    let canCreate = false;
+    if (userRole === 'ADMIN') {
+        canCreate = true;
+    } else if (userRole === 'OWNER') {
+        const fieldOwnership = await prisma.fieldOwnership.findFirst({
             where: {
-              category: "FUEL",
-              ownerships: {
-                some: {
-                  userId: owner.userId,
-                },
-              },
-              totalQuantity: { gt: 0 }, // Sadece miktarı 0'dan büyük olanları al
-            },
-            orderBy: { createdAt: "asc" }, // Önce eski envanterleri kullan
-          });
-
-          let remainingFuelNeeded = fuelNeeded;
-
-          // Bulunan yakıt envanterlerinden düşüm yap
-          for (const inventory of fuelInventories) {
-            if (remainingFuelNeeded <= 0) break;
-
-            const usageAmount = Math.min(
-              inventory.totalQuantity,
-              remainingFuelNeeded
-            );
-
-            // Envanter kullanımını kaydet
-            await tx.inventoryUsage.create({
-              data: {
-                processId: process.id,
-                inventoryId: inventory.id,
-                usedQuantity: usageAmount,
-                usageType: "PROCESSING",
-                usedById: owner.userId,
-                fieldId,
-              },
-            });
-
-            // Envanter miktarını güncelle
-            await tx.inventory.update({
-              where: { id: inventory.id },
-              data: {
-                totalQuantity: {
-                  decrement: usageAmount,
-                },
-              },
-            });
-
-            remainingFuelNeeded -= usageAmount;
-            fuelInventoryFound = true;
-          }
-
-          // Eğer bu sahipten yeterli yakıt düşümü yapıldıysa, diğer sahiplere geçme
-          if (remainingFuelNeeded <= 0) break;
-        }
-
-        // Eğer hiç yakıt envanteri bulunamadıysa veya yeterli değilse uyarı ver
-        if (!fuelInventoryFound) {
-          throw new Error(
-            "Tarla sahiplerinin envanterinde yeterli yakıt bulunamadı."
-          );
-        }
-      }
-
-      // 4. Maliyet hesapla
-      // İşçilik maliyeti (örnek olarak sabit bir değer)
-      const laborCost = 100; // TL/saat olarak düşünülebilir
-
-      // Ekipman maliyeti (örnek olarak sabit bir değer)
-      const equipmentCost = equipmentUsageRecords.length * 50; // Her ekipman için 50 TL
-
-      // Envanter maliyeti
-      let inventoryCost = 0;
-      for (const usage of inventoryUsageRecords) {
-        const inventory = await tx.inventory.findUnique({
-          where: { id: usage.inventoryId },
+                fieldId: fieldId,
+                userId: userId,
+            }
         });
-        if (inventory) {
-          // Basit bir hesaplama örneği
-          inventoryCost += usage.usedQuantity * 10; // Her birim için 10 TL
+        if (fieldOwnership) {
+            canCreate = true;
         }
-      }
+    }
+    // Worker'ın kendi adına işlem oluşturma senaryosu eklenmek istenirse buraya eklenebilir.
+    // Örneğin: else if (userRole === 'WORKER' && workerId === userId) { canCreate = true; }
 
-      // Yakıt maliyeti
-      const fuelCost = equipmentUsageRecords.reduce(
-        (sum, usage) => sum + usage.fuelConsumed * 30, // Litre başına 30 TL
-        0
-      );
+    if (!canCreate) {
+         return NextResponse.json({ error: "Bu işlemi oluşturma yetkiniz yok" }, { status: 403 });
+    }
 
-      // Toplam maliyet
-      const totalCost = laborCost + equipmentCost + inventoryCost + fuelCost;
 
-      // Maliyet kaydı oluştur
-      const processCost = await tx.processCost.create({
-        data: {
-          processId: process.id,
-          laborCost,
-          equipmentCost,
-          inventoryCost,
-          fuelCost,
-          totalCost,
-        },
-      });
-
-      // 5. Tarla gideri oluştur
-      const fieldExpense = await tx.fieldExpense.create({
-        data: {
-          fieldId,
-          seasonId: seasonId || activeSeason!.id,
-          processCostId: processCost.id,
-          totalCost,
-          periodStart: new Date(date),
-          periodEnd: new Date(date),
-        },
-      });
-
-      // 6. Tarla sahipleri için gider kayıtları oluştur
-      const fieldOwnerships = await tx.fieldOwnership.findMany({
-        where: { fieldId },
-      });
-
-      for (const ownership of fieldOwnerships) {
-        await tx.fieldOwnerExpense.create({
-          data: {
-            fieldOwnershipId: ownership.id,
-            processCostId: processCost.id,
-            userId: ownership.userId, // Kullanıcı ID'si eklendi
-            amount: totalCost * (ownership.percentage / 100),
-            percentage: ownership.percentage,
-            periodStart: new Date(date),
-            periodEnd: new Date(date),
-          },
+    // Transaction başlat
+    const newProcess = await prisma.$transaction(async (tx) => {
+        // 0. Tarla bilgisini al (totalArea için)
+        const field = await tx.field.findUnique({
+            where: { id: fieldId },
+            select: { size: true }
         });
-      }
 
-      // 7. Tüm sahiplere ve yöneticilere bildirim gönder
-      const owners = await tx.user.findMany({
-        where: {
-          OR: [{ role: "OWNER" }, { role: "ADMIN" }],
-        },
-      });
+        if (!field) {
+            throw new Error(`Tarla bulunamadı: ${fieldId}`); // Hata fırlat transaction'ı geri almak için
+        }
+        const totalArea = field.size; // Tarlanın boyutunu totalArea olarak kullan
 
-      const worker = await tx.user.findUnique({
-        where: { id: userId },
-        select: { name: true },
-      });
-
-      const processTypeMap: Record<ProcessType, string> = {
-        PLOWING: "Sürme",
-        SEEDING: "Ekim",
-        FERTILIZING: "Gübreleme",
-        PESTICIDE: "İlaçlama",
-        HARVESTING: "Hasat",
-        OTHER: "Diğer",
-      };
-
-      const processTypeName = processTypeMap[type as ProcessType] || type;
-
-      for (const owner of owners) {
-        // İşçilere bildirim gönderme
-        if (owner.id !== userId) {
-          // İşlemi yapan kişiye bildirim gönderme
-          await tx.notification.create({
+        // 1. Ana İşlem Kaydını Oluştur
+        const createdProcess = await tx.process.create({
             data: {
-              title: "Tarla İşlemi Kaydedildi",
-              message: `${field.name} tarlasının %${processedPercentage}'lik kısmında ${processTypeName} işlemi ${worker?.name || "bir çalışan"} tarafından gerçekleştirildi.`,
-              type: "FIELD_PROCESSING",
-              receiverId: owner.id,
-              senderId: userId,
-              processId: process.id,
+                fieldId,
+                workerId,
+                seasonId,
+                type: type as ProcessType,
+                date: new Date(date),
+                description,
+                totalArea: totalArea, // Eksik alan eklendi
+                processedArea: parseFloat(processedArea),
+                processedPercentage: parseInt(processedPercentage, 10),
+                // createdBy: userId, // İşlemi kimin oluşturduğu bilgisi - Kaldırıldı (Prisma modelinde yok)
             },
-          });
-        }
-      }
+        });
 
-      return {
-        process,
-        equipmentUsages: equipmentUsageRecords,
-        inventoryUsages: inventoryUsageRecords,
-        processCost,
-        fieldExpense,
-      };
-    }, {
-      timeout: 10000, // Zaman aşımını 10 saniyeye çıkar
+        // 2. Ekipman Kullanımlarını Oluştur (varsa)
+        if (equipmentUsages && equipmentUsages.length > 0) {
+            await tx.equipmentUsage.createMany({
+                data: equipmentUsages.map((usage: any) => ({
+                    processId: createdProcess.id,
+                    equipmentId: usage.equipmentId,
+                    usageDuration: usage.usageDuration ? parseFloat(usage.usageDuration) : null, // Süre varsa ekle
+                    cost: parseFloat(usage.cost),
+                    // Gerekirse diğer alanlar
+                })),
+            });
+        }
+
+        // 3. Envanter Kullanımlarını Oluştur (varsa)
+        if (inventoryUsages && inventoryUsages.length > 0) {
+            await tx.inventoryUsage.createMany({
+                data: inventoryUsages.map((usage: any) => ({
+                    processId: createdProcess.id,
+                    inventoryId: usage.inventoryId,
+                    quantityUsed: parseFloat(usage.quantityUsed),
+                    cost: parseFloat(usage.cost),
+                    // Gerekirse diğer alanlar
+                })),
+            });
+
+             // Envanter stoklarını güncelle (opsiyonel ama önemli)
+             for (const usage of inventoryUsages) {
+                await tx.inventory.update({
+                    where: { id: usage.inventoryId },
+                    data: {
+                        totalQuantity: { // 'quantity' yerine 'totalQuantity' kullanıldı
+                            decrement: parseFloat(usage.quantityUsed)
+                        }
+                    }
+                });
+            }
+        }
+
+        // 4. İşlem Maliyetlerini Kaydet (varsa)
+        // Maliyet hesaplama mantığı projenin gereksinimlerine göre daha detaylı olabilir.
+        const totalEquipmentCost = equipmentUsages?.reduce((sum: number, usage: any) => sum + parseFloat(usage.cost || 0), 0) || 0;
+        const totalInventoryCost = inventoryUsages?.reduce((sum: number, usage: any) => sum + parseFloat(usage.cost || 0), 0) || 0;
+        const totalDirectCost = totalEquipmentCost + totalInventoryCost;
+
+        if (totalDirectCost > 0) {
+             // ProcessCost modelinde laborCost, equipmentCost, inventoryCost, fuelCost gibi alanlar var.
+             // Bunları ayrı ayrı veya toplam olarak kaydetmek gerekebilir.
+             // Şimdilik sadece toplam maliyeti kaydedelim, diğerlerini 0 varsayalım.
+             // Gerçek uygulamada bu maliyetlerin nasıl hesaplanacağı belirlenmeli.
+             await tx.processCost.create({
+                data: {
+                    processId: createdProcess.id,
+                    // costType: 'DIRECT', // Kaldırıldı (Prisma modelinde yok)
+                    // description: 'Ekipman ve Malzeme Kullanımı (Oto)', // Kaldırıldı (Prisma modelinde yok)
+                    totalCost: totalDirectCost,
+                    equipmentCost: totalEquipmentCost, // Varsayılan atama
+                    inventoryCost: totalInventoryCost, // Varsayılan atama
+                    laborCost: 0, // Varsayılan
+                    fuelCost: 0, // Varsayılan
+                    fieldId: fieldId, // fieldId ProcessCost modelinde zorunlu görünüyor, ekleyelim.
+                    // fieldExpense ve ownerExpense ilişkileri daha sonra kurulabilir.
+                }
+            });
+        }
+
+
+        // 5. Bildirim Oluşturma (Opsiyonel - Şimdilik kaldırıldı)
+        // Bildirim mantığı ayrı bir adımda veya serviste ele alınabilir.
+
+        return createdProcess;
     });
 
-    return NextResponse.json(result);
-  } catch (error: any) {
+
+    return NextResponse.json(newProcess, { status: 201 }); // 201 Created
+
+  } catch (error) {
     console.error("Error creating process:", error);
+    // Prisma veya diğer hataları daha detaylı yakala
+    if (error instanceof Error && 'code' in error && (error as any).code === 'P2002') {
+         return NextResponse.json({ error: "Benzersizlik kısıtlaması ihlali." }, { status: 409 }); // Conflict
+    }
+     if (error instanceof Error && 'code' in error && (error as any).code === 'P2003') {
+         return NextResponse.json({ error: "İlişkili kayıt bulunamadı (örn. tarla, işçi veya sezon)." }, { status: 400 });
+    }
     return NextResponse.json(
-      {
-        error:
-          "İşlem oluşturulurken bir hata oluştu: " + (error as Error).message,
-      },
+      { error: "İşlem oluşturulurken bir hata oluştu" },
       { status: 500 }
     );
   }
+}
+
+// Helper function (process-table.tsx'den alınabilir veya ortak bir yere taşınabilir)
+function getTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    PLOWING: "Sürme",
+    SEEDING: "Ekim",
+    FERTILIZING: "Gübreleme",
+    PESTICIDE: "İlaçlama",
+    HARVESTING: "Hasat",
+    OTHER: "Diğer",
+  };
+  return labels[type] || type;
 }

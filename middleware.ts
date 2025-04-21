@@ -5,17 +5,33 @@ import { verifyToken } from "./lib/jwt";
 export async function middleware(request: NextRequest) {
   const isProtectedRoute = request.nextUrl.pathname.startsWith("/dashboard");
   const isLoginPage = request.nextUrl.pathname === "/login";
-  const token = request.cookies.get("token")?.value;
+  let token = request.cookies.get("token")?.value; // Define token here
 
   // API rotaları için token kontrolü
   if (
     request.nextUrl.pathname.startsWith("/api/") &&
     !request.nextUrl.pathname.startsWith("/api/auth/")
   ) {
+    // Eğer request.cookies'ten token alınamazsa, manuel olarak header'dan okumayı dene
     if (!token) {
-      console.log("API isteği token bulunamadı:", request.nextUrl.pathname);
+      const cookieHeader = request.headers.get("cookie");
+      if (cookieHeader) {
+        const parsedCookies = cookieHeader.split(';').reduce((acc, cookie) => {
+          const [key, value] = cookie.trim().split('=');
+          if (key === 'token') acc[key] = value;
+          return acc;
+        }, {} as Record<string, string>);
+        token = parsedCookies['token'];
+        if (token) {
+           console.log("Token manuel olarak Cookie header'ından okundu.");
+        }
+      }
+    }
+
+    if (!token) {
+      console.log("API isteği token bulunamadı (middleware):", request.nextUrl.pathname);
       return NextResponse.json(
-        { error: "Kimlik doğrulama gerekli" },
+        { error: "Kimlik doğrulama gerekli (middleware)" },
         { status: 401 }
       );
     }
@@ -30,13 +46,17 @@ export async function middleware(request: NextRequest) {
       console.log(`API isteği: ${request.nextUrl.pathname}`);
       console.log(`Kullanıcı ID: ${decoded.id}, Rol: ${decoded.role}`);
 
-      // Önemli: Burada request.clone() kullanarak yeni bir istek oluşturuyoruz
-      // Bu, orijinal isteğin değiştirilmesini önler
-      const clonedRequest = request.clone();
+      // Yeni bir Headers nesnesi oluştur ve mevcut başlıkları kopyala
+      const newHeaders = new Headers(request.headers);
+      // Yeni başlıkları ekle
+      newHeaders.set("x-user-id", decoded.id);
+      newHeaders.set("x-user-role", decoded.role);
 
+      // İsteği yeni başlıklarla devam ettir
       return NextResponse.next({
         request: {
-          headers: requestHeaders,
+          // Yeni başlıkları kullan
+          headers: newHeaders,
         },
       });
     } catch (error) {

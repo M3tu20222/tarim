@@ -393,12 +393,13 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
       const response = await fetch("/api/purchases", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ ...values, seasonId }),
-      });
+           "Content-Type": "application/json",
+         },
+         // Rename 'product' to 'productName' to match API expectation
+         body: JSON.stringify({ ...values, productName: values.product, seasonId }),
+       });
 
-      if (!response.ok) {
+       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(
           errorData.error || "Alış kaydı oluşturulurken bir hata oluştu."

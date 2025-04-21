@@ -35,6 +35,7 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/components/ui/use-toast";
 import { FieldOwnershipForm } from "./field-ownership-form";
+import { MultiSelect } from "@/components/ui/multi-select"; // MultiSelect import edildi
 
 // Sezon tipi
 interface Season {
@@ -82,7 +83,8 @@ const formSchema = z.object({
   }),
   notes: z.string().optional(),
   seasonId: z.string().optional(),
-  wellId: z.string().optional(),
+  // wellId: z.string().optional(), // Kaldırıldı
+  wellIds: z.array(z.string()).optional(), // Dizi olarak eklendi
 });
 
 // Add initialData prop to the component
@@ -110,7 +112,8 @@ export function NewFieldForm({ initialData }: NewFieldFormProps = {}) {
       soilType: initialData?.soilType || "",
       notes: initialData?.notes || "",
       seasonId: initialData?.seasonId || "",
-      wellId: initialData?.wellId || "",
+      // wellId: initialData?.wellId || "", // Kaldırıldı
+      wellIds: initialData?.wellIds || [], // Dizi olarak eklendi
       plantingDate: initialData?.crops?.[0]?.plantedDate
         ? new Date(initialData.crops[0].plantedDate)
         : new Date(),
@@ -198,7 +201,8 @@ export function NewFieldForm({ initialData }: NewFieldFormProps = {}) {
       const formData = {
         ...values,
         seasonId: values.seasonId === "no-season" ? null : values.seasonId,
-        wellId: values.wellId === "no-well" ? null : values.wellId,
+        // wellId: values.wellId === "no-well" ? null : values.wellId, // Kaldırıldı
+        wellIds: values.wellIds, // Dizi olarak gönder
         ownerships: ownerships,
       };
 
@@ -264,7 +268,8 @@ export function NewFieldForm({ initialData }: NewFieldFormProps = {}) {
       form.setValue("soilType", initialData.soilType || "");
       form.setValue("notes", initialData.notes || "");
       form.setValue("seasonId", initialData.seasonId || "");
-      form.setValue("wellId", initialData.wellId || "");
+      // form.setValue("wellId", initialData.wellId || ""); // Kaldırıldı
+      form.setValue("wellIds", initialData.wellIds || []); // Dizi olarak ayarla
     }
   }, [initialData, form]);
 
@@ -478,28 +483,25 @@ export function NewFieldForm({ initialData }: NewFieldFormProps = {}) {
             )}
           />
 
-          {/* Kuyu seçimi */}
+          {/* Kuyu seçimi (MultiSelect) */}
           <FormField
             control={form.control}
-            name="wellId"
+            name="wellIds" // name="wellIds" olarak güncellendi
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Bağlı Kuyu</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Kuyu seçin" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="no-well">Kuyu Yok</SelectItem>
-                    {wells.map((well) => (
-                      <SelectItem key={well.id} value={well.id}>
-                        {well.name} ({well.depth}m, {well.capacity} lt/sa)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <FormLabel>Bağlı Kuyular</FormLabel>
+                <FormControl>
+                   <MultiSelect
+                      options={wells.map((well) => ({ // Seçenekler map'lendi
+                        value: well.id,
+                        label: `${well.name} (${well.depth}m, ${well.capacity} lt/sa)`,
+                      }))}
+                      value={field.value || []} // selected -> value olarak değiştirildi
+                      onChange={field.onChange} // onChange handler'ı bağlandı
+                      // placeholder="Kuyu seçin..." // Placeholder kaldırıldı
+                      className="w-full" // Gerekirse stil ayarları
+                    />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}

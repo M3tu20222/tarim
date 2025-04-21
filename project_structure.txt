@@ -25,7 +25,9 @@
 |  |  |     \--route.ts
 |  |  +--debts
 |  |  |  +--reminders
-|  |  |  |  \--route.ts
+|  |  |  +--[id]
+|  |  |  \--route.ts
+|  |  +--equipment
 |  |  |  +--[id]
 |  |  |  \--route.ts
 |  |  +--fields
@@ -36,6 +38,8 @@
 |  |  |  |  \--route.ts
 |  |  |  +--reports
 |  |  |  |  \--route.ts
+|  |  |  +--update-category
+|  |  |  |  \--route.ts
 |  |  |  +--[id]
 |  |  |  \--route.ts
 |  |  +--irrigation-logs
@@ -43,6 +47,9 @@
 |  |  +--notifications
 |  |  |  \--route.ts
 |  |  +--payments
+|  |  |  \--route.ts
+|  |  +--processes
+|  |  |  +--[id]
 |  |  |  \--route.ts
 |  |  +--purchase-templates
 |  |  |  \--route.ts
@@ -52,7 +59,6 @@
 |  |  +--seasons
 |  |  |  +--[id]
 |  |  |  \--route.ts
-|  |  +--session
 |  |  |  \--route.ts
 |  |  +--users
 |  |  |  +--owners
@@ -90,15 +96,28 @@
 |  |  |  |  |  \--page.tsx
 |  |  |  |  +--[id]
 |  |  |  |  \--page.tsx
+|  |  |  +--equipment
+|  |  |  |  +--new
+|  |  |  |  |  \--page.tsx
+|  |  |  |  +--[id]
+|  |  |  |  \--page.tsx
 |  |  |  +--fields
 |  |  |  |  +--new
 |  |  |  |  |  \--page.tsx
+|  |  |  |  +--[id]
 |  |  |  |  \--page.tsx
 |  |  |  +--inventory
+|  |  |  |  +--new
+|  |  |  |  |  \--page.tsx
 |  |  |  |  +--reports
 |  |  |  |  |  \--page.tsx
+|  |  |  |  +--[id]
 |  |  |  |  \--page.tsx
 |  |  |  +--notifications
+|  |  |  |  \--page.tsx
+|  |  |  +--processes
+|  |  |  |  +--new
+|  |  |  |  |  \--page.tsx
 |  |  |  |  \--page.tsx
 |  |  |  +--purchases
 |  |  |  |  +--new
@@ -117,6 +136,7 @@
 |  |  |  +--wells
 |  |  |  |  +--new
 |  |  |  |  |  \--page.tsx
+|  |  |  |  +--[id]
 |  |  |  |  \--page.tsx
 |  |  |  +--loading.tsx
 |  |  |  \--page.tsx
@@ -147,17 +167,29 @@
 |  |  +--debt-list.tsx
 |  |  +--debt-payment-form.tsx
 |  |  \--debt-reminder.tsx
+|  +--equipment
+|  |  +--equipment-form.tsx
+|  |  \--equipment-table.tsx
 |  +--fields
+|  |  +--field-form.tsx
 |  |  +--field-ownership-form.tsx
-|  |  \--new-field-form.tsx
+|  |  +--fields-list.tsx
+|  |  +--new-field-form.tsx
+|  |  \--processing-form.tsx
 |  +--inventory
 |  |  +--inventory-actions.tsx
+|  |  +--inventory-category-update.tsx
+|  |  +--inventory-form.tsx
 |  |  +--inventory-report.tsx
+|  |  +--inventory-selector.tsx
 |  |  +--inventory-table-skeleton.tsx
 |  |  +--inventory-table.tsx
 |  |  \--new-inventory-form.tsx
 |  +--payments
 |  |  \--payment-form.tsx
+|  +--processes
+|  |  +--process-form.tsx
+|  |  \--process-table.tsx
 |  +--purchases
 |  |  +--edit-purchase-form.tsx
 |  |  +--enhanced-purchase-form.tsx
@@ -197,6 +229,7 @@
 |  |  +--input.tsx
 |  |  +--label.tsx
 |  |  +--menubar.tsx
+|  |  +--multi-select.tsx
 |  |  +--navigation-menu.tsx
 |  |  +--pagination.tsx
 |  |  +--popover.tsx
@@ -308,4 +341,3 @@
 +--tailwind.config.ts
 +--tsconfig.json
 \--vercel.json
-//powershell -ExecutionPolicy Bypass -File .\generate_tree.ps1

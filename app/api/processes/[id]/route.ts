@@ -1,25 +1,32 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import type { ProcessType } from "@prisma/client";
+import type { ProcessType, Role } from "@prisma/client"; // UserRole yerine Role import edildi
+import { getServerSideSession } from "@/lib/session"; // getServerSideSession import edildi
 
 // Belirli bir işlemi getir
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } } // context objesi olarak al
 ) {
   try {
-    const userId = request.headers.get("x-user-id");
-    const userRole = request.headers.get("x-user-role");
+    const { id } = await context.params; // id'yi destruct et
+    // Middleware yerine doğrudan session'dan kullanıcı bilgilerini al
+    const session = await getServerSideSession();
 
-    if (!userId || !userRole) {
+    if (!session || !session.id || !session.role) {
+      console.log("API isteği oturum bulunamadı:", request.url);
       return NextResponse.json(
-        { error: "Kullanıcı ID'si veya rolü eksik" },
+        { error: "Kimlik doğrulama gerekli (API)" },
         { status: 401 }
       );
     }
+    const userId = session.id;
+    const userRole = session.role as Role; // Rolü Role olarak cast et
+
+    console.log(`API isteği (/api/processes/[id]): Kullanıcı ID: ${userId}, Rol: ${userRole}`);
 
     const process = await prisma.process.findUnique({
-      where: { id: params.id },
+      where: { id: id }, // Destruct edilen id'yi kullan
       include: {
         field: {
           include: {
@@ -91,7 +98,8 @@ export async function GET(
     if (
       userRole === "OWNER" &&
       process.workerId !== userId &&
-      !process.field.owners.some((owner) => owner.userId === userId)
+      // process.field null ise veya sahip değilse yetki yok
+      !(process.field && process.field.owners.some((owner) => owner.userId === userId))
     ) {
       return NextResponse.json(
         { error: "Bu işlemi görüntüleme yetkiniz yok" },
@@ -112,54 +120,78 @@ export async function GET(
 // İşlemi güncelle
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } } // context objesi olarak al
 ) {
   try {
-    const userId = request.headers.get("x-user-id");
-    const userRole = request.headers.get("x-user-role");
+    const { id } = context.params; // id'yi destruct et
+    // Middleware yerine doğrudan session'dan kullanıcı bilgilerini al
+    const session = await getServerSideSession();
 
-    if (!userId || !userRole) {
+    if (!session || !session.id || !session.role) {
       return NextResponse.json(
-        { error: "Kullanıcı ID'si veya rolü eksik" },
+        { error: "Kimlik doğrulama gerekli" },
         { status: 401 }
       );
     }
+    const userId = session.id;
+    const userRole = session.role as Role;
 
     // Sadece admin, sahip ve işlemi yapan işçi güncelleyebilir
     const process = await prisma.process.findUnique({
-      where: { id: params.id },
+      where: { id: id }, // Destruct edilen id'yi kullan
+      include: {
+        field: {
+          include: {
+            owners: true,
+          },
+        },
+      },
     });
 
     if (!process) {
       return NextResponse.json({ error: "İşlem bulunamadı" }, { status: 404 });
     }
 
-    if (userRole === "WORKER" && process.workerId !== userId) {
-      return NextResponse.json(
+    // Yetki kontrolü: Admin, işlemi yapan işçi veya tarlanın sahibi
+    const isOwner = process.field?.owners.some(owner => owner.userId === userId);
+    if (userRole !== 'ADMIN' && process.workerId !== userId && !(userRole === 'OWNER' && isOwner)) {
+       return NextResponse.json(
         { error: "Bu işlemi güncelleme yetkiniz yok" },
         { status: 403 }
       );
     }
 
-    const { type, date, description } = await request.json();
 
-    // Veri doğrulama
-    if (!type || !date) {
+    const { type, date, description, fieldId, workerId, seasonId, processedArea, processedPercentage, equipmentUsages, inventoryUsages } = await request.json();
+
+    // Veri doğrulama (Temel)
+    if (!type || !date || !fieldId || !workerId || !seasonId || processedArea == null || processedPercentage == null) {
       return NextResponse.json(
         { error: "Gerekli alanlar eksik" },
         { status: 400 }
       );
     }
 
+    // TODO: Daha detaylı veri doğrulama eklenebilir (örn. tarih formatı, sayısal değerler)
+    // TODO: equipmentUsages ve inventoryUsages yapılarının doğrulanması
+
     // İşlemi güncelle
     const updatedProcess = await prisma.process.update({
-      where: { id: params.id },
+      where: { id: id }, // Destruct edilen id'yi kullan
       data: {
         type: type as ProcessType,
         date: new Date(date),
         description,
+        fieldId,
+        workerId,
+        seasonId,
+        processedArea,
+        processedPercentage,
+        // TODO: equipmentUsages ve inventoryUsages güncelleme mantığı eklenecek
       },
     });
+
+    // TODO: İlişkili equipmentUsages ve inventoryUsages kayıtlarını güncelle/sil/ekle
 
     return NextResponse.json(updatedProcess);
   } catch (error) {
@@ -174,32 +206,33 @@ export async function PUT(
 // İşlemi sil
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } } // context objesi olarak al
 ) {
   try {
-    const userId = request.headers.get("x-user-id");
-    const userRole = request.headers.get("x-user-role");
+    const { id } = context.params; // id'yi destruct et
+    // Middleware yerine doğrudan session'dan kullanıcı bilgilerini al
+    const session = await getServerSideSession();
 
-    if (!userId || !userRole) {
+    if (!session || !session.id || !session.role) {
       return NextResponse.json(
-        { error: "Kullanıcı ID'si veya rolü eksik" },
+        { error: "Kimlik doğrulama gerekli" },
         { status: 401 }
       );
     }
+    const userId = session.id;
+    const userRole = session.role as Role;
 
-    // Sadece admin ve sahip kullanıcılar işlem silebilir
-    if (userRole !== "ADMIN" && userRole !== "OWNER") {
-      return NextResponse.json(
-        { error: "Bu işlem için yetkiniz yok" },
-        { status: 403 }
-      );
-    }
 
-    // İşlemi kontrol et
+    // İşlemi kontrol et ve sahibini al
     const process = await prisma.process.findUnique({
-      where: { id: params.id },
+      where: { id: id }, // Destruct edilen id'yi kullan
       include: {
         processCosts: true,
+        field: {
+          include: {
+            owners: true,
+          },
+        },
       },
     });
 
@@ -207,49 +240,53 @@ export async function DELETE(
       return NextResponse.json({ error: "İşlem bulunamadı" }, { status: 404 });
     }
 
+    // Yetki kontrolü: Admin veya tarlanın sahibi
+    const isOwner = process.field?.owners.some(owner => owner.userId === userId);
+    if (userRole !== 'ADMIN' && !(userRole === 'OWNER' && isOwner)) {
+       return NextResponse.json(
+        { error: "Bu işlemi silme yetkiniz yok" },
+        { status: 403 }
+      );
+    }
+
+
     // Transaction ile ilişkili kayıtları sil
     await prisma.$transaction(async (tx) => {
       // 1. Tarla sahibi giderlerini sil
       if (process.processCosts.length > 0) {
-        for (const cost of process.processCosts) {
-          await tx.fieldOwnerExpense.deleteMany({
-            where: { processCostId: cost.id },
-          });
-        }
+        const costIds = process.processCosts.map(cost => cost.id);
+        await tx.fieldOwnerExpense.deleteMany({
+          where: { processCostId: { in: costIds } },
+        });
+        // 2. Tarla giderlerini sil
+        await tx.fieldExpense.deleteMany({
+          where: { processCostId: { in: costIds } },
+        });
+        // 3. İşlem maliyetlerini sil
+        await tx.processCost.deleteMany({
+          where: { processId: id }, // Destruct edilen id'yi kullan
+        });
       }
 
-      // 2. Tarla giderlerini sil
-      if (process.processCosts.length > 0) {
-        for (const cost of process.processCosts) {
-          await tx.fieldExpense.deleteMany({
-            where: { processCostId: cost.id },
-          });
-        }
-      }
-
-      // 3. İşlem maliyetlerini sil
-      await tx.processCost.deleteMany({
-        where: { processId: params.id },
-      });
 
       // 4. Ekipman kullanımlarını sil
       await tx.equipmentUsage.deleteMany({
-        where: { processId: params.id },
+        where: { processId: id }, // Destruct edilen id'yi kullan
       });
 
       // 5. Envanter kullanımlarını sil
       await tx.inventoryUsage.deleteMany({
-        where: { processId: params.id },
+        where: { processId: id }, // Destruct edilen id'yi kullan
       });
 
       // 6. Bildirimleri sil
       await tx.notification.deleteMany({
-        where: { processId: params.id },
+        where: { processId: id }, // Destruct edilen id'yi kullan
       });
 
       // 7. İşlemi sil
       await tx.process.delete({
-        where: { id: params.id },
+        where: { id: id }, // Destruct edilen id'yi kullan
       });
     });
 

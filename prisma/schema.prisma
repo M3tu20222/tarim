@@ -44,6 +44,9 @@ model User {
   equipmentOwnerships EquipmentOwnership[] // Sahip olunan ekipmanlar
   equipmentUsages     EquipmentUsage[] // Kullanılan ekipmanlar
   fieldOwnerExpenses  FieldOwnerExpense[] // Tarla sahibi giderleri
+  
+  // YENİ: Bildirim tercihleri
+  notificationPreferences NotificationPreference?
 }
 
 // YENİ: Sezon Modeli
@@ -69,6 +72,9 @@ model Season {
 
   // YENİ: Tarla giderleri
   fieldExpenses FieldExpense[]
+  
+  // YENİ: Bildirimler
+  notifications Notification[] @relation("SeasonNotifications")
 }
 
 // Tarla Modeli
@@ -104,6 +110,9 @@ model Field {
 
   // YENİ: Tarla giderleri
   fieldExpenses FieldExpense[]
+  
+  // YENİ: Bildirimler
+  notifications Notification[] @relation("FieldNotifications")
 }
 
 // Tarla Sahipliği Modeli
@@ -167,6 +176,9 @@ model Well {
   // İlişkiler
   // field   Field?  @relation(fields: [fieldId], references: [id])
   // fieldId String? @db.ObjectId // Kaldırıldı
+  
+  // YENİ: Bildirimler
+  notifications Notification[] @relation("WellNotifications")
 }
 
 // Ürün modeli
@@ -187,6 +199,9 @@ model Crop {
   // İlişkiler
   field   Field  @relation(fields: [fieldId], references: [id])
   fieldId String @db.ObjectId
+  
+  // YENİ: Bildirimler
+  notifications Notification[] @relation("CropNotifications")
 }
 
 // Sulama kaydı modeli
@@ -209,6 +224,9 @@ model IrrigationLog {
   fieldId  String @db.ObjectId
   worker   User   @relation(fields: [workerId], references: [id]) // Yeni ilişki
   workerId String @db.ObjectId // Yeni alan
+  
+  // YENİ: Bildirimler
+  notifications Notification[] @relation("IrrigationNotifications")
 }
 
 // Tarla işleme kaydı modeli
@@ -225,6 +243,9 @@ model ProcessingLog {
   // İlişkiler
   field   Field  @relation(fields: [fieldId], references: [id])
   fieldId String @db.ObjectId
+  
+  // YENİ: Bildirimler
+  notifications Notification[] @relation("ProcessingLogNotifications")
 }
 
 // Envanter Modeli
@@ -237,6 +258,7 @@ model Inventory {
   purchaseDate  DateTime?
   expiryDate    DateTime?
   status        InventoryStatus   @default(AVAILABLE)
+  costPrice     Float? // YENİ: Envanterin birim maliyeti
   notes         String?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
@@ -245,6 +267,9 @@ model Inventory {
   ownerships            InventoryOwnership[]
   usages                InventoryUsage[]
   inventoryTransactions InventoryTransaction[] // YENİ
+  
+  // YENİ: Bildirimler
+  notifications Notification[] @relation("InventoryNotifications")
 }
 
 // Envanter Payları
@@ -288,6 +313,9 @@ model Purchase {
   invoices              Invoice[]              @relation("PurchaseInvoices")
   inventoryTransactions InventoryTransaction[] // YENİ
   approvals             PurchaseApproval[] // YENİ: Onaylar
+  
+  // YENİ: Bildirimler
+  notifications Notification[] @relation("PurchaseNotifications")
 }
 
 // YENİ: Alış Onay Modeli
@@ -302,6 +330,9 @@ model PurchaseApproval {
   approvedAt DateTime?
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
+  
+  // YENİ: Bildirimler
+  notifications Notification[] @relation("ApprovalNotifications")
 }
 
 // Alış Katılımcıları (Genişletilmiş)
@@ -324,6 +355,9 @@ model PurchaseContributor {
 
   // İlişkiler
   paymentHistory PaymentHistory[] // YENİ
+  
+  // YENİ: Bildirimler
+  notifications Notification[] @relation("ContributorNotifications")
 }
 
 // YENİ: Ödeme Geçmişi Modeli
@@ -338,12 +372,15 @@ model PaymentHistory {
   // İlişkiler
   debt          Debt?               @relation(fields: [debtId], references: [id])
   debtId        String?             @db.ObjectId
-  contributor   PurchaseContributor @relation(fields: [contributorId], references: [id])
-  contributorId String              @db.ObjectId
+  contributor   PurchaseContributor? @relation(fields: [contributorId], references: [id]) // İlişkiyi de isteğe bağlı yapalım
+  contributorId String?             @db.ObjectId // Zorunlu alanı isteğe bağlı yapalım (?)
   payer         User                @relation("PaymentsMade", fields: [payerId], references: [id])
   payerId       String              @db.ObjectId
   receiver      User                @relation("PaymentsReceived", fields: [receiverId], references: [id])
   receiverId    String              @db.ObjectId
+  
+  // YENİ: Bildirimler
+  notifications Notification[] @relation("PaymentNotifications")
 }
 
 // YENİ: Envanter İşlemleri Modeli
@@ -366,6 +403,9 @@ model InventoryTransaction {
   purchaseId  String?   @db.ObjectId
   user        User      @relation(fields: [userId], references: [id])
   userId      String    @db.ObjectId
+  
+  // YENİ: Bildirimler
+  notifications Notification[] @relation("TransactionNotifications")
 }
 
 // Borç Modeli (Genişletilmiş)
@@ -393,6 +433,9 @@ model Debt {
   purchase       Purchase?        @relation("PurchaseDebts", fields: [purchaseId], references: [id])
   purchaseId     String?          @db.ObjectId
   paymentHistory PaymentHistory[] // YENİ
+  
+  // YENİ: Bildirimler
+  notifications Notification[] @relation("DebtNotifications")
 }
 
 // Fatura Modeli
@@ -413,6 +456,9 @@ model Invoice {
   debts       Debt[]    @relation("DebtInvoice")
   purchase    Purchase? @relation("PurchaseInvoices", fields: [purchaseId], references: [id])
   purchaseId  String?   @db.ObjectId
+  
+  // YENİ: Bildirimler
+  notifications Notification[] @relation("InvoiceNotifications")
 }
 
 // Stok Kullanımı
@@ -429,14 +475,17 @@ model InventoryUsage {
   process      Process?  @relation(fields: [processId], references: [id])
   processId    String?   @db.ObjectId
   createdAt    DateTime  @default(now())
+  
+  // YENİ: Bildirimler
+  notifications Notification[] @relation("UsageNotifications")
 }
 
 // İşlemler (Tarla, Sulama, vb.) - Güncellendi
 model Process {
   id          String      @id @default(auto()) @map("_id") @db.ObjectId
   type        ProcessType
-  field       Field       @relation(fields: [fieldId], references: [id])
-  fieldId     String      @db.ObjectId
+  field       Field?      @relation(fields: [fieldId], references: [id], onDelete: Cascade) // İlişki isteğe bağlı yapıldı (?) ve onDelete: Cascade eklendi
+  fieldId     String?     @db.ObjectId // Alan isteğe bağlı yapıldı (?)
   worker      User        @relation(fields: [workerId], references: [id])
   workerId    String      @db.ObjectId
   date        DateTime
@@ -463,13 +512,18 @@ model Process {
 
 // Bildirimler - Güncellendi
 model Notification {
-  id        String           @id @default(auto()) @map("_id") @db.ObjectId
-  title     String
-  message   String
-  type      NotificationType
-  isRead    Boolean          @default(false)
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  id          String             @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  message     String
+  type        NotificationType
+  priority    NotificationPriority @default(NORMAL) // YENİ: Bildirim önceliği
+  isRead      Boolean            @default(false)
+  isArchived  Boolean            @default(false) // YENİ: Arşivlenmiş mi?
+  link        String?            // YENİ: Bildirime tıklandığında yönlendirilecek URL
+  expiresAt   DateTime?          // YENİ: Bildirim geçerlilik süresi
+  targetRoles Role[]             // YENİ: Hedef roller
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
 
   // İlişkiler
   receiver   User    @relation("NotificationsReceived", fields: [receiverId], references: [id])
@@ -480,6 +534,69 @@ model Notification {
   // YENİ: İşlem ilişkisi
   process   Process? @relation(fields: [processId], references: [id])
   processId String?  @db.ObjectId
+  
+  // YENİ: Diğer ilişkiler
+  debt                Debt?                @relation("DebtNotifications", fields: [debtId], references: [id])
+  debtId              String?              @db.ObjectId
+  purchase            Purchase?            @relation("PurchaseNotifications", fields: [purchaseId], references: [id])
+  purchaseId          String?              @db.ObjectId
+  inventory           Inventory?           @relation("InventoryNotifications", fields: [inventoryId], references: [id])
+  inventoryId         String?              @db.ObjectId
+  irrigation          IrrigationLog?       @relation("IrrigationNotifications", fields: [irrigationId], references: [id])
+  irrigationId        String?              @db.ObjectId
+  field               Field?               @relation("FieldNotifications", fields: [fieldId], references: [id])
+  fieldId             String?              @db.ObjectId
+  season              Season?              @relation("SeasonNotifications", fields: [seasonId], references: [id])
+  seasonId            String?              @db.ObjectId
+  crop                Crop?                @relation("CropNotifications", fields: [cropId], references: [id])
+  cropId              String?              @db.ObjectId
+  well                Well?                @relation("WellNotifications", fields: [wellId], references: [id])
+  wellId              String?              @db.ObjectId
+  processingLog       ProcessingLog?       @relation("ProcessingLogNotifications", fields: [processingLogId], references: [id])
+  processingLogId     String?              @db.ObjectId
+  invoice             Invoice?             @relation("InvoiceNotifications", fields: [invoiceId], references: [id])
+  invoiceId           String?              @db.ObjectId
+  inventoryUsage      InventoryUsage?      @relation("UsageNotifications", fields: [inventoryUsageId], references: [id])
+  inventoryUsageId    String?              @db.ObjectId
+  transaction         InventoryTransaction? @relation("TransactionNotifications", fields: [transactionId], references: [id])
+  transactionId       String?              @db.ObjectId
+  payment             PaymentHistory?      @relation("PaymentNotifications", fields: [paymentId], references: [id])
+  paymentId           String?              @db.ObjectId
+  contributor         PurchaseContributor? @relation("ContributorNotifications", fields: [contributorId], references: [id])
+  contributorId       String?              @db.ObjectId
+  approval            PurchaseApproval?    @relation("ApprovalNotifications", fields: [approvalId], references: [id])
+  approvalId          String?              @db.ObjectId
+
+  // Eksik ilişkiler eklendi
+  equipment           Equipment?           @relation("EquipmentNotifications", fields: [equipmentId], references: [id])
+  equipmentId         String?              @db.ObjectId
+  equipmentUsage      EquipmentUsage?      @relation("EquipmentUsageNotifications", fields: [equipmentUsageId], references: [id])
+  equipmentUsageId    String?              @db.ObjectId
+  processCost         ProcessCost?         @relation("ProcessCostNotifications", fields: [processCostId], references: [id])
+  processCostId       String?              @db.ObjectId
+  fieldExpense        FieldExpense?        @relation("ExpenseNotifications", fields: [fieldExpenseId], references: [id])
+  fieldExpenseId      String?              @db.ObjectId
+  ownerExpense        FieldOwnerExpense?   @relation("OwnerExpenseNotifications", fields: [ownerExpenseId], references: [id])
+  ownerExpenseId      String?              @db.ObjectId
+}
+
+// YENİ: Bildirim Tercihleri Modeli
+model NotificationPreference {
+  id                      String   @id @default(auto()) @map("_id") @db.ObjectId
+  user                    User     @relation(fields: [userId], references: [id])
+  userId                  String   @db.ObjectId @unique
+  emailNotifications      Boolean  @default(true)
+  pushNotifications       Boolean  @default(true)
+  inAppNotifications      Boolean  @default(true)
+  dailyDigest             Boolean  @default(false)
+  notifyOnDebtReminders   Boolean  @default(true)
+  notifyOnPayments        Boolean  @default(true)
+  notifyOnProcessUpdates  Boolean  @default(true)
+  notifyOnInventoryAlerts Boolean  @default(true)
+  notifyOnApprovals       Boolean  @default(true)
+  notifyOnIrrigation      Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 }
 
 // YENİ: Tarım Aleti/Ekipman Modeli
@@ -497,6 +614,9 @@ model Equipment {
   ownerships   EquipmentOwnership[] // Ekipman sahiplikleri
   capabilities EquipmentCapability[] // Ekipman yetenekleri
   usages       EquipmentUsage[] // Ekipman kullanımları
+  
+  // YENİ: Bildirimler
+  notifications Notification[] @relation("EquipmentNotifications")
 }
 
 // YENİ: Ekipman Sahipliği Modeli
@@ -541,6 +661,9 @@ model EquipmentUsage {
   unit                Unit // Birim (DECARE/DONUM)
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
+  
+  // YENİ: Bildirimler
+  notifications Notification[] @relation("EquipmentUsageNotifications")
 }
 
 // YENİ: İşlem Maliyeti Modeli
@@ -561,6 +684,9 @@ model ProcessCost {
   fieldId       String              @db.ObjectId // Karşı ilişki için alan eklendi
   fieldExpenses FieldExpense[] // Tarla giderleri
   ownerExpenses FieldOwnerExpense[] // Tarla sahibi giderleri
+  
+  // YENİ: Bildirimler
+  notifications Notification[] @relation("ProcessCostNotifications")
 }
 
 // YENİ: Tarla Gideri Modeli
@@ -577,6 +703,9 @@ model FieldExpense {
   periodEnd     DateTime // Dönem sonu
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+  
+  // YENİ: Bildirimler
+  notifications Notification[] @relation("ExpenseNotifications")
 }
 
 // YENİ: Tarla Sahibi Gideri Modeli
@@ -594,6 +723,9 @@ model FieldOwnerExpense {
   periodEnd        DateTime // Dönem sonu
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
+  
+  // YENİ: Bildirimler
+  notifications Notification[] @relation("OwnerExpenseNotifications")
 }
 
 // Enum'lar
@@ -690,6 +822,7 @@ enum ProcessType {
   OTHER
 }
 
+// YENİ: Bildirim Türleri Genişletildi
 enum NotificationType {
   SYSTEM
   IRRIGATION
@@ -700,7 +833,24 @@ enum NotificationType {
   APPROVAL // YENİ: Onay bildirimi
   REMINDER // YENİ: Hatırlatma bildirimi
   FIELD_PROCESSING // YENİ: Tarla işleme bildirimi
+  PAYMENT_DUE // YENİ: Ödeme vadesi bildirimi
+  PAYMENT_RECEIVED // YENİ: Ödeme alındı bildirimi
+  PROCESS_COMPLETED // YENİ: Süreç tamamlandı bildirimi
+  TASK_ASSIGNED // YENİ: Görev atandı bildirimi
+  INVENTORY_LOW // YENİ: Envanter azaldı bildirimi
+  DEBT_REMINDER // YENİ: Borç hatırlatma bildirimi
+  IRRIGATION_SCHEDULED // YENİ: Sulama planlandı bildirimi
+  IRRIGATION_COMPLETED // YENİ: Sulama tamamlandı bildirimi
+  SYSTEM_ALERT // YENİ: Sistem uyarısı
   OTHER
+}
+
+// YENİ: Bildirim Önceliği Enum
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
 }
 
 // YENİ: Envanter İşlem Tipleri

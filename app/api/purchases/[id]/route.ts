@@ -22,10 +22,15 @@ type PurchaseWithRelations = Prisma.PurchaseGetPayload<{
 // Alış güncelle
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } } // params'ı doğrudan al
 ) {
+  // Hata mesajının önerdiği gibi, params'a erişmeden önce mikro görev kuyruğuna bir bekleme ekleyelim.
+  // Bu, Next.js'in dahili işlemlerinin tamamlanmasına yardımcı olabilir.
+  // await Promise.resolve(); // Şimdilik bunu yorumlayalım, destructuring yeterli olabilir.
+
   try {
-    const purchaseId = params.id;
+    // params bir Promise olabilir, await ile çözülmeli (Kullanıcı geri bildirimine göre)
+    const { id: purchaseId } = await params; 
     const userId = request.headers.get("x-user-id");
     const userRole = request.headers.get("x-user-role");
 
@@ -47,7 +52,7 @@ export async function PUT(
 
     // Güncellenecek alanlar
     const updatedPurchase = await prisma.purchase.update({
-      where: { id: purchaseId },
+      where: { id: purchaseId }, // purchaseId'yi burada kullan
       data: {
         product: data.product,
         category: data.category,

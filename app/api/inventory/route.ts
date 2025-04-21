@@ -19,7 +19,8 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category");
     const status = searchParams.get("status");
-    const showAll = searchParams.get("showAll") === "true"; // Tüm envanterleri gösterme parametresi
+    const showAll = searchParams.get("showAll") === "true";
+    const userIdsParam = searchParams.get("userIds"); // userIds parametresini al
 
     // Filtre oluştur
     const filter: any = {};
@@ -30,8 +31,29 @@ export async function GET(request: Request) {
       filter.status = status;
     }
 
-    // Eğer showAll parametresi yoksa veya false ise, sadece kullanıcının sahip olduğu envanterleri getir
-    if (!showAll && userRole !== "ADMIN") {
+    // Filtreleme Mantığı Düzeltmesi:
+    // 1. userIds parametresi varsa öncelikli olarak ona göre filtrele
+    if (userIdsParam) {
+      const userIdsArray = userIdsParam.split(',').filter(id => id.trim() !== '');
+      if (userIdsArray.length > 0) {
+        filter.ownerships = {
+          some: {
+            userId: {
+              in: userIdsArray,
+            },
+          },
+        };
+      } else {
+        // userIds parametresi var ama geçerli ID içermiyorsa boş liste döndür
+        return NextResponse.json([]);
+      }
+    }
+    // 2. userIds yoksa, showAll=true veya rol ADMIN ise filtre uygulama
+    else if (showAll || userRole === "ADMIN") {
+      // Sahiplik filtresi uygulanmaz, tüm envanter (kategori/status varsa onlara göre filtrelenmiş) gelir.
+    }
+    // 3. userIds yoksa, showAll=false ve rol ADMIN değilse, isteği yapan kullanıcıya göre filtrele
+    else {
       filter.ownerships = {
         some: {
           userId: userId,

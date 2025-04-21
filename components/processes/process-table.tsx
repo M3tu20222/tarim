@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react"; // useCallback eklendi
 import { formatDate, formatCurrency } from "@/lib/utils";
+import { Input } from "@/components/ui/input"; // Input eklendi
 import {
   Table,
   TableBody,
@@ -45,23 +46,36 @@ export default function ProcessTable() {
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState(""); // Arama state'i
+  // const [selectedType, setSelectedType] = useState<string | null>(null); // Filtre state'i (şimdilik yorumlu)
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchProcesses();
-  }, []);
-
-  const fetchProcesses = async () => {
+  // useCallback ile fetchProcesses'ı optimize edelim
+  const fetchProcesses = useCallback(async (currentSearchTerm = "") => {
+    // currentSearchTerm parametresi eklendi
     try {
       setLoading(true);
-      const response = await fetch("/api/processes");
+      let apiUrl = "/api/processes";
+      const params = new URLSearchParams();
+      if (currentSearchTerm) {
+        params.append("search", currentSearchTerm);
+      }
+      // if (selectedType) { // Filtre eklenirse
+      //   params.append("type", selectedType);
+      // }
+      const queryString = params.toString();
+      if (queryString) {
+        apiUrl += `?${queryString}`;
+      }
+
+      const response = await fetch(apiUrl);
       if (!response.ok) {
         throw new Error("İşlem verileri alınamadı");
       }
       const data = await response.json();
       setProcesses(data);
     } catch (error) {
-      console.error("Error fetching processes:", error);
+      console.error("Error fetching processes:", error); // Hata logunu koru
       toast({
         title: "Hata",
         description: "İşlem verileri yüklenirken bir hata oluştu.",
@@ -70,6 +84,21 @@ export default function ProcessTable() {
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Bağımlılıkları boş bırakarak sadece ilk render'da ve manuel çağrıldığında çalışmasını sağlıyoruz
+
+  useEffect(() => {
+    fetchProcesses(); // İlk yüklemede çağır
+  }, [fetchProcesses]);
+
+  // Arama işlemini tetikleyen fonksiyon
+  const handleSearch = () => {
+    fetchProcesses(searchTerm);
+  };
+
+  // Silme sonrası listeyi yenilemek için fetchProcesses'ı çağır
+  const refreshList = () => {
+    fetchProcesses(searchTerm); // Mevcut arama terimiyle yenile
   };
 
   // İşlem silme
@@ -92,10 +121,11 @@ export default function ProcessTable() {
         description: "İşlem başarıyla silindi.",
       });
 
-      // İşlemi listeden kaldır
-      setProcesses(processes.filter((item) => item.id !== deleteId));
+      // İşlemi listeden kaldır yerine listeyi yenile
+      // setProcesses(processes.filter((item) => item.id !== deleteId));
+      refreshList(); // Listeyi yenile
     } catch (error: any) {
-      console.error("Error deleting process:", error);
+      console.error("Error deleting process:", error); // Hata logunu koru
       toast({
         title: "Hata",
         description: error.message || "İşlem silinirken bir hata oluştu.",
@@ -118,22 +148,36 @@ export default function ProcessTable() {
 
   return (
     <div className="space-y-4">
+      {/* Filtreleme ve Arama Alanı */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm">
-                <Filter className="h-4 w-4 mr-2" />
-                Filtrele
-              </Button>
-              <Button variant="outline" size="sm">
+          <div className="flex items-center justify-between gap-4 mb-4">
+            {/* Arama */}
+            <div className="flex flex-grow gap-2">
+              <Input
+                placeholder="Tarla, işçi veya açıklamada ara..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()} // Enter ile arama
+                className="max-w-sm"
+              />
+              <Button onClick={handleSearch} size="sm">
                 <Search className="h-4 w-4 mr-2" />
                 Ara
               </Button>
             </div>
+            {/* Filtreleme (Şimdilik basit buton) */}
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" disabled> {/* Şimdilik devre dışı */}
+                <Filter className="h-4 w-4 mr-2" />
+                Filtrele
+              </Button>
+              {/* Başka filtre butonları eklenebilir */}
+            </div>
           </div>
         </CardContent>
       </Card>
+      {/* // Filtreleme ve Arama Alanı Sonu */}
 
       <div className="rounded-md border">
         <Table>

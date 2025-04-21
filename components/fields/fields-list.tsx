@@ -71,7 +71,7 @@ interface Field {
     };
   }[];
   // Güncellendi: wells -> fieldWells
-  fieldWells: { 
+  fieldWells: {
     well: {
       id: string;
       name: string;
@@ -228,6 +228,7 @@ export default function FieldsList() {
   };
 
   const handleDelete = async (id: string) => {
+    // Loglar kaldırıldı
     setIsDeleting(true);
     try {
       const response = await fetch(`/api/fields/${id}`, {
@@ -235,8 +236,9 @@ export default function FieldsList() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Tarla silinirken bir hata oluştu");
+        // JSON parse hatasını yakala
+        const errorData = await response.json().catch(() => ({ error: "Tarla silinirken bir hata oluştu (JSON ayrıştırılamadı)" }));
+        throw new Error(errorData.error || `Tarla silinirken bir hata oluştu (status: ${response.status})`);
       }
 
       toast({
@@ -244,18 +246,21 @@ export default function FieldsList() {
         description: "Tarla başarıyla silindi.",
       });
 
-      setFields(fields.filter((field) => field.id !== id));
-      setFilteredFields(filteredFields.filter((field) => field.id !== id));
+      // Hem ana listeyi hem de filtrelenmiş listeyi doğrudan güncelle
+      setFields((prevFields) => prevFields.filter((field) => field.id !== id));
+      setFilteredFields((prevFiltered) => prevFiltered.filter((field) => field.id !== id));
+
     } catch (error: any) {
-      console.error("Error deleting field:", error);
+      console.error("Error deleting field:", error); // Hata logu kalsın
       toast({
         title: "Hata",
         description: error.message || "Tarla silinirken bir hata oluştu.",
         variant: "destructive",
       });
     } finally {
+      // Her durumda state'leri sıfırla
       setIsDeleting(false);
-      setDeleteId(null);
+      // setDeleteId(null); // Artık AlertDialog kullanmadığımız için buna gerek yok
     }
   };
 
@@ -470,17 +475,17 @@ export default function FieldsList() {
                   </TableCell>
                   <TableCell>
                     {/* Güncellendi: field.wells -> field.fieldWells */}
-                    {field.fieldWells && field.fieldWells.length > 0 ? ( 
+                    {field.fieldWells && field.fieldWells.length > 0 ? (
                       <div className="flex flex-col gap-1">
                         {/* Güncellendi: field.wells -> field.fieldWells */}
-                        {field.fieldWells.map((fieldWell) => ( 
+                        {field.fieldWells.map((fieldWell) => (
                           <div
                             key={fieldWell.well.id} // fieldWell.well.id
                             className="text-xs flex items-center gap-1"
                           >
                             <DropletIcon className="h-3 w-3 text-muted-foreground" />
                             {/* Güncellendi: well.name -> fieldWell.well.name */}
-                            <span>{fieldWell.well.name}</span> 
+                            <span>{fieldWell.well.name}</span>
                           </div>
                         ))}
                       </div>
@@ -518,7 +523,13 @@ export default function FieldsList() {
                         variant="outline"
                         size="icon"
                         className="text-destructive hover:text-destructive"
-                        onClick={() => setDeleteId(field.id)}
+                        onClick={() => {
+                          // window.confirm kullan
+                          if (window.confirm(`${field.name} tarlasını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) {
+                            handleDelete(field.id);
+                          }
+                        }}
+                        disabled={isDeleting}
                       >
                         <Trash className="h-4 w-4" />
                       </Button>
@@ -531,32 +542,7 @@ export default function FieldsList() {
         </Table>
       </div>
 
-      <AlertDialog
-        open={deleteId !== null}
-        onOpenChange={(open) => !open && setDeleteId(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Tarlayı silmek istediğinize emin misiniz?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Bu işlem geri alınamaz. Bu tarla ve ilişkili tüm veriler kalıcı
-              olarak silinecektir.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>İptal</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => deleteId && handleDelete(deleteId)}
-              disabled={isDeleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {isDeleting ? "Siliniyor..." : "Sil"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* AlertDialog kaldırıldı */}
     </div>
   );
 }

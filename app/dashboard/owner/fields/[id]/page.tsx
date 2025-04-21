@@ -13,6 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Edit } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { formatDate } from "@/lib/utils";
+import { Dialog, DialogTrigger, DialogContent } from "@/components/ui/dialog"; // Import Dialog components
+import { ProcessDetails } from "@/components/processes/process-details"; // Import ProcessDetails component as named export
+import { DialogTitle } from "@/components/ui/dialog"; // Import DialogTitle
 
 export const metadata: Metadata = {
   title: "Tarla Detayları | Tarım Yönetim Sistemi",
@@ -44,17 +47,57 @@ export default async function FieldPage({ params }: FieldPageProps) {
       },
       season: true,
       crops: true,
-      wells: true,
+      // wells: true, // Hatalı include kaldırıldı
+      fieldWells: { // Doğru include eklendi
+        include: {
+          well: true, // İlişkili kuyu bilgilerini getir
+        },
+      },
       irrigationLogs: {
         take: 5,
         orderBy: {
           date: "desc",
         },
       },
-      processingLogs: {
+      processes: { // Changed from processingLogs to processes
         take: 5,
         orderBy: {
           date: "desc",
+        },
+        include: { // Include worker and other relations for ProcessDetails component
+          worker: {
+            select: {
+              name: true,
+            },
+          },
+          inventoryUsages: { // Include inventory usages
+            include: {
+              inventory: true, // Include inventory details
+            },
+          },
+          equipmentUsages: { // Include equipment usages
+            include: {
+              equipment: true, // Include equipment details
+            },
+          },
+          processCosts: { // Include process costs
+            include: {
+              fieldExpenses: true, // Include field expenses
+              ownerExpenses: { // Include owner expenses
+                include: {
+                  fieldOwnership: { // Include field ownership to get owner name
+                    include: {
+                      user: {
+                        select: {
+                          name: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -196,30 +239,30 @@ export default async function FieldPage({ params }: FieldPageProps) {
         <Card>
           <CardHeader>
             <CardTitle>Kuyular</CardTitle>
-            <CardDescription>Bu tarlada bulunan kuyular</CardDescription>
+            <CardDescription>Bu tarlaya bağlı kuyular</CardDescription>
           </CardHeader>
           <CardContent>
-            {field.wells.length === 0 ? (
+            {field.fieldWells.length === 0 ? ( // field.wells -> field.fieldWells
               <div className="flex h-24 items-center justify-center rounded-md border border-dashed">
                 <p className="text-sm text-muted-foreground">
-                  Bu tarlada henüz kuyu bulunmuyor.
+                  Bu tarlaya bağlı kuyu bulunmuyor.
                 </p>
               </div>
             ) : (
               <div className="space-y-2">
-                {field.wells.map((well) => (
+                {field.fieldWells.map((fieldWell) => ( // field.wells -> field.fieldWells
                   <div
-                    key={well.id}
+                    key={fieldWell.well.id} // well.id -> fieldWell.well.id
                     className="flex items-center justify-between rounded-lg border p-3"
                   >
                     <div>
-                      <p className="font-medium">{well.name}</p>
+                      <p className="font-medium">{fieldWell.well.name}</p> {/* well.name -> fieldWell.well.name */}
                       <p className="text-sm text-muted-foreground">
-                        Derinlik: {well.depth}m | Kapasite: {well.capacity}{" "}
+                        Derinlik: {fieldWell.well.depth}m | Kapasite: {fieldWell.well.capacity}{" "} {/* well.depth -> fieldWell.well.depth, etc. */}
                         lt/sa
                       </p>
                     </div>
-                    <Badge variant="outline">{well.status}</Badge>
+                    <Badge variant="outline">{fieldWell.well.status}</Badge> {/* well.status -> fieldWell.well.status */}
                   </div>
                 ))}
               </div>
@@ -266,7 +309,7 @@ export default async function FieldPage({ params }: FieldPageProps) {
             <CardTitle>Son İşlemler</CardTitle>
           </CardHeader>
           <CardContent>
-            {field.processingLogs.length === 0 ? (
+            {field.processes.length === 0 ? ( // Changed from processingLogs to processes
               <div className="flex h-24 items-center justify-center rounded-md border border-dashed">
                 <p className="text-sm text-muted-foreground">
                   Bu tarlada henüz işlem yapılmamış.
@@ -274,18 +317,30 @@ export default async function FieldPage({ params }: FieldPageProps) {
               </div>
             ) : (
               <div className="space-y-2">
-                {field.processingLogs.map((log) => (
-                  <div
-                    key={log.id}
-                    className="flex items-center justify-between rounded-lg border p-3"
-                  >
-                    <div>
-                      <p className="font-medium">{formatDate(log.date)}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Tür: {log.processType} | Süre: {log.duration} dakika
-                      </p>
-                    </div>
-                  </div>
+                {field.processes.map((process) => ( // Changed from log to process
+                  <Dialog key={process.id}> {/* Wrap with Dialog */}
+                    <DialogTrigger asChild>
+                      <div className="flex items-center justify-between rounded-lg border p-3 cursor-pointer hover:bg-gray-100"> {/* Make it clickable */}
+                        <div>
+                          <p className="font-medium">{process.type} - {formatDate(process.date)}</p> {/* Display process type and date */}
+                          {process.worker && (
+                            <p className="text-sm text-muted-foreground">
+                              Yapan: {process.worker.name} {/* Display worker name */}
+                            </p>
+                          )}
+                          {process.description && (
+                             <p className="text-sm text-muted-foreground">
+                               Açıklama: {process.description} {/* Display description if available */}
+                             </p>
+                          )}
+                        </div>
+                      </div>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[425px]"> {/* Dialog content */}
+                      <DialogTitle>İşlem Detayları</DialogTitle> {/* Add DialogTitle */}
+                      <ProcessDetails process={process} /> {/* Render ProcessDetails component with the process object */}
+                    </DialogContent>
+                  </Dialog>
                 ))}
               </div>
             )}

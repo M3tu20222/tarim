@@ -48,8 +48,15 @@ interface Season {
   isActive: boolean;
 }
 
+// Envanter Kategorisi Tipleri (Prisma Enum ile eşleşmeli)
+type InventoryCategory = "SEED" | "FERTILIZER" | "PESTICIDE" | "FUEL" | "OTHER";
+
+
 // Partner schema for validation
 const formSchema = z.object({
+  seasonId: z.string({
+    required_error: "Sezon seçilmelidir.",
+  }),
   fieldId: z.string({
     required_error: "Tarla seçilmelidir.",
   }),
@@ -71,11 +78,12 @@ const formSchema = z.object({
       message: "İşlenen alan yüzdesi en fazla %100 olabilir.",
     }),
   description: z.string().optional(),
-  equipmentId: z.string().optional(),
+  // equipmentId boş olabilir, bu yüzden optional ve string olmalı
+  equipmentId: z.string().optional().nullable(),
   inventoryItems: z
     .array(
       z.object({
-        inventoryId: z.string(),
+        inventoryId: z.string().min(1, "Envanter seçilmelidir."), // inventoryId boş olamaz
         quantity: z.number().positive({
           message: "Miktar pozitif bir sayı olmalıdır.",
         }),
@@ -95,8 +103,26 @@ const processTypes = [
 ];
 
 interface ProcessFormProps {
-  initialData?: any;
+  initialData?: any; // Daha spesifik bir tip kullanmak daha iyi olabilir
 }
+
+// Helper function to get inventory category based on process type
+const getCategoryForProcess = (processType: string): InventoryCategory | undefined => {
+  switch (processType) {
+    case "PESTICIDE":
+      return "PESTICIDE";
+    case "FERTILIZING":
+      return "FERTILIZER";
+    case "SEEDING":
+      return "SEED";
+    // Yakıt direkt olarak işlemle değil, ekipmanla ilişkili
+    // case "FUEL": // Eğer yakıtı da işlemle ilişkilendirmek isterseniz
+    //   return "FUEL";
+    default:
+      return undefined; // Diğer işlem tipleri için belirli bir envanter kategorisi yok
+  }
+};
+
 
 export function ProcessForm({ initialData }: ProcessFormProps = {}) {
   const router = useRouter();
@@ -107,188 +133,223 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
   const [workers, setWorkers] = useState<any[]>([]);
   const [owners, setOwners] = useState<any[]>([]);
   const [equipment, setEquipment] = useState<any[]>([]);
+  const [seasons, setSeasons] = useState<Season[]>([]);
   const [selectedField, setSelectedField] = useState<any>(null);
   const [selectedEquipment, setSelectedEquipment] = useState<any>(null);
-  const [inventoryItems, setInventoryItems] = useState<any[]>([]);
-  const [fuelAvailabilityError, setFuelAvailabilityError] = useState<
-    string | null
-  >(null); // Hata mesajı için state
-  const [error, setError] = useState<string | null>(null);
+  // inventoryItems state'ini initialData ile başlat
+  const [inventoryItems, setInventoryItems] = useState<any[]>(initialData?.inventoryItems || []);
+  const [fuelAvailabilityError, setFuelAvailabilityError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null); // Genel form hataları için
 
   // Form oluştur
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: initialData || {
-      fieldId: "",
-      type: "",
-      date: new Date(),
-      workerId: user?.id || "",
-      processedPercentage: 100,
-      description: "",
-      equipmentId: "",
-      inventoryItems: [],
-    },
+    // defaultValues initialData'dan türetilmeli, useEffect içinde reset ile yönetilecek
   });
 
-  // Tarlaları, çalışanları ve ekipmanları getir
+  // İşlem tipini izle ve ilgili envanter kategorisini belirle
+  const currentProcessType = form.watch("type");
+  const inventoryCategory = getCategoryForProcess(currentProcessType);
+
+  // Tarlaları, çalışanları, sahipleri, ekipmanları ve sezonları getir
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Tarlaları getir
-        const fieldsResponse = await fetch("/api/fields");
-        if (fieldsResponse.ok) {
-          const fieldsData = await fieldsResponse.json();
-          setFields(fieldsData);
+        const [fieldsRes, workersRes, ownersRes, equipmentRes, seasonsRes] = await Promise.all([
+          fetch("/api/fields"),
+          fetch("/api/users?role=WORKER"),
+          fetch("/api/users/owners"),
+          fetch("/api/equipment?status=ACTIVE"),
+          fetch("/api/seasons?active=true")
+        ]);
+
+        if (fieldsRes.ok) setFields(await fieldsRes.json());
+        if (workersRes.ok) setWorkers(await workersRes.json());
+        if (ownersRes.ok) setOwners(await ownersRes.json());
+        if (equipmentRes.ok) setEquipment(await equipmentRes.json());
+        if (seasonsRes.ok) {
+            const seasonsData = await seasonsRes.json();
+            setSeasons(seasonsData);
+             // Yeni formda ve tek aktif sezon varsa varsayılan yap
+            if (seasonsData.length === 1 && !initialData) {
+                form.setValue("seasonId", seasonsData[0].id, { shouldValidate: true });
+            }
         }
 
-        // Çalışanları getir
-        const workersResponse = await fetch("/api/users?role=WORKER");
-        if (workersResponse.ok) {
-          const workersData = await workersResponse.json();
-          setWorkers(workersData);
-        }
-
-        // Sahipleri getir
-        const ownersResponse = await fetch("/api/users/owners");
-        if (ownersResponse.ok) {
-          const ownersData = await ownersResponse.json();
-          setOwners(ownersData);
-        }
-
-        // Ekipmanları getir
-        const equipmentResponse = await fetch("/api/equipment?status=ACTIVE");
-        if (equipmentResponse.ok) {
-          const equipmentData = await equipmentResponse.json();
-          setEquipment(equipmentData);
-        }
-      } catch (error) {
-        console.error("Error fetching data:", error);
+      } catch (err) {
+        console.error("Error fetching initial data:", err);
         toast({
           title: "Hata",
-          description: "Veriler yüklenirken bir hata oluştu.",
+          description: "Gerekli veriler yüklenirken bir hata oluştu.",
           variant: "destructive",
         });
       }
     };
 
     fetchData();
-  }, [toast]);
+  }, [toast, initialData, form]); // form'u dependency ekle
 
-  // Seçilen tarla değiştiğinde
+  // Formu initialData ile doldur (Edit modu) veya varsayılan değerleri ayarla (New modu)
+  useEffect(() => {
+    if (initialData) {
+      form.reset({
+        ...initialData,
+        date: initialData.date ? new Date(initialData.date) : new Date(),
+        // equipmentId null ise 'none' veya boş string olarak ayarla
+        equipmentId: initialData.equipmentId || null,
+        // inventoryItems state'i ayrı yönetiliyor, form default'una ekleme
+      });
+      // inventoryItems state'ini de initialData ile güncelle
+      setInventoryItems(initialData.inventoryItems || []);
+    } else {
+      // Yeni form için varsayılan değerler
+      form.reset({
+        seasonId: seasons.length === 1 ? seasons[0].id : "", // Tek sezon varsa seçili gelsin
+        fieldId: "",
+        type: "",
+        date: new Date(),
+        workerId: user?.id || "", // Giriş yapan kullanıcı varsayılan çalışan olsun
+        processedPercentage: 100,
+        description: "",
+        equipmentId: null, // Varsayılan olarak ekipman yok
+        inventoryItems: [],
+      });
+      setInventoryItems([]); // Yeni formda envanter listesini sıfırla
+    }
+  }, [initialData, form, user?.id, seasons]); // seasons dependency eklendi
+
+  // Seçilen tarla değiştiğinde state'i güncelle
   useEffect(() => {
     const fieldId = form.watch("fieldId");
-    if (fieldId) {
-      const field = fields.find((f) => f.id === fieldId);
-      setSelectedField(field);
-    }
+    const field = fields.find((f) => f.id === fieldId);
+    setSelectedField(field || null);
   }, [form.watch("fieldId"), fields]);
 
-  // Seçilen ekipman değiştiğinde
+  // Seçilen ekipman değiştiğinde state'i güncelle
   useEffect(() => {
     const equipmentId = form.watch("equipmentId");
-    if (equipmentId) {
+    // 'none' veya null/undefined kontrolü
+    if (equipmentId && equipmentId !== 'none') {
       const equip = equipment.find((e) => e.id === equipmentId);
-      setSelectedEquipment(equip);
+      setSelectedEquipment(equip || null);
     } else {
       setSelectedEquipment(null);
     }
   }, [form.watch("equipmentId"), equipment]);
 
+   // İşlem tipi değiştiğinde, eğer yeni tip envanter gerektirmiyorsa listeyi temizle
+   useEffect(() => {
+    if (!inventoryCategory) {
+      setInventoryItems([]);
+      // Formdaki inventoryItems alanını da temizle (opsiyonel, validasyon için gerekebilir)
+      // form.setValue('inventoryItems', []);
+    }
+  }, [inventoryCategory]);
+
+
   // Envanter öğesi ekle
   const addInventoryItem = () => {
-    setInventoryItems([...inventoryItems, { inventoryId: "", quantity: 0 }]);
+    // Sadece ilgili kategori varsa eklemeye izin ver
+    if (inventoryCategory) {
+        setInventoryItems([...inventoryItems, { inventoryId: "", quantity: "" }]); // Miktarı başlangıçta boş string yap
+    }
   };
 
   // Envanter öğesi sil
   const removeInventoryItem = (index: number) => {
-    const newItems = [...inventoryItems];
-    newItems.splice(index, 1);
+    const newItems = inventoryItems.filter((_, i) => i !== index);
     setInventoryItems(newItems);
   };
 
   // Envanter öğesi güncelle
-  const updateInventoryItem = (index: number, field: string, value: any) => {
+  const updateInventoryItem = (index: number, field: 'inventoryId' | 'quantity', value: string) => {
     const newItems = [...inventoryItems];
     newItems[index] = { ...newItems[index], [field]: value };
     setInventoryItems(newItems);
+
+    // Form state'ini de güncellemek validasyon için önemli olabilir
+    // Özellikle quantity'yi number'a çevirip form state'ine öyle yazmak gerekebilir
+    // form.setValue(`inventoryItems.${index}.${field}`, field === 'quantity' ? Number(value) || 0 : value, { shouldValidate: true });
   };
 
   // Form gönderimi
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    // Envanter öğelerini ekle
-    const formData = {
-      ...values,
-      inventoryItems: inventoryItems.filter(
-        (item) => item.inventoryId && item.quantity > 0
-      ),
-    };
+    setIsSubmitting(true);
+    setError(null);
+    setFuelAvailabilityError(null);
 
-    // 1. Yakıt kontrolü
-    if (selectedEquipment && selectedField) {
+    // 1. Kullanılacak Envanterleri Hazırla (Sadece ilgili kategori varsa)
+    const finalInventoryItems = inventoryCategory
+      ? inventoryItems
+          .filter((item) => item.inventoryId && Number(item.quantity) > 0)
+          .map((item) => ({
+            inventoryId: item.inventoryId,
+            quantity: Number(item.quantity), // API'ye number olarak gönder
+          }))
+      : []; // Kategori yoksa boş dizi gönder
+
+    // 2. Yakıt Kontrolü (Ekipman seçiliyse ve yakıt tüketimi varsa)
+    if (selectedEquipment && selectedField && selectedEquipment.fuelConsumptionPerDecare > 0) {
       const fuelNeeded =
         (selectedEquipment.fuelConsumptionPerDecare *
           selectedField.size *
           values.processedPercentage) /
         100;
-
-      const fuelCategory = "FUEL"; // Yakıt kategorisini belirle
+      const fuelCategory = "FUEL";
       const fieldOwners = selectedField.owners;
 
-      let hasEnoughFuel = false;
-      let fuelAvailabilityMessage = "";
-
-      for (const owner of fieldOwners) {
-        const ownerInventoryResponse = await fetch(
-          `/api/inventory?category=${fuelCategory}&userId=${owner.userId}`,
-          {
-            headers: {
-              "x-user-id": user?.id || "",
-              "x-user-role": user?.role || "",
-            },
+      let totalAvailableFuel = 0;
+      try {
+        // Tüm sahiplerin yakıtını tek seferde kontrol et (API destekliyorsa daha iyi olur)
+        for (const owner of fieldOwners) {
+          const ownerInventoryResponse = await fetch(
+            `/api/inventory?category=${fuelCategory}&userId=${owner.userId}`,
+            { headers: { "x-user-id": user?.id || "", "x-user-role": user?.role || "" } }
+          );
+          if (ownerInventoryResponse.ok) {
+            const ownerInventory = await ownerInventoryResponse.json();
+            totalAvailableFuel += ownerInventory.reduce(
+              (sum: number, item: any) => sum + item.totalQuantity, 0
+            );
+          } else {
+             console.warn(`Yakıt envanteri alınamadı: Sahip ${owner.user.name}`);
           }
-        );
-
-        if (!ownerInventoryResponse.ok) {
-          console.error("Error fetching owner inventory");
-          continue; // Hata durumunda bir sonraki ortağa geç
         }
 
-        const ownerInventory = await ownerInventoryResponse.json();
-        const totalFuel = ownerInventory.reduce(
-          (sum: number, item: any) => sum + item.totalQuantity,
-          0
-        );
-
-        if (totalFuel >= fuelNeeded) {
-          hasEnoughFuel = true;
-          break; // Yeterli yakıt varsa döngüden çık
-        } else {
-          fuelAvailabilityMessage = `Sahip ${owner.user.name}'in envanterinde yeterli yakıt bulunmuyor.`;
+        if (totalAvailableFuel < fuelNeeded) {
+          setFuelAvailabilityError(
+            `Tarlanın sahiplerinin toplam envanterinde yeterli yakıt bulunmuyor. Gereken: ${fuelNeeded.toFixed(2)} lt, Mevcut: ${totalAvailableFuel.toFixed(2)} lt.`
+          );
+          setIsSubmitting(false);
+          return;
         }
-      }
-
-      if (!hasEnoughFuel) {
-        setFuelAvailabilityError(
-          fuelAvailabilityMessage ||
-            "Tarlanın sahiplerinin envanterinde yeterli yakıt bulunmuyor."
-        );
-        return; // Formu göndermeyi durdur
+      } catch (fetchError) {
+         console.error("Yakıt kontrolü sırasında hata:", fetchError);
+         setError("Yakıt durumu kontrol edilirken bir hata oluştu.");
+         setIsSubmitting(false);
+         return;
       }
     }
 
-    setIsSubmitting(true);
-    setError(null); // Hata durumunu sıfırla
+    // 3. API İsteği için Veriyi Hazırla
+    const formData = {
+      ...values,
+      // equipmentId 'none' veya null ise API'ye null gönder
+      equipmentId: values.equipmentId === 'none' ? null : values.equipmentId,
+      inventoryItems: finalInventoryItems, // Hazırlanan envanter listesi
+    };
 
+    // 4. API İsteği
     try {
-      const url = initialData
-        ? `/api/processes/${initialData.id}`
-        : "/api/processes";
+      const url = initialData ? `/api/processes/${initialData.id}` : "/api/processes";
       const method = initialData ? "PUT" : "POST";
 
       const response = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
+          "x-user-id": user?.id || "",
+          "x-user-role": user?.role || "",
         },
         body: JSON.stringify(formData),
       });
@@ -296,21 +357,26 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
       if (response.ok) {
         toast({
           title: "Başarılı!",
-          description: initialData
-            ? "İşlem başarıyla güncellendi."
-            : "İşlem başarıyla eklendi.",
+          description: `İşlem başarıyla ${initialData ? 'güncellendi' : 'eklendi'}.`,
         });
         router.push("/dashboard/owner/processes");
-        router.refresh();
+        router.refresh(); // Sayfayı yenilemek yerine datayı yeniden fetch etmek daha iyi olabilir
       } else {
-        const error = await response.json();
-        throw new Error(error.error || "Bir hata oluştu");
+        const errorData = await response.json();
+        console.error("API Error:", errorData);
+        setError(errorData.error || `Sunucu hatası: ${response.status}`);
+        toast({
+          title: "Hata!",
+          description: errorData.error || "İşlem kaydedilirken bir sunucu hatası oluştu.",
+          variant: "destructive",
+        });
       }
-    } catch (error: any) {
-      console.error("İşlem kaydetme hatası:", error);
+    } catch (err: any) {
+      console.error("İşlem kaydetme hatası:", err);
+      setError("İstemci tarafında bir hata oluştu.");
       toast({
         title: "Hata!",
-        description: error.message || "İşlem kaydedilirken bir hata oluştu.",
+        description: err.message || "İşlem kaydedilirken bir hata oluştu.",
         variant: "destructive",
       });
     } finally {
@@ -318,37 +384,74 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
     }
   }
 
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {/* Hata Mesajları */}
         {fuelAvailabilityError && (
           <Alert variant="destructive">
-            <AlertTitle>Hata</AlertTitle>
+            <AlertTitle>Yakıt Hatası</AlertTitle>
             <AlertDescription>{fuelAvailabilityError}</AlertDescription>
           </Alert>
         )}
+        {error && (
+          <Alert variant="destructive">
+            <AlertTitle>Form Hatası</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
+        {/* Form Alanları */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {/* Sezon */}
+          <FormField
+            control={form.control}
+            name="seasonId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Sezon</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value || ""} // Kontrollü bileşen
+                  disabled={seasons.length === 0}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sezon seçin" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {seasons.length === 0 ? (
+                      <SelectItem value="no-season" disabled>Aktif sezon bulunamadı</SelectItem>
+                    ) : (
+                      seasons.map((season) => (
+                        <SelectItem key={season.id} value={season.id}>{season.name}</SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Tarla */}
           <FormField
             control={form.control}
             name="fieldId"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Tarla</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                >
+                <Select onValueChange={field.onChange} value={field.value || ""}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Tarla seçin" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {fields.map((field) => (
-                      <SelectItem key={field.id} value={field.id}>
-                        {field.name} ({field.size} dekar)
-                      </SelectItem>
+                    {fields.map((f) => (
+                      <SelectItem key={f.id} value={f.id}>{f.name} ({f.size} dekar)</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -357,16 +460,14 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
             )}
           />
 
+          {/* İşlem Tipi */}
           <FormField
             control={form.control}
             name="type"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>İşlem Tipi</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                >
+                <Select onValueChange={field.onChange} value={field.value || ""}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="İşlem tipi seçin" />
@@ -374,9 +475,7 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
                   </FormControl>
                   <SelectContent>
                     {processTypes.map((type) => (
-                      <SelectItem key={type.value} value={type.value}>
-                        {type.label}
-                      </SelectItem>
+                      <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -385,6 +484,7 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
             )}
           />
 
+          {/* İşlem Tarihi */}
           <FormField
             control={form.control}
             name="date"
@@ -398,22 +498,13 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
                         variant={"outline"}
                         className={`w-full pl-3 text-left font-normal ${!field.value ? "text-muted-foreground" : ""}`}
                       >
-                        {field.value ? (
-                          format(field.value, "PPP", { locale: tr })
-                        ) : (
-                          <span>Tarih seçin</span>
-                        )}
+                        {field.value ? format(field.value, "PPP", { locale: tr }) : <span>Tarih seçin</span>}
                         <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                       </Button>
                     </FormControl>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={field.value}
-                      onSelect={field.onChange}
-                      // initialFocus is deprecated
-                    />
+                    <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
                   </PopoverContent>
                 </Popover>
                 <FormMessage />
@@ -421,57 +512,27 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
             )}
           />
 
+          {/* İşlemi Yapan */}
           <FormField
             control={form.control}
             name="workerId"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>İşlemi Yapan</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                >
+                <Select onValueChange={field.onChange} value={field.value || ""}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="İşlemi yapan kişiyi seçin" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="placeholder" disabled>
-                      Kişi seçin
-                    </SelectItem>
-                    {workers.length > 0 && (
-                      <>
-                        <SelectItem
-                          value="workers-group"
-                          disabled
-                          className="font-semibold"
-                        >
-                          Çalışanlar
-                        </SelectItem>
-                        {workers.map((worker) => (
-                          <SelectItem key={worker.id} value={worker.id}>
-                            {worker.name}
-                          </SelectItem>
-                        ))}
-                      </>
-                    )}
-                    {owners.length > 0 && (
-                      <>
-                        <SelectItem
-                          value="owners-group"
-                          disabled
-                          className="font-semibold"
-                        >
-                          Sahipler
-                        </SelectItem>
-                        {owners.map((owner) => (
-                          <SelectItem key={owner.id} value={owner.id}>
-                            {owner.name}
-                          </SelectItem>
-                        ))}
-                      </>
-                    )}
+                    {[...owners, ...workers]
+                      .sort((a, b) => a.name.localeCompare(b.name)) // İsim sırasına göre sırala
+                      .map((person) => (
+                       <SelectItem key={person.id} value={person.id}>
+                         {person.name} {owners.some(o => o.id === person.id) ? '(Sahip)' : '(Çalışan)'}
+                       </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -479,29 +540,22 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
             )}
           />
 
+          {/* İşlenen Alan Yüzdesi */}
           <FormField
             control={form.control}
             name="processedPercentage"
             render={({ field }) => (
               <FormItem className="col-span-2">
-                <FormLabel>İşlenen Alan Yüzdesi (%{field.value})</FormLabel>
+                <FormLabel>İşlenen Alan Yüzdesi (%{Number(field.value || 0)})</FormLabel>
                 <FormControl>
                   <Slider
-                    min={1}
-                    max={100}
-                    step={1}
-                    defaultValue={[field.value]}
-                    onValueChange={(values) => field.onChange(values[0])}
+                    min={1} max={100} step={1}
+                    value={[Number(field.value || 0)]} // Slider'a number[] tipinde değer ver
+                    onValueChange={(values) => field.onChange(values[0])} // Gelen değeri number olarak al
                   />
                 </FormControl>
                 <FormDescription>
-                  {selectedField && (
-                    <>
-                      İşlenen Alan:{" "}
-                      {((selectedField.size * field.value) / 100).toFixed(2)}{" "}
-                      dekar (Toplam: {selectedField.size} dekar)
-                    </>
-                  )}
+                  {selectedField && `İşlenen Alan: ${((selectedField.size * Number(field.value || 0)) / 100).toFixed(2)} dekar (Toplam: ${selectedField.size} dekar)`}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -509,6 +563,7 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
           />
         </div>
 
+        {/* Açıklama */}
         <FormField
           control={form.control}
           name="description"
@@ -516,24 +571,21 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
             <FormItem>
               <FormLabel>Açıklama</FormLabel>
               <FormControl>
-                <Textarea
-                  placeholder="İşlem hakkında ek bilgiler..."
-                  className="resize-none"
-                  {...field}
-                />
+                <Textarea placeholder="İşlem hakkında ek bilgiler..." className="resize-none" {...field} value={field.value || ""} />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
 
+        {/* Kullanılan Ekipman */}
         <FormField
           control={form.control}
           name="equipmentId"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Kullanılan Ekipman</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <Select onValueChange={field.onChange} value={field.value || "none"}>
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Ekipman seçin (opsiyonel)" />
@@ -549,117 +601,83 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
                 </SelectContent>
               </Select>
               <FormDescription>
-                {selectedEquipment && selectedField && (
-                  <>
-                    Tahmini Yakıt Tüketimi:{" "}
-                    {(
-                      (selectedEquipment.fuelConsumptionPerDecare *
-                        selectedField.size *
-                        form.watch("processedPercentage")) /
-                      100
-                    ).toFixed(2)}{" "}
-                    litre
-                  </>
-                )}
+                {selectedEquipment && selectedField && selectedEquipment.fuelConsumptionPerDecare > 0 &&
+                  `Tahmini Yakıt Tüketimi: ${((selectedEquipment.fuelConsumptionPerDecare * selectedField.size * form.watch("processedPercentage")) / 100).toFixed(2)} litre`}
               </FormDescription>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>Kullanılan Envanter</span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addInventoryItem}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Envanter Ekle
-              </Button>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {inventoryItems.length === 0 ? (
-                <div className="flex h-24 items-center justify-center rounded-md border border-dashed">
-                  <p className="text-sm text-muted-foreground">
-                    Henüz envanter eklenmemiş.
-                  </p>
-                </div>
-              ) : (
-                inventoryItems.map((item, index) => (
-                  <div
-                    key={index}
-                    className="grid grid-cols-1 gap-4 md:grid-cols-3 border p-4 rounded-md"
-                  >
-                    <div className="md:col-span-2">
-                      <InventorySelector
-                        onSelect={(id) =>
-                          updateInventoryItem(index, "inventoryId", id)
-                        }
-                        selectedId={item.inventoryId}
-                        label="Envanter"
-                        required={true}
-                        category="FUEL" // Yakıt kategorisini filtrele
-                      />
-                    </div>
-                    <div className="flex items-end gap-2">
-                      <div className="flex-1">
-                        <FormLabel>Miktar</FormLabel>
-                        <Input
-                          type="number"
-                          min="0.01"
-                          step="0.01"
-                          value={item.quantity}
-                          onChange={(e) =>
-                            updateInventoryItem(
-                              index,
-                              "quantity",
-                              Number(e.target.value)
-                            )
-                          }
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="icon"
-                        onClick={() => removeInventoryItem(index)}
-                      >
-                        <Trash className="h-4 w-4" />
-                      </Button>
-                    </div>
+        {/* Kullanılan Envanter (Sadece ilgili işlem tiplerinde göster) */}
+        {inventoryCategory && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>Kullanılan {inventoryCategory === 'PESTICIDE' ? 'İlaç' : inventoryCategory === 'FERTILIZER' ? 'Gübre' : 'Tohum'}</span>
+                <Button type="button" variant="outline" size="sm" onClick={addInventoryItem}>
+                  <Plus className="mr-2 h-4 w-4" /> Envanter Ekle
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {inventoryItems.length === 0 ? (
+                  <div className="flex h-24 items-center justify-center rounded-md border border-dashed">
+                    <p className="text-sm text-muted-foreground">Henüz envanter eklenmemiş.</p>
                   </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                ) : (
+                  inventoryItems.map((item, index) => (
+                    <div key={index} className="grid grid-cols-1 gap-4 md:grid-cols-3 border p-4 rounded-md items-end">
+                      {/* Envanter Seçici */}
+                      <div className="md:col-span-2">
+                         {/* inventoryId için FormField sarmalayıcı eklemek validasyon için daha iyi olabilir */}
+                        <FormLabel>Envanter</FormLabel>
+                        <InventorySelector
+                          onSelect={(id) => updateInventoryItem(index, "inventoryId", id)}
+                          selectedId={item.inventoryId}
+                          category={inventoryCategory} // Dinamik kategori
+                          // Tarla sahiplerinin ID'lerini ownerIds prop'u olarak gönder
+                          ownerIds={selectedField?.owners?.map((o: any) => o.userId) || []}
+                          required={true} // Bu alan zorunlu
+                        />
+                         {/* Eğer FormField kullanırsak FormMessage buraya gelir */}
+                      </div>
+                      {/* Miktar Girişi */}
+                      <div className="flex items-end gap-2">
+                        <div className="flex-1">
+                          {/* quantity için FormField sarmalayıcı */}
+                          <FormLabel>Miktar</FormLabel>
+                          <Input
+                            type="number"
+                            min="0.01" step="0.01"
+                            value={item.quantity} // State'den al
+                            onChange={(e) => updateInventoryItem(index, "quantity", e.target.value)}
+                            placeholder="0.00"
+                          />
+                           {/* Eğer FormField kullanırsak FormMessage buraya gelir */}
+                        </div>
+                        <Button type="button" variant="destructive" size="icon" onClick={() => removeInventoryItem(index)}>
+                          <Trash className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
+        {/* Butonlar */}
         <div className="flex justify-end gap-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => router.push("/dashboard/owner/processes")}
-            disabled={isSubmitting}
-          >
+          <Button type="button" variant="outline" onClick={() => router.push("/dashboard/owner/processes")} disabled={isSubmitting}>
             İptal
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" disabled={isSubmitting || !form.formState.isValid}>
             {isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Kaydediliyor...
-              </>
-            ) : initialData ? (
-              "Güncelle"
-            ) : (
-              "Kaydet"
-            )}
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Kaydediliyor...</>
+            ) : (initialData ? "Güncelle" : "Kaydet")}
           </Button>
         </div>
       </form>

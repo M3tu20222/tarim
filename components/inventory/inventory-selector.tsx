@@ -26,7 +26,8 @@ interface InventorySelectorProps {
   selectedId?: string;
   label?: string;
   required?: boolean;
-  category?: string; // Kategori filtresi için eklendi
+  category?: string; // Kategori filtresi
+  ownerIds?: string[]; // Tarla sahiplerinin ID'leri için eklendi
 }
 
 export function InventorySelector({
@@ -35,6 +36,7 @@ export function InventorySelector({
   label = "Envanter",
   required = false,
   category,
+  ownerIds, // Yeni prop'u al
 }: InventorySelectorProps) {
   const [open, setOpen] = useState(false);
   const [inventory, setInventory] = useState<any[]>([]);
@@ -42,17 +44,33 @@ export function InventorySelector({
   const [selected, setSelected] = useState<string | undefined>(selectedId);
   const { toast } = useToast();
 
+  // ownerIds veya category değiştiğinde envanteri yeniden yükle
   useEffect(() => {
-    fetchInventory();
-  }, [category]); // Kategori değiştiğinde yeniden yükle
+    // ownerIds boş bir dizi ise veya hiç yoksa fetch yapma (veya tümünü getir?)
+    // Şimdilik ownerIds varsa fetch yapacak şekilde ayarlayalım.
+    // if (ownerIds && ownerIds.length > 0) {
+       fetchInventory();
+    // } else {
+    //   setInventory([]); // Sahip yoksa listeyi boşalt
+    //   setLoading(false);
+    // }
+  }, [category, ownerIds]); // ownerIds dependency eklendi
 
   const fetchInventory = async () => {
+    // Eğer ownerIds belirtilmemişse veya boşsa, belki hiçbir şey getirmemeliyiz?
+    // Veya tüm uygun envanteri mi getirmeli? Şimdilik tümünü getiriyor.
+    // API'nin userIds parametresini işlemesi GEREKİR.
+    // Örnek: /api/inventory?category=PESTICIDE&status=AVAILABLE&userIds=id1,id2
     try {
       setLoading(true);
-      // Kategori filtresi varsa URL'ye ekle
-      const url = category
-        ? `/api/inventory?category=${category}&status=AVAILABLE`
-        : `/api/inventory?status=AVAILABLE`;
+      let url = `/api/inventory?status=AVAILABLE`;
+      if (category) {
+        url += `&category=${category}`;
+      }
+      // ownerIds varsa ve boş değilse, URL'ye ekle
+      if (ownerIds && ownerIds.length > 0) {
+        url += `&userIds=${ownerIds.join(',')}`; // Virgülle ayrılmış ID listesi
+      }
 
       const response = await fetch(url);
       if (!response.ok) {

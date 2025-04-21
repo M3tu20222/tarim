@@ -1,0 +1,397 @@
+﻿.
++--.vercel
+|  +--output
+|  |  +--diagnostics
+|  |  |  +--build-diagnostics.json
+|  |  |  +--cli_traces.json
+|  |  |  +--framework.json
+|  |  |  \--trace
+|  |  +--builds.json
+|  |  \--config.json
+|  +--.env.preview.local
+|  +--project.json
+|  \--README.txt
++--app
+|  +--api
+|  |  +--auth
+|  |  |  +--login
+|  |  |  |  \--route.ts
+|  |  |  +--logout
+|  |  |  |  \--route.ts
+|  |  |  \--refresh
+|  |  |     \--route.ts
+|  |  +--billing
+|  |  |  +--owner-bills
+|  |  |  |  +--[id]
+|  |  |  |  \--route.ts
+|  |  |  +--payments
+|  |  |  |  \--route.ts
+|  |  |  +--periods
+|  |  |  |  +--[id]
+|  |  |  |  \--route.ts
+|  |  |  \--well-bills
+|  |  |     +--[id]
+|  |  |     \--route.ts
+|  |  +--cron
+|  |  |  \--debt-reminders
+|  |  |     \--route.ts
+|  |  +--debts
+|  |  |  +--reminders
+|  |  |  |  \--route.ts
+|  |  |  +--[id]
+|  |  |  \--route.ts
+|  |  +--equipment
+|  |  |  +--[id]
+|  |  |  \--route.ts
+|  |  +--fields
+|  |  |  +--[id]
+|  |  |  \--route.ts
+|  |  +--inventory
+|  |  |  +--categories
+|  |  |  |  \--route.ts
+|  |  |  +--reports
+|  |  |  |  \--route.ts
+|  |  |  +--update-category
+|  |  |  |  \--route.ts
+|  |  |  +--[id]
+|  |  |  \--route.ts
+|  |  +--irrigation
+|  |  |  +--stats
+|  |  |  |  \--route.ts
+|  |  |  +--[id]
+|  |  |  \--route.ts
+|  |  +--irrigation-logs
+|  |  |  \--route.ts
+|  |  +--notifications
+|  |  |  +--mark-all-read
+|  |  |  |  \--route.ts
+|  |  |  +--summary
+|  |  |  |  \--route.ts
+|  |  |  +--[id]
+|  |  |  \--route.ts
+|  |  +--payments
+|  |  |  \--route.ts
+|  |  +--processes
+|  |  |  +--[id]
+|  |  |  \--route.ts
+|  |  +--purchase-templates
+|  |  |  \--route.ts
+|  |  +--purchases
+|  |  |  +--[id]
+|  |  |  \--route.ts
+|  |  +--seasons
+|  |  |  +--[id]
+|  |  |  \--route.ts
+|  |  +--session
+|  |  |  \--route.ts
+|  |  +--users
+|  |  |  +--owners
+|  |  |  |  \--route.ts
+|  |  |  +--[id]
+|  |  |  \--route.ts
+|  |  +--webhooks
+|  |  |  \--notifications
+|  |  |     \--route.ts
+|  |  \--wells
+|  |     +--[id]
+|  |     \--route.ts
+|  +--auth
+|  |  +--layout.tsx
+|  |  \--page.tsx
+|  +--dashboard
+|  |  +--admin
+|  |  |  +--users
+|  |  |  |  \--page.tsx
+|  |  |  +--loading.tsx
+|  |  |  \--page.tsx
+|  |  +--dashboard
+|  |  |  +--inventory
+|  |  |  |  +--new
+|  |  |  |  |  \--page.tsx
+|  |  |  |  \--page.tsx
+|  |  |  +--purchases
+|  |  |  |  \--page.tsx
+|  |  |  +--layout.tsx
+|  |  |  \--page.tsx
+|  |  +--notifications
+|  |  |  \--page.tsx
+|  |  +--owner
+|  |  |  +--debts
+|  |  |  |  +--new
+|  |  |  |  |  \--page.tsx
+|  |  |  |  +--pay
+|  |  |  |  |  \--[id]
+|  |  |  |  +--reminders
+|  |  |  |  |  \--page.tsx
+|  |  |  |  +--[id]
+|  |  |  |  \--page.tsx
+|  |  |  +--equipment
+|  |  |  |  +--new
+|  |  |  |  |  \--page.tsx
+|  |  |  |  +--[id]
+|  |  |  |  \--page.tsx
+|  |  |  +--fields
+|  |  |  |  +--new
+|  |  |  |  |  \--page.tsx
+|  |  |  |  +--[id]
+|  |  |  |  \--page.tsx
+|  |  |  +--inventory
+|  |  |  |  +--new
+|  |  |  |  |  \--page.tsx
+|  |  |  |  +--reports
+|  |  |  |  |  \--page.tsx
+|  |  |  |  +--[id]
+|  |  |  |  \--page.tsx
+|  |  |  +--irrigation
+|  |  |  |  +--new
+|  |  |  |  |  \--page.tsx
+|  |  |  |  +--stats
+|  |  |  |  |  \--page.tsx
+|  |  |  |  +--[id]
+|  |  |  |  \--page.tsx
+|  |  |  +--notifications
+|  |  |  |  \--page.tsx
+|  |  |  +--processes
+|  |  |  |  +--new
+|  |  |  |  |  \--page.tsx
+|  |  |  |  +--[id]
+|  |  |  |  \--page.tsx
+|  |  |  +--purchases
+|  |  |  |  +--new
+|  |  |  |  |  \--page.tsx
+|  |  |  |  +--templates
+|  |  |  |  |  +--new
+|  |  |  |  |  |  \--page.tsx
+|  |  |  |  |  \--page.tsx
+|  |  |  |  +--[id]
+|  |  |  |  \--page.tsx
+|  |  |  +--seasons
+|  |  |  |  +--new
+|  |  |  |  |  \--page.tsx
+|  |  |  |  +--[id]
+|  |  |  |  \--page.tsx
+|  |  |  +--wells
+|  |  |  |  +--new
+|  |  |  |  |  \--page.tsx
+|  |  |  |  +--[id]
+|  |  |  |  \--page.tsx
+|  |  |  +--loading.tsx
+|  |  |  \--page.tsx
+|  |  +--worker
+|  |  |  +--loading.tsx
+|  |  |  \--page.tsx
+|  |  +--DashboardLayoutClient.tsx
+|  |  \--layout.tsx
+|  +--login
+|  |  \--page.tsx
+|  +--protected
+|  |  \--layout.tsx
+|  +--test-auth
+|  |  \--page.tsx
+|  +--favicon.ico
+|  +--globals.css
+|  +--layout.tsx
+|  \--page.tsx
++--components
+|  +--billing
+|  |  +--billing-period-form.tsx
+|  |  \--well-bill-form.tsx
+|  +--dashboard
+|  |  +--dashboard-stats.tsx
+|  |  +--overview.tsx
+|  |  +--recent-activity.tsx
+|  |  +--recent-sales.tsx
+|  |  \--weather-widget.tsx
+|  +--debts
+|  |  +--debt-form.tsx
+|  |  +--debt-list.tsx
+|  |  +--debt-payment-form.tsx
+|  |  \--debt-reminder.tsx
+|  +--equipment
+|  |  +--equipment-form.tsx
+|  |  \--equipment-table.tsx
+|  +--fields
+|  |  +--field-form.tsx
+|  |  +--field-ownership-form.tsx
+|  |  +--fields-list.tsx
+|  |  +--new-field-form.tsx
+|  |  \--processing-form.tsx
+|  +--inventory
+|  |  +--inventory-actions.tsx
+|  |  +--inventory-category-update.tsx
+|  |  +--inventory-form.tsx
+|  |  +--inventory-report.tsx
+|  |  +--inventory-selector.tsx
+|  |  +--inventory-table-skeleton.tsx
+|  |  +--inventory-table.tsx
+|  |  \--new-inventory-form.tsx
+|  +--irrigation
+|  |  +--irrigation-form.tsx
+|  |  +--irrigation-list-skeleton.tsx
+|  |  +--irrigation-list.tsx
+|  |  \--irrigation-stats.tsx
+|  +--notifications
+|  |  +--notification-dropdown.tsx
+|  |  \--notification-list.tsx
+|  +--payments
+|  |  \--payment-form.tsx
+|  +--processes
+|  |  +--process-actions.tsx
+|  |  +--process-details.tsx
+|  |  +--process-form.tsx
+|  |  \--process-table.tsx
+|  +--purchases
+|  |  +--edit-purchase-form.tsx
+|  |  +--enhanced-purchase-form.tsx
+|  |  +--new-purchase-form.tsx
+|  |  +--purchase-actions.tsx
+|  |  +--purchase-approval.tsx
+|  |  +--purchase-details.tsx
+|  |  +--purchase-template-list.tsx
+|  |  +--purchases-table-skeleton.tsx
+|  |  \--purchases-table.tsx
+|  +--seasons
+|  |  +--season-form.tsx
+|  |  \--season-list.tsx
+|  +--ui
+|  |  +--accordion.tsx
+|  |  +--alert-dialog.tsx
+|  |  +--alert.tsx
+|  |  +--aspect-ratio.tsx
+|  |  +--avatar.tsx
+|  |  +--badge.tsx
+|  |  +--breadcrumb.tsx
+|  |  +--button.tsx
+|  |  +--calendar.tsx
+|  |  +--card.tsx
+|  |  +--carousel.tsx
+|  |  +--chart.tsx
+|  |  +--checkbox.tsx
+|  |  +--collapsible.tsx
+|  |  +--command.tsx
+|  |  +--context-menu.tsx
+|  |  +--dialog.tsx
+|  |  +--drawer.tsx
+|  |  +--dropdown-menu.tsx
+|  |  +--form.tsx
+|  |  +--hover-card.tsx
+|  |  +--input-otp.tsx
+|  |  +--input.tsx
+|  |  +--label.tsx
+|  |  +--menubar.tsx
+|  |  +--multi-select.tsx
+|  |  +--navigation-menu.tsx
+|  |  +--pagination.tsx
+|  |  +--popover.tsx
+|  |  +--progress.tsx
+|  |  +--radio-group.tsx
+|  |  +--resizable.tsx
+|  |  +--scroll-area.tsx
+|  |  +--select.tsx
+|  |  +--separator.tsx
+|  |  +--sheet.tsx
+|  |  +--sidebar.tsx
+|  |  +--skeleton.tsx
+|  |  +--slider.tsx
+|  |  +--sonner.tsx
+|  |  +--switch.tsx
+|  |  +--table.tsx
+|  |  +--tabs.tsx
+|  |  +--textarea.tsx
+|  |  +--toast.tsx
+|  |  +--toaster.tsx
+|  |  +--toggle-group.tsx
+|  |  +--toggle.tsx
+|  |  +--tooltip.tsx
+|  |  +--use-mobile.tsx
+|  |  \--use-toast.ts
+|  +--users
+|  |  +--add-user-dialog.tsx
+|  |  +--delete-user-dialog.tsx
+|  |  +--edit-user-dialog.tsx
+|  |  +--user-management.tsx
+|  |  \--user-table.tsx
+|  +--wells
+|  |  +--well-form.tsx
+|  |  \--well-list.tsx
+|  +--admin-activity-chart.tsx
+|  +--admin-overview-stats.tsx
+|  +--admin-recent-users.tsx
+|  +--app-sidebar.tsx
+|  +--auth-provider.tsx
+|  +--dashboard-header.tsx
+|  +--dashboard-layout.tsx
+|  +--dashboard-nav.tsx
+|  +--date-range-picker.tsx
+|  +--fields-list.tsx
+|  +--login-form.tsx
+|  +--main-sidebar.tsx
+|  +--mobile-nav.tsx
+|  +--owner-irrigation-chart.tsx
+|  +--owner-overview-stats.tsx
+|  +--owner-recent-fields.tsx
+|  +--protected-page.tsx
+|  +--session-provider.tsx
+|  +--sidebar.tsx
+|  +--theme-provider.tsx
+|  +--theme-toggle.tsx
+|  +--user-nav.tsx
+|  +--user-table.tsx
+|  +--worker-fields-list.tsx
+|  +--worker-overview-stats.tsx
+|  +--worker-recent-tasks.tsx
+|  \--worker-tasks-chart.tsx
++--hooks
+|  +--use-mobile.tsx
+|  \--use-toast.ts
++--lib
+|  +--jwt.ts
+|  +--notification-service.ts
+|  +--prisma.ts
+|  +--prismaClientExtension.ts
+|  +--prismaMiddleware.ts
+|  +--session.ts
+|  \--utils.ts
++--prisma
+|  +--schema.prisma
+|  +--seed.ts
+|  \--tsconfig.prisma.json
++--public
+|  +--file.svg
+|  +--globe.svg
+|  +--next.svg
+|  +--placeholder-logo.png
+|  +--placeholder-logo.svg
+|  +--placeholder-user.jpg
+|  +--placeholder.jpg
+|  +--placeholder.svg
+|  +--vercel.svg
+|  \--window.svg
++--scripts
+|  \--createProjectStructure.js
++--types
+|  +--billing-types.ts
+|  +--next-auth.d.ts
+|  +--notification-types.ts
+|  +--prisma-types.ts
+|  \--user-form-data.ts
++--.env
++--.eslintrc.json
++--.gitignore
++--components.json
++--eslint.config.mjs
++--generate_tree.ps1
++--middleware.ts
++--next-env.d.ts
++--next.config.mjs
++--next.config.ts
++--package-lock.json
++--package.json
++--postcss.config.mjs
++--project_structure.txt
++--project_structure_new.txt
++--README.md
++--tailwind.config.ts
++--tsconfig.json
++--vercel.json
+\--__.env.local
