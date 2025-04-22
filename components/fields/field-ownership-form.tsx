@@ -133,6 +133,9 @@ export function FieldOwnershipForm({
     0
   );
 
+  // Kayan nokta hatalarını tolere etmek için küçük bir epsilon değeri
+  const epsilon = 0.01;
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -215,10 +218,10 @@ export function FieldOwnershipForm({
             <div className="flex justify-between items-center pt-2 border-t">
               <span className="font-medium">Toplam:</span>
               <span
-                className={`font-bold ${totalPercentage !== 100 ? "text-destructive" : ""}`}
+                className={`font-bold ${Math.abs(totalPercentage - 100) > epsilon ? "text-destructive" : ""}`}
               >
-                {totalPercentage}%
-                {totalPercentage !== 100 && (
+                {totalPercentage.toFixed(1)}%
+                {Math.abs(totalPercentage - 100) > epsilon && (
                   <span className="ml-2 text-xs">
                     {totalPercentage < 100 ? "(Eksik)" : "(Fazla)"}
                   </span>

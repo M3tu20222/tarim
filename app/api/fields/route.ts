@@ -194,7 +194,7 @@ export async function POST(request: Request) {
       soilType,
       notes,
       seasonId,
-      wellId,
+      wellIds, // wellIds dizisi olarak değiştirildi
       ownerships,
     } = await request.json();
 
@@ -226,7 +226,9 @@ export async function POST(request: Request) {
       (sum: number, o: any) => sum + o.percentage,
       0
     );
-    if (totalPercentage !== 100) {
+    // Kayan nokta hatalarını tolere etmek için küçük bir epsilon değeri
+    const epsilon = 0.01;
+    if (Math.abs(totalPercentage - 100) > epsilon) {
       return NextResponse.json(
         { error: "Sahiplik yüzdeleri toplamı %100 olmalıdır" },
         { status: 400 }
@@ -263,21 +265,17 @@ export async function POST(request: Request) {
             user: {
               connect: { id: ownership.userId },
             },
-            percentage: ownership.percentage, // Sahiplik yüzdesini ekle
+            percentage: ownership.percentage,
           })),
         },
+        // FieldWell kayıtları burada oluşturulacak
+        fieldWells: wellIds && wellIds.length > 0 ? {
+          create: wellIds.map((id: string) => ({
+            well: { connect: { id: id } },
+          })),
+        } : undefined,
       },
     });
-
-    // Kuyu bağlantısı varsa FieldWell kaydı oluştur
-    if (wellId) {
-      await prisma.fieldWell.create({
-        data: {
-          field: { connect: { id: field.id } },
-          well: { connect: { id: wellId } },
-        },
-      });
-    }
 
     return NextResponse.json(field);
   } catch (error) {

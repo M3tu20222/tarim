@@ -183,7 +183,9 @@ export function NewFieldForm({ initialData }: NewFieldFormProps = {}) {
       (sum, o) => sum + o.percentage,
       0
     );
-    if (totalPercentage !== 100) {
+    // Kayan nokta hatalarını tolere etmek için küçük bir epsilon değeri
+    const epsilon = 0.01;
+    if (Math.abs(totalPercentage - 100) > epsilon) {
       toast({
         title: "Hata!",
         description: "Sahiplik yüzdeleri toplamı %100 olmalıdır.",

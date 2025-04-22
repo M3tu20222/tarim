@@ -1,110 +1,95 @@
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import type { ProcessType, Role } from "@prisma/client"; // UserRole yerine Role import edildi
-import { getServerSideSession } from "@/lib/session"; // getServerSideSession import edildi
+import { cookies } from "next/headers";
+import { verifyToken } from "@/lib/jwt";
+import type { ProcessType, Role } from "@prisma/client";
 
 // Belirli bir işlemi getir
 export async function GET(
-  request: Request,
-  context: { params: { id: string } } // context objesi olarak al
+  request: NextRequest,
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = await context.params; // id'yi destruct et
-    // Middleware yerine doğrudan session'dan kullanıcı bilgilerini al
-    const session = await getServerSideSession();
+    // Token kontrolü
+    const cookieStore = await cookies(); // Await cookies()
+    const token = cookieStore.get("token")?.value;
 
-    if (!session || !session.id || !session.role) {
-      console.log("API isteği oturum bulunamadı:", request.url);
+    // Access params *after* the first await
+    const processId = params.id;
+
+    // Özel durum: unread-count için farklı endpoint kullanılmalı
+    if (processId === "unread-count") { // Use processId variable
       return NextResponse.json(
-        { error: "Kimlik doğrulama gerekli (API)" },
+        {
+          error: "Geçersiz endpoint. /api/notifications/unread-count kullanın",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Token kontrolü (zaten yukarıda yapıldı, bu blok kaldırılacak)
+    // const cookieStore = await cookies(); // Await cookies()
+    // const token = cookieStore.get("token")?.value; // Bu satır da kaldırılacak
+
+    if (!token) { // Yukarıdaki token değişkeni kullanılacak
+      console.error("Token bulunamadı:", request.url);
+      return NextResponse.json(
+        { error: "Kimlik doğrulama gerekli" },
         { status: 401 }
       );
     }
-    const userId = session.id;
-    const userRole = session.role as Role; // Rolü Role olarak cast et
 
-    console.log(`API isteği (/api/processes/[id]): Kullanıcı ID: ${userId}, Rol: ${userRole}`);
+    let decoded;
+    try {
+      decoded = await verifyToken(token);
+    } catch (error) {
+      console.error("Token doğrulama hatası:", error);
+      return NextResponse.json(
+        { error: "Geçersiz veya süresi dolmuş token" },
+        { status: 401 }
+      );
+    }
 
-    const process = await prisma.process.findUnique({
-      where: { id: id }, // Destruct edilen id'yi kullan
+    const userId = decoded.id;
+    const userRole = decoded.role as Role;
+
+    console.log(
+      `API isteği (/api/processes/${processId}): Kullanıcı ID: ${userId}, Rol: ${userRole}` // Use processId variable
+    );
+
+    // Rol bazlı erişim kontrolü
+    const whereClause: any = { id: processId }; // Use processId variable
+
+    if (userRole === "WORKER") {
+      // İşçi sadece kendisine atanmış işlemleri görebilir
+      whereClause.workerId = userId;
+    } else if (userRole !== "ADMIN" && userRole !== "OWNER") {
+      // Diğer roller yetkisiz
+      return NextResponse.json({ error: "Yetkisiz erişim" }, { status: 403 });
+    }
+
+    const process = await prisma.process.findFirst({
+      where: whereClause,
       include: {
-        field: {
-          include: {
-            owners: {
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-        worker: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-        season: true,
+        field: { select: { id: true, name: true, size: true } },
+        worker: { select: { id: true, name: true } },
+        season: { select: { id: true, name: true } },
         equipmentUsages: {
           include: {
-            equipment: true,
+            equipment: { select: { id: true, name: true } },
           },
         },
         inventoryUsages: {
           include: {
-            inventory: true,
+            inventory: { select: { id: true, name: true, unit: true } },
           },
         },
-        processCosts: {
-          include: {
-            fieldExpenses: true,
-            ownerExpenses: {
-              include: {
-                fieldOwnership: {
-                  include: {
-                    user: {
-                      select: {
-                        id: true,
-                        name: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
+        processCosts: true,
       },
     });
 
     if (!process) {
       return NextResponse.json({ error: "İşlem bulunamadı" }, { status: 404 });
-    }
-
-    // Yetki kontrolü
-    if (userRole === "WORKER" && process.workerId !== userId) {
-      return NextResponse.json(
-        { error: "Bu işlemi görüntüleme yetkiniz yok" },
-        { status: 403 }
-      );
-    }
-
-    if (
-      userRole === "OWNER" &&
-      process.workerId !== userId &&
-      // process.field null ise veya sahip değilse yetki yok
-      !(process.field && process.field.owners.some((owner) => owner.userId === userId))
-    ) {
-      return NextResponse.json(
-        { error: "Bu işlemi görüntüleme yetkiniz yok" },
-        { status: 403 }
-      );
     }
 
     return NextResponse.json(process);
@@ -119,79 +104,241 @@ export async function GET(
 
 // İşlemi güncelle
 export async function PUT(
-  request: Request,
-  context: { params: { id: string } } // context objesi olarak al
+  request: NextRequest,
+  { params }: { params: { id: string } }
 ) {
-  try {
-    const { id } = context.params; // id'yi destruct et
-    // Middleware yerine doğrudan session'dan kullanıcı bilgilerini al
-    const session = await getServerSideSession();
+  const processId = params.id; // Extract id from params at the beginning
 
-    if (!session || !session.id || !session.role) {
+  try {
+    // Token kontrolü
+    const cookieStore = await cookies(); // Await cookies()
+    const tokenCookie = cookieStore.get("token"); // Get the cookie object
+    const token = tokenCookie?.value; // Extract the value
+
+    if (!token) {
       return NextResponse.json(
         { error: "Kimlik doğrulama gerekli" },
         { status: 401 }
       );
     }
-    const userId = session.id;
-    const userRole = session.role as Role;
 
-    // Sadece admin, sahip ve işlemi yapan işçi güncelleyebilir
-    const process = await prisma.process.findUnique({
-      where: { id: id }, // Destruct edilen id'yi kullan
+    let decoded;
+    try {
+      decoded = await verifyToken(token);
+    } catch (error) {
+      return NextResponse.json(
+        { error: "Geçersiz veya süresi dolmuş token" },
+        { status: 401 }
+      );
+    }
+
+    const userId = decoded.id;
+    const userRole = decoded.role as Role;
+
+    // İşlemi bul
+    const existingProcess = await prisma.process.findUnique({
+      where: { id: processId }, // Use processId variable
       include: {
-        field: {
-          include: {
-            owners: true,
-          },
-        },
+        field: { select: { id: true } },
       },
     });
 
-    if (!process) {
+    if (!existingProcess) {
       return NextResponse.json({ error: "İşlem bulunamadı" }, { status: 404 });
     }
 
-    // Yetki kontrolü: Admin, işlemi yapan işçi veya tarlanın sahibi
-    const isOwner = process.field?.owners.some(owner => owner.userId === userId);
-    if (userRole !== 'ADMIN' && process.workerId !== userId && !(userRole === 'OWNER' && isOwner)) {
-       return NextResponse.json(
+    // Yetki kontrolü
+    let canUpdate = false;
+    if (userRole === "ADMIN") {
+      canUpdate = true;
+    } else if (userRole === "OWNER" && existingProcess.fieldId) { // Check if fieldId exists
+      // Tarla sahibi kontrolü
+      const fieldOwnership = await prisma.fieldOwnership.findFirst({
+        where: {
+          fieldId: existingProcess.fieldId, // Use checked fieldId
+          userId: userId,
+        },
+      });
+      if (fieldOwnership) {
+        canUpdate = true;
+      }
+    } else if (userRole === "WORKER" && existingProcess.workerId === userId) {
+      // İşçi kendi işlemini güncelleyebilir
+      canUpdate = true;
+    }
+
+    if (!canUpdate) {
+      return NextResponse.json(
         { error: "Bu işlemi güncelleme yetkiniz yok" },
         { status: 403 }
       );
     }
 
+    // İstek gövdesini al
+    const body = await request.json();
+    const {
+      fieldId,
+      workerId,
+      seasonId,
+      type,
+      date,
+      description,
+      processedArea,
+      processedPercentage,
+      equipmentUsages,
+      inventoryUsages,
+    } = body;
 
-    const { type, date, description, fieldId, workerId, seasonId, processedArea, processedPercentage, equipmentUsages, inventoryUsages } = await request.json();
-
-    // Veri doğrulama (Temel)
-    if (!type || !date || !fieldId || !workerId || !seasonId || processedArea == null || processedPercentage == null) {
+    // Veri doğrulama
+    if (!fieldId || !workerId || !type || !date) {
       return NextResponse.json(
-        { error: "Gerekli alanlar eksik" },
+        {
+          error:
+            "Gerekli alanlar eksik: fieldId, workerId, type, date zorunludur.",
+        },
         { status: 400 }
       );
     }
 
-    // TODO: Daha detaylı veri doğrulama eklenebilir (örn. tarih formatı, sayısal değerler)
-    // TODO: equipmentUsages ve inventoryUsages yapılarının doğrulanması
+    // Transaction başlat
+    const updatedProcess = await prisma.$transaction(async (tx) => {
+      // 1. Ana işlem kaydını güncelle
+      const updated = await tx.process.update({
+        where: { id: processId }, // Use processId variable
+        data: {
+          fieldId,
+          workerId,
+          seasonId,
+          type: type as ProcessType,
+          date: new Date(date),
+          description,
+          processedArea: processedArea
+            ? Number.parseFloat(processedArea)
+            : undefined,
+          processedPercentage: processedPercentage
+            ? Number.parseInt(processedPercentage, 10)
+            : undefined,
+        },
+      });
 
-    // İşlemi güncelle
-    const updatedProcess = await prisma.process.update({
-      where: { id: id }, // Destruct edilen id'yi kullan
-      data: {
-        type: type as ProcessType,
-        date: new Date(date),
-        description,
-        fieldId,
-        workerId,
-        seasonId,
-        processedArea,
-        processedPercentage,
-        // TODO: equipmentUsages ve inventoryUsages güncelleme mantığı eklenecek
-      },
+      // 2. Ekipman kullanımlarını güncelle (varsa)
+      if (equipmentUsages && equipmentUsages.length > 0) {
+        // Önce mevcut kullanımları sil
+        await tx.equipmentUsage.deleteMany({
+          where: { processId: processId }, // Use processId variable
+        });
+
+        // Sonra yenilerini ekle
+        await tx.equipmentUsage.createMany({
+          data: equipmentUsages.map((usage: any) => ({
+            processId: processId, // Use processId variable
+            equipmentId: usage.equipmentId,
+            usageDuration: usage.usageDuration
+              ? Number.parseFloat(usage.usageDuration)
+              : null,
+            cost: Number.parseFloat(usage.cost),
+          })),
+        });
+      }
+
+      // 3. Envanter kullanımlarını güncelle (varsa)
+      if (inventoryUsages && inventoryUsages.length > 0) {
+        // Mevcut kullanımları al
+        const existingUsages = await tx.inventoryUsage.findMany({
+          where: { processId: processId }, // Use processId variable
+        });
+
+        // Mevcut kullanımları sil
+        await tx.inventoryUsage.deleteMany({
+          where: { processId: processId }, // Use processId variable
+        });
+
+        // Silinen kullanımlar için envanter stoklarını geri ekle
+        for (const usage of existingUsages) {
+          // Use usedQuantity instead of quantityUsed
+          const quantityToIncrement = Number(usage.usedQuantity);
+          if (!isNaN(quantityToIncrement) && quantityToIncrement > 0) {
+            await tx.inventory.update({
+              where: { id: usage.inventoryId },
+              data: {
+                totalQuantity: {
+                  increment: quantityToIncrement,
+                },
+              },
+            });
+          } else {
+             console.warn(`Skipping inventory update for usage ${usage.id} due to invalid quantity: ${usage.usedQuantity}`);
+          }
+        }
+
+        // Yeni kullanımları ekle
+        await tx.inventoryUsage.createMany({
+          data: inventoryUsages.map((usage: any) => ({
+            processId: processId, // Use processId variable
+            inventoryId: usage.inventoryId,
+            quantityUsed: Number.parseFloat(usage.quantityUsed),
+            cost: Number.parseFloat(usage.cost),
+          })),
+        });
+
+        // Yeni kullanımlar için envanter stoklarını azalt
+        for (const usage of inventoryUsages) {
+          await tx.inventory.update({
+            where: { id: usage.inventoryId },
+            data: {
+              totalQuantity: {
+                decrement: Number.parseFloat(usage.quantityUsed),
+              },
+            },
+          });
+        }
+      }
+
+      // 4. İşlem maliyetlerini güncelle
+      const totalEquipmentCost =
+        equipmentUsages?.reduce(
+          (sum: number, usage: any) => sum + Number.parseFloat(usage.cost || 0),
+          0
+        ) || 0;
+      const totalInventoryCost =
+        inventoryUsages?.reduce(
+          (sum: number, usage: any) => sum + Number.parseFloat(usage.cost || 0),
+          0
+        ) || 0;
+      const totalDirectCost = totalEquipmentCost + totalInventoryCost;
+
+      // Mevcut maliyet kaydını bul
+      const existingCost = await tx.processCost.findFirst({
+        where: { processId: processId }, // Use processId variable
+      });
+
+      if (existingCost) {
+        // Mevcut kaydı güncelle
+        await tx.processCost.update({
+          where: { id: existingCost.id },
+          data: {
+            totalCost: totalDirectCost,
+            equipmentCost: totalEquipmentCost,
+            inventoryCost: totalInventoryCost,
+          },
+        });
+      } else if (totalDirectCost > 0) {
+        // Yeni kayıt oluştur
+        await tx.processCost.create({
+          data: {
+            processId: processId, // Use processId variable
+            totalCost: totalDirectCost,
+            equipmentCost: totalEquipmentCost,
+            inventoryCost: totalInventoryCost,
+            laborCost: 0,
+            fuelCost: 0,
+            fieldId: fieldId,
+          },
+        });
+      }
+
+      return updated;
     });
-
-    // TODO: İlişkili equipmentUsages ve inventoryUsages kayıtlarını güncelle/sil/ekle
 
     return NextResponse.json(updatedProcess);
   } catch (error) {
@@ -205,92 +352,146 @@ export async function PUT(
 
 // İşlemi sil
 export async function DELETE(
-  request: Request,
-  context: { params: { id: string } } // context objesi olarak al
+  request: NextRequest,
+  { params }: { params: { id: string } } // Destructure params object
 ) {
-  try {
-    const { id } = context.params; // id'yi destruct et
-    // Middleware yerine doğrudan session'dan kullanıcı bilgilerini al
-    const session = await getServerSideSession();
+  const processId = params.id; // Get id from params object
 
-    if (!session || !session.id || !session.role) {
+  try {
+    // Token kontrolü
+    const cookieStore = await cookies(); // Await cookies()
+    const token = cookieStore.get("token")?.value;
+
+    if (!token) {
       return NextResponse.json(
         { error: "Kimlik doğrulama gerekli" },
         { status: 401 }
       );
     }
-    const userId = session.id;
-    const userRole = session.role as Role;
 
+    let decoded;
+    try {
+      decoded = await verifyToken(token);
+    } catch (error) {
+      return NextResponse.json(
+        { error: "Geçersiz veya süresi dolmuş token" },
+        { status: 401 }
+      );
+    }
 
-    // İşlemi kontrol et ve sahibini al
-    const process = await prisma.process.findUnique({
-      where: { id: id }, // Destruct edilen id'yi kullan
+    const userId = decoded.id;
+    const userRole = decoded.role as Role;
+
+    // İşlemi bul
+    const existingProcess = await prisma.process.findUnique({
+      where: { id: processId }, // Use processId variable
       include: {
-        processCosts: true,
-        field: {
-          include: {
-            owners: true,
-          },
-        },
+        field: { select: { id: true } },
+        inventoryUsages: true,
       },
     });
 
-    if (!process) {
+    if (!existingProcess) {
       return NextResponse.json({ error: "İşlem bulunamadı" }, { status: 404 });
     }
 
-    // Yetki kontrolü: Admin veya tarlanın sahibi
-    const isOwner = process.field?.owners.some(owner => owner.userId === userId);
-    if (userRole !== 'ADMIN' && !(userRole === 'OWNER' && isOwner)) {
-       return NextResponse.json(
+    // Yetki kontrolü
+    let canDelete = false;
+    if (userRole === "ADMIN") {
+      canDelete = true;
+    } else if (userRole === "OWNER" && existingProcess.fieldId) { // Check if fieldId exists
+      // Tarla sahibi kontrolü
+      const fieldOwnership = await prisma.fieldOwnership.findFirst({
+        where: {
+          fieldId: existingProcess.fieldId, // Use checked fieldId
+          userId: userId,
+        },
+      });
+      if (fieldOwnership) {
+        canDelete = true;
+      }
+    }
+
+    if (!canDelete) {
+      return NextResponse.json(
         { error: "Bu işlemi silme yetkiniz yok" },
         { status: 403 }
       );
     }
 
-
-    // Transaction ile ilişkili kayıtları sil
+    // Transaction başlat (zaman aşımı süresini artırarak)
     await prisma.$transaction(async (tx) => {
-      // 1. Tarla sahibi giderlerini sil
-      if (process.processCosts.length > 0) {
-        const costIds = process.processCosts.map(cost => cost.id);
-        await tx.fieldOwnerExpense.deleteMany({
-          where: { processCostId: { in: costIds } },
-        });
-        // 2. Tarla giderlerini sil
-        await tx.fieldExpense.deleteMany({
-          where: { processCostId: { in: costIds } },
-        });
-        // 3. İşlem maliyetlerini sil
-        await tx.processCost.deleteMany({
-          where: { processId: id }, // Destruct edilen id'yi kullan
-        });
+      // 1. Envanter kullanımlarını sil ve stokları geri ekle
+      console.log(`Starting inventory update for process: ${processId}`); // Log başlangıcı
+      if (existingProcess.inventoryUsages && Array.isArray(existingProcess.inventoryUsages) && existingProcess.inventoryUsages.length > 0) {
+        console.log(`Found ${existingProcess.inventoryUsages.length} inventory usages to process.`); // Log: Kaç kullanım bulundu
+        for (const usage of existingProcess.inventoryUsages) {
+          console.log(`Processing usage ID: ${usage.id}, Inventory ID: ${usage.inventoryId}, Quantity Used: ${usage.usedQuantity}`); // Log: Mevcut kullanım detayı
+          // Ensure usedQuantity is a valid number before incrementing
+          // Use usedQuantity instead of quantityUsed
+          const quantityToIncrement = Number(usage.usedQuantity);
+          if (!isNaN(quantityToIncrement) && quantityToIncrement > 0) {
+               console.log(`Attempting to increment inventory ${usage.inventoryId} by ${quantityToIncrement}`); // Log: Güncelleme denemesi
+               try {
+                 await tx.inventory.update({
+                    where: { id: usage.inventoryId },
+                    data: {
+                        totalQuantity: {
+                        increment: quantityToIncrement,
+                        },
+                    },
+                 });
+                 console.log(`Successfully incremented inventory ${usage.inventoryId}`); // Log: Başarılı güncelleme
+               } catch (updateError) {
+                 console.error(`Failed to update inventory ${usage.inventoryId}:`, updateError); // Log: Güncelleme hatası
+                 // Transaction'ı geri almak için hatayı tekrar fırlat
+                 throw updateError;
+               }
+          } else {
+              // Use usedQuantity in the warning message
+              console.warn(`Skipping inventory update for usage ${usage.id} due to invalid or zero quantity: ${usage.usedQuantity}`); // Log: Geçersiz miktar
+          }
+        }
+      } else {
+        console.log(`No inventory usages found for process ${processId} to update.`); // Log: Kullanım bulunamadı
       }
 
+      // 2. İlişkili kayıtları sil (Sıralama önemli!)
 
-      // 4. Ekipman kullanımlarını sil
+      // Önce FieldOwnerExpense kayıtlarını sil
+      await tx.fieldOwnerExpense.deleteMany({
+        where: { processCost: { processId: processId } },
+      });
+
+      // Sonra FieldExpense kayıtlarını sil (Yeni Eklendi)
+      await tx.fieldExpense.deleteMany({
+        where: { processCost: { processId: processId } },
+      });
+
+      // Sonra ProcessCost kayıtlarını sil
+      await tx.processCost.deleteMany({
+        where: { processId: processId },
+      });
+
+      // Diğer ilişkili kayıtları sil
       await tx.equipmentUsage.deleteMany({
-        where: { processId: id }, // Destruct edilen id'yi kullan
+        where: { processId: processId }, // Use processId variable
       });
 
-      // 5. Envanter kullanımlarını sil
       await tx.inventoryUsage.deleteMany({
-        where: { processId: id }, // Destruct edilen id'yi kullan
+        where: { processId: processId }, // Use processId variable
       });
 
-      // 6. Bildirimleri sil
-      await tx.notification.deleteMany({
-        where: { processId: id }, // Destruct edilen id'yi kullan
-      });
 
-      // 7. İşlemi sil
+      // 3. Ana işlem kaydını sil
       await tx.process.delete({
-        where: { id: id }, // Destruct edilen id'yi kullan
+        where: { id: processId }, // Use processId variable
       });
+    }, {
+      timeout: 15000 // Zaman aşımını 15 saniyeye çıkar
     });
 
-    return NextResponse.json({ message: "İşlem başarıyla silindi" });
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error deleting process:", error);
     return NextResponse.json(
