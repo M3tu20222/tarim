@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react"; // useMemo import edildi
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -136,8 +136,15 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [selectedField, setSelectedField] = useState<any>(null);
   const [selectedEquipment, setSelectedEquipment] = useState<any>(null);
-  // inventoryItems state'ini initialData ile başlat
-  const [inventoryItems, setInventoryItems] = useState<any[]>(initialData?.inventoryItems || []);
+  // inventoryItems state'ini initialData.inventoryUsages ile başlat (API'den gelen isim)
+  // Gelen verinin formatını { inventoryId: string, quantity: number } varsayıyoruz.
+  // Form state'i { inventoryId: string, quantity: string } beklediği için quantity'yi string'e çevirebiliriz.
+  const [inventoryItems, setInventoryItems] = useState<any[]>(
+    initialData?.inventoryUsages?.map((usage: any) => ({
+      inventoryId: usage.inventoryId || usage.inventory?.id, // API'den gelen olası farklı isimler
+      quantity: String(usage.quantity || 0) // State için string'e çevir
+    })) || []
+  );
   const [fuelAvailabilityError, setFuelAvailabilityError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null); // Genel form hataları için
 
@@ -156,14 +163,18 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
     const fetchData = async () => {
       try {
         const [fieldsRes, workersRes, ownersRes, equipmentRes, seasonsRes] = await Promise.all([
-          fetch("/api/fields"),
+          // Tarla verisini çekerken sahip bilgilerini de iste (InventorySelector için gerekli)
+          fetch("/api/fields?includeOwnerships=true"),
           fetch("/api/users?role=WORKER"),
           fetch("/api/users/owners"),
           fetch("/api/equipment?status=ACTIVE"),
           fetch("/api/seasons?active=true")
         ]);
 
-        if (fieldsRes.ok) setFields(await fieldsRes.json());
+        if (fieldsRes.ok) {
+            const responseData = await fieldsRes.json();
+            setFields(responseData.data || []); // Extract the 'data' array
+        }
         if (workersRes.ok) setWorkers(await workersRes.json());
         if (ownersRes.ok) setOwners(await ownersRes.json());
         if (equipmentRes.ok) setEquipment(await equipmentRes.json());
@@ -197,10 +208,33 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
         date: initialData.date ? new Date(initialData.date) : new Date(),
         // equipmentId null ise 'none' veya boş string olarak ayarla
         equipmentId: initialData.equipmentId || null,
-        // inventoryItems state'i ayrı yönetiliyor, form default'una ekleme
+        // inventoryItems form state'ine doğrudan eklenmiyor, ayrı yönetiliyor.
       });
-      // inventoryItems state'ini de initialData ile güncelle
-      setInventoryItems(initialData.inventoryItems || []);
+      // inventoryItems state'ini initialData.inventoryUsages ile güncelle
+      // console.log("[ProcessForm] Initial Inventory Usages:", initialData?.inventoryUsages); // Log kaldırıldı
+
+      // Sadece mevcut işlem tipiyle ilgili envanter kategorisini filtrele
+      // Not: Bu, yakıt gibi diğer kategorilerin başlangıçta gösterilmemesine neden olur.
+      // Daha iyi bir çözüm, API'nin her usage için kategori döndürmesi olabilir.
+      const currentCategory = getCategoryForProcess(initialData?.type); // initialData'dan tipi al
+      setInventoryItems(
+        initialData.inventoryUsages
+          ?.filter((usage: any) => {
+            // API'den kategori gelmiyorsa, bu filtreleme tam doğru olmayabilir.
+            // Şimdilik, sadece mevcut kategoriye ait olanları göstermeyi deneyelim.
+            // Eğer usage.inventory.category varsa onu kullanmak daha iyi olurdu.
+            // Geçici olarak, sadece mevcut kategori varsa filtrelemeyi aktif edelim.
+            // Bu, yakıt gibi diğer girdilerin görünmemesini sağlar.
+            // TODO: API'yi güncelleyerek usage.inventory.category bilgisini ekle.
+            // Şimdilik, eğer bir kategori belirlenmişse (örn. PESTICIDE),
+            // ve usage'ın inventoryId'si varsa devam et. Bu dolaylı bir kontrol.
+            return currentCategory ? usage.inventoryId : true; // Kategori yoksa hepsini al, varsa sadece ID'si olanları (dolaylı filtre)
+          })
+          .map((usage: any) => ({
+            inventoryId: usage.inventoryId || usage.inventory?.id,
+            quantity: String(usage.usedQuantity || 0)
+          })) || []
+      );
     } else {
       // Yeni form için varsayılan değerler
       form.reset({
@@ -242,9 +276,18 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
     if (!inventoryCategory) {
       setInventoryItems([]);
       // Formdaki inventoryItems alanını da temizle (opsiyonel, validasyon için gerekebilir)
-      // form.setValue('inventoryItems', []);
+   // form.setValue('inventoryItems', []);
     }
   }, [inventoryCategory]);
+
+  // InventorySelector'a gönderilecek ownerIds dizisini memoize et
+  const selectedFieldOwnerIds = useMemo(() => {
+    // selectedField null veya undefined ise veya owners yoksa boş dizi döndür
+    if (!selectedField || !selectedField.owners) {
+      return [];
+    }
+    return selectedField.owners.map((o: any) => o.userId);
+  }, [selectedField]); // Sadece selectedField değiştiğinde yeniden hesapla
 
 
   // Envanter öğesi ekle
@@ -637,8 +680,8 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
                           onSelect={(id) => updateInventoryItem(index, "inventoryId", id)}
                           selectedId={item.inventoryId}
                           category={inventoryCategory} // Dinamik kategori
-                          // Tarla sahiplerinin ID'lerini ownerIds prop'u olarak gönder
-                          ownerIds={selectedField?.owners?.map((o: any) => o.userId) || []}
+                          // Memoize edilmiş sahip ID'lerini gönder
+                          ownerIds={selectedFieldOwnerIds}
                           required={true} // Bu alan zorunlu
                         />
                          {/* Eğer FormField kullanırsak FormMessage buraya gelir */}

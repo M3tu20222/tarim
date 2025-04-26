@@ -3,9 +3,9 @@ import { cookies } from "next/headers";
 import { ThemeProvider } from "@/components/theme-provider";
 // Inter font import removed, using font from root layout
 import "../globals.css";
-import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+// AppSidebar, SidebarProvider, SidebarInset importları kaldırıldı
 import { Toaster } from "@/components/ui/toaster";
+import DashboardLayoutClient from "./DashboardLayoutClient"; // DashboardLayoutClient'ı import et
 
 // inter constant removed
 
@@ -27,6 +27,8 @@ export default async function DashboardLayout({
   // might be intentional for nested theme control, though potentially redundant.
   // If ThemeProvider is only needed once, it should be removed from here.
   // For now, let's keep it but remove the body wrapper.
+  // SidebarProvider, AppSidebar ve SidebarInset kaldırıldı.
+  // DashboardLayoutClient tüm yapıyı yönetecek.
   return (
     <ThemeProvider
       attribute="class"
@@ -34,12 +36,7 @@ export default async function DashboardLayout({
       enableSystem={false} // Consider if this conflicts with root layout's ThemeProvider
       disableTransitionOnChange
     >
-      <SidebarProvider defaultOpen={defaultOpen}>
-        <AppSidebar />
-        <SidebarInset className="bg-background text-foreground">
-          {children}
-        </SidebarInset>
-      </SidebarProvider>
+      <DashboardLayoutClient>{children}</DashboardLayoutClient>
       <Toaster />
     </ThemeProvider>
   );

@@ -1,8 +1,20 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { format } from "date-fns";
+import { tr } from "date-fns/locale";
+import { Edit, Trash2, Eye, Filter, Calendar, Clock } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -11,278 +23,566 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { formatDate } from "@/lib/utils";
-import { Edit, Eye, MoreHorizontal, Trash } from "lucide-react";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { useToast } from "@/components/ui/use-toast";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { toast } from "@/components/ui/use-toast";
+import { cn } from "@/lib/utils";
 
-interface IrrigationLog {
-  id: string;
-  date: string;
-  amount: number;
-  duration: number;
-  method: string;
-  notes?: string;
-  field: {
-    id: string;
-    name: string;
-    location: string;
-  };
-  worker: {
-    id: string;
-    name: string;
-  };
-  createdAt: string;
+interface IrrigationListProps {
+  initialData?: any[];
 }
 
-export function IrrigationList() {
-  const [irrigationLogs, setIrrigationLogs] = useState<IrrigationLog[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const searchParams = useSearchParams();
-  const { toast } = useToast();
+export function IrrigationList({ initialData }: IrrigationListProps) {
+  const router = useRouter();
+  const [irrigationLogs, setIrrigationLogs] = useState<any[]>(
+    initialData || []
+  );
+  const [loading, setLoading] = useState(false);
+  const [wells, setWells] = useState<any[]>([]);
+  const [fields, setFields] = useState<any[]>([]);
+  const [seasons, setSeasons] = useState<any[]>([]);
+  const [filters, setFilters] = useState({
+    wellId: "",
+    fieldId: "",
+    seasonId: "",
+    status: "",
+    startDate: null as Date | null,
+    endDate: null as Date | null,
+  });
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalRecords, setTotalRecords] = useState(0);
 
-  // Sulama kayıtlarını getir
+  // Verileri yükle
   useEffect(() => {
-    const fetchIrrigationLogs = async () => {
-      setLoading(true);
+    const fetchData = async () => {
       try {
-        // URL parametrelerini al
-        const fieldId = searchParams.get("fieldId");
-        const startDate = searchParams.get("startDate");
-        const endDate = searchParams.get("endDate");
-        const method = searchParams.get("method");
+        // Kuyuları getir
+        const wellsResponse = await fetch("/api/wells");
+        const wellsData = await wellsResponse.json();
+        setWells(wellsData.data || []);
 
-        // Query string oluştur
-        let queryString = "";
-        if (fieldId) queryString += `fieldId=${fieldId}&`;
-        if (startDate) queryString += `startDate=${startDate}&`;
-        if (endDate) queryString += `endDate=${endDate}&`;
-        if (method) queryString += `method=${method}&`;
+        // Tarlaları getir
+        const fieldsResponse = await fetch("/api/fields");
+        const fieldsData = await fieldsResponse.json();
+        setFields(fieldsData.data || []);
 
-        // API'den verileri getir
-        const response = await fetch(`/api/irrigation?${queryString}`);
-        if (!response.ok) {
-          throw new Error("Sulama kayıtları getirilemedi");
-        }
-        const data = await response.json();
-        setIrrigationLogs(data);
+        // Sezonları getir
+        const seasonsResponse = await fetch("/api/seasons");
+        const seasonsData = await seasonsResponse.json();
+        setSeasons(seasonsData.data || []);
+
+        // Sulama kayıtlarını getir
+        await fetchIrrigationLogs();
       } catch (error) {
-        console.error("Error fetching irrigation logs:", error);
+        console.error("Veri yükleme hatası:", error);
         toast({
           title: "Hata",
-          description: "Sulama kayıtları yüklenirken bir hata oluştu.",
+          description: "Veriler yüklenirken bir hata oluştu.",
           variant: "destructive",
         });
-      } finally {
-        setLoading(false);
       }
     };
 
+    fetchData();
+  }, []);
+
+  // Filtreleme değiştiğinde verileri yeniden yükle
+  useEffect(() => {
     fetchIrrigationLogs();
-  }, [searchParams, toast]);
+  }, [filters, page]);
+
+  // Sulama kayıtlarını getir
+  const fetchIrrigationLogs = async () => {
+    try {
+      setLoading(true);
+
+      // Filtre parametrelerini oluştur
+      const params = new URLSearchParams();
+      params.append("page", page.toString());
+      params.append("limit", "10");
+
+      if (filters.wellId) params.append("wellId", filters.wellId);
+      if (filters.fieldId) params.append("fieldId", filters.fieldId);
+      if (filters.seasonId) params.append("seasonId", filters.seasonId);
+      if (filters.status) params.append("status", filters.status);
+      if (filters.startDate)
+        params.append("startDate", filters.startDate.toISOString());
+      if (filters.endDate)
+        params.append("endDate", filters.endDate.toISOString());
+
+      // API isteği
+      const response = await fetch(`/api/irrigation?${params.toString()}`);
+
+      if (!response.ok) {
+        throw new Error("Sulama kayıtları getirilemedi.");
+      }
+
+      const data = await response.json();
+      setIrrigationLogs(data.data || []);
+      setTotalPages(data.meta?.pages || 1);
+      setTotalRecords(data.meta?.total || 0);
+    } catch (error) {
+      console.error("Sulama kayıtları yükleme hatası:", error);
+      toast({
+        title: "Hata",
+        description: "Sulama kayıtları yüklenirken bir hata oluştu.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Filtreleri temizle
+  const clearFilters = () => {
+    setFilters({
+      wellId: "",
+      fieldId: "",
+      seasonId: "",
+      status: "",
+      startDate: null,
+      endDate: null,
+    });
+    setPage(1);
+  };
 
   // Sulama kaydını sil
-  const handleDelete = async () => {
-    if (!deleteId) return;
+  const deleteIrrigationLog = async () => {
+    if (!itemToDelete) return;
 
-    setIsDeleting(true);
     try {
-      const response = await fetch(`/api/irrigation/${deleteId}`, {
+      setLoading(true);
+
+      // API isteği
+      const response = await fetch(`/api/irrigation/${itemToDelete}`, {
         method: "DELETE",
       });
 
       if (!response.ok) {
-        throw new Error("Sulama kaydı silinemedi");
+        throw new Error("Sulama kaydı silinemedi.");
       }
 
-      // Başarılı silme işlemi
-      setIrrigationLogs((prev) => prev.filter((log) => log.id !== deleteId));
       toast({
         title: "Başarılı",
         description: "Sulama kaydı başarıyla silindi.",
       });
+
+      // Listeyi güncelle
+      await fetchIrrigationLogs();
     } catch (error) {
-      console.error("Error deleting irrigation log:", error);
+      console.error("Sulama kaydı silme hatası:", error);
       toast({
         title: "Hata",
         description: "Sulama kaydı silinirken bir hata oluştu.",
         variant: "destructive",
       });
     } finally {
-      setIsDeleting(false);
-      setDeleteId(null);
+      setLoading(false);
+      setDeleteDialogOpen(false);
+      setItemToDelete(null);
     }
   };
 
-  // Sulama yöntemine göre badge rengi
-  const getMethodBadgeVariant = (method: string) => {
-    switch (method) {
-      case "DRIP":
-        return "default";
-      case "SPRINKLER":
-        return "secondary";
-      case "FLOOD":
-        return "destructive";
-      case "CENTER_PIVOT":
-        return "outline";
+  // Durum badge'i
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "COMPLETED":
+        return <Badge variant="success">Tamamlandı</Badge>;
+      case "PLANNED":
+        return <Badge variant="warning">Planlandı</Badge>;
+      case "CANCELLED":
+        return <Badge variant="destructive">İptal Edildi</Badge>;
       default:
-        return "default";
+        return <Badge>{status}</Badge>;
     }
   };
-
-  // Sulama yöntemini Türkçe'ye çevir
-  const getMethodTranslation = (method: string) => {
-    switch (method) {
-      case "DRIP":
-        return "Damla Sulama";
-      case "SPRINKLER":
-        return "Yağmurlama";
-      case "FLOOD":
-        return "Salma Sulama";
-      case "CENTER_PIVOT":
-        return "Merkezi Pivot";
-      case "MANUAL":
-        return "Manuel Sulama";
-      case "OTHER":
-        return "Diğer";
-      default:
-        return method;
-    }
-  };
-
-  if (loading) {
-    return <div>Yükleniyor...</div>;
-  }
 
   return (
-    <>
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Tarla</TableHead>
-              <TableHead>Tarih</TableHead>
-              <TableHead>Miktar (L)</TableHead>
-              <TableHead>Süre (dk)</TableHead>
-              <TableHead>Yöntem</TableHead>
-              <TableHead>İşçi</TableHead>
-              <TableHead className="text-right">İşlemler</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {irrigationLogs.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={7}
-                  className="h-24 text-center text-muted-foreground"
-                >
-                  Sulama kaydı bulunamadı.
-                </TableCell>
-              </TableRow>
-            ) : (
-              irrigationLogs.map((log) => (
-                <TableRow key={log.id}>
-                  <TableCell>
-                    <Link
-                      href={`/dashboard/owner/fields/${log.field.id}`}
-                      className="hover:underline"
-                    >
-                      {log.field.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{formatDate(log.date)}</TableCell>
-                  <TableCell>{log.amount}</TableCell>
-                  <TableCell>{log.duration}</TableCell>
-                  <TableCell>
-                    <Badge variant={getMethodBadgeVariant(log.method)}>
-                      {getMethodTranslation(log.method)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{log.worker.name}</TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">Menüyü aç</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>İşlemler</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem asChild>
-                          <Link href={`/dashboard/owner/irrigation/${log.id}`}>
-                            <Eye className="mr-2 h-4 w-4" />
-                            Görüntüle
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link
-                            href={`/dashboard/owner/irrigation/${log.id}/edit`}
-                          >
-                            <Edit className="mr-2 h-4 w-4" />
-                            Düzenle
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => setDeleteId(log.id)}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <Trash className="mr-2 h-4 w-4" />
-                          Sil
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Filtreler</CardTitle>
+          <CardDescription>
+            Sulama kayıtlarını filtrelemek için aşağıdaki seçenekleri kullanın.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="wellId">Kuyu</Label>
+              <Select
+                value={filters.wellId}
+                onValueChange={(value) =>
+                  setFilters({ ...filters, wellId: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Tüm Kuyular" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tüm Kuyular</SelectItem>
+                  {wells.map((well) => (
+                    <SelectItem key={well.id} value={well.id}>
+                      {well.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Emin misiniz?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Bu işlem sulama kaydını kalıcı olarak silecektir. Bu işlem geri
-              alınamaz.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>İptal</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              disabled={isDeleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            <div className="space-y-2">
+              <Label htmlFor="fieldId">Tarla</Label>
+              <Select
+                value={filters.fieldId}
+                onValueChange={(value) =>
+                  setFilters({ ...filters, fieldId: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Tüm Tarlalar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tüm Tarlalar</SelectItem>
+                  {fields.map((field) => (
+                    <SelectItem key={field.id} value={field.id}>
+                      {field.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="seasonId">Sezon</Label>
+              <Select
+                value={filters.seasonId}
+                onValueChange={(value) =>
+                  setFilters({ ...filters, seasonId: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Tüm Sezonlar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tüm Sezonlar</SelectItem>
+                  {seasons.map((season) => (
+                    <SelectItem key={season.id} value={season.id}>
+                      {season.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="status">Durum</Label>
+              <Select
+                value={filters.status}
+                onValueChange={(value) =>
+                  setFilters({ ...filters, status: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Tüm Durumlar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tüm Durumlar</SelectItem>
+                  <SelectItem value="COMPLETED">Tamamlandı</SelectItem>
+                  <SelectItem value="PLANNED">Planlandı</SelectItem>
+                  <SelectItem value="CANCELLED">İptal Edildi</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Başlangıç Tarihi</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !filters.startDate && "text-muted-foreground"
+                    )}
+                  >
+                    <Calendar className="mr-2 h-4 w-4" />
+                    {filters.startDate ? (
+                      format(filters.startDate, "PPP", { locale: tr })
+                    ) : (
+                      <span>Tarih Seçin</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <CalendarComponent
+                    mode="single"
+                    selected={filters.startDate || undefined}
+                    onSelect={(date) =>
+                      setFilters({ ...filters, startDate: date || null }) // undefined ise null ata
+                    }
+                    initialFocus
+                    locale={tr}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Bitiş Tarihi</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !filters.endDate && "text-muted-foreground"
+                    )}
+                  >
+                    <Calendar className="mr-2 h-4 w-4" />
+                    {filters.endDate ? (
+                      format(filters.endDate, "PPP", { locale: tr })
+                    ) : (
+                      <span>Tarih Seçin</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <CalendarComponent
+                    mode="single"
+                    selected={filters.endDate || undefined}
+                    onSelect={(date) =>
+                      setFilters({ ...filters, endDate: date || null }) // undefined ise null ata
+                    }
+                    initialFocus
+                    locale={tr}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+        </CardContent>
+        <CardFooter className="flex justify-between">
+          <Button variant="outline" onClick={clearFilters}>
+            Filtreleri Temizle
+          </Button>
+          <Button onClick={() => fetchIrrigationLogs()}>
+            <Filter className="mr-2 h-4 w-4" />
+            Filtrele
+          </Button>
+        </CardFooter>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle>Sulama Kayıtları</CardTitle>
+              <CardDescription>
+                Toplam {totalRecords} kayıt bulundu. Sayfa {page}/{totalPages}
+              </CardDescription>
+            </div>
+            <Button
+              onClick={() => router.push("/dashboard/owner/irrigation/new")}
             >
-              {isDeleting ? "Siliniyor..." : "Sil"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+              Yeni Sulama Kaydı
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex justify-center items-center h-40">
+              <p>Yükleniyor...</p>
+            </div>
+          ) : irrigationLogs.length === 0 ? (
+            <div className="flex flex-col justify-center items-center h-40">
+              <p className="text-muted-foreground">Kayıt bulunamadı.</p>
+              <Button variant="link" onClick={clearFilters}>
+                Filtreleri temizle
+              </Button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Tarih</TableHead>
+                    <TableHead>Kuyu</TableHead>
+                    <TableHead>Süre</TableHead>
+                    <TableHead>Tarlalar</TableHead>
+                    <TableHead>Durum</TableHead>
+                    <TableHead className="text-right">İşlemler</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {irrigationLogs.map((log) => (
+                    <TableRow key={log.id}>
+                      <TableCell>
+                        <div className="flex items-center">
+                          <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
+                          {format(new Date(log.startDateTime), "dd MMM yyyy", {
+                            locale: tr,
+                          })}
+                          <Clock className="ml-4 mr-2 h-4 w-4 text-muted-foreground" />
+                          {format(new Date(log.startDateTime), "HH:mm", {
+                            locale: tr,
+                          })}
+                        </div>
+                      </TableCell>
+                      <TableCell>{log.well?.name || "-"}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center">
+                          <Clock className="mr-2 h-4 w-4 text-muted-foreground" />
+                          {Math.floor(log.duration / 60)}s {log.duration % 60}dk
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="max-w-xs truncate">
+                          {log.fieldUsages?.map((usage: any) => (
+                            <Badge
+                              key={usage.id}
+                              variant="outline"
+                              className="mr-1 mb-1"
+                            >
+                              {usage.field?.name} (%{usage.percentage})
+                            </Badge>
+                          ))}
+                        </div>
+                      </TableCell>
+                      <TableCell>{getStatusBadge(log.status)}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end space-x-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() =>
+                              router.push(
+                                `/dashboard/owner/irrigation/${log.id}`
+                              )
+                            }
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() =>
+                              router.push(
+                                `/dashboard/owner/irrigation/${log.id}/edit`
+                              )
+                            }
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-red-500"
+                            onClick={() => {
+                              setItemToDelete(log.id);
+                              setDeleteDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {totalPages > 1 && (
+            <div className="flex justify-center mt-4 space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                disabled={page === 1}
+              >
+                Önceki
+              </Button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                (pageNum) => (
+                  <Button
+                    key={pageNum}
+                    variant={pageNum === page ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPage(pageNum)}
+                  >
+                    {pageNum}
+                  </Button>
+                )
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setPage((prev) => Math.min(prev + 1, totalPages))
+                }
+                disabled={page === totalPages}
+              >
+                Sonraki
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Sulama Kaydını Sil</DialogTitle>
+            <DialogDescription>
+              Bu sulama kaydını silmek istediğinizden emin misiniz? Bu işlem
+              geri alınamaz.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteDialogOpen(false);
+                setItemToDelete(null);
+              }}
+            >
+              İptal
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={deleteIrrigationLog}
+              disabled={loading}
+            >
+              {loading ? "Siliniyor..." : "Sil"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

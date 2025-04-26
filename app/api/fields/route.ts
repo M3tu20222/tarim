@@ -1,169 +1,125 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import type { NextRequest } from "next/server";
+import { getServerSideSession } from "@/lib/session";
+import { Prisma } from "@prisma/client";
 
-// Tüm tarlaları getir
-export async function GET(request: Request) {
+// includeOwnerships durumuna bağlı olarak dinamik tip tanımı
+type FieldWithRelations = Prisma.FieldGetPayload<{
+  include: {
+    season: true;
+    fieldWells: { include: { well: true } };
+    owners: boolean extends true
+      ? { include: { user: { select: { id: true; name: true; email: true } } } }
+      : false;
+  };
+}>;
+
+export async function GET(request: NextRequest) {
   try {
-    const userId = request.headers.get("x-user-id");
-    const userRole = request.headers.get("x-user-role");
-
-    if (!userId || !userRole) {
-      return NextResponse.json(
-        { error: "Kullanıcı ID'si veya rolü eksik" },
-        { status: 401 }
-      );
+    const session = await getServerSideSession();
+    if (!session || !session.id) {
+      return NextResponse.json({ error: "Yetkisiz erişim" }, { status: 401 });
     }
 
-    // URL parametrelerini al
     const { searchParams } = new URL(request.url);
-    const activeOnly = searchParams.get("active") === "true";
-    const seasonId = searchParams.get("seasonId");
-    const ownerId = searchParams.get("ownerId");
-    const wellId = searchParams.get("wellId");
-    const processType = searchParams.get("processType");
-    const searchTerm = searchParams.get("search");
+    const limit = searchParams.get("limit")
+      ? Number.parseInt(searchParams.get("limit")!)
+      : 50;
+    const page = searchParams.get("page")
+      ? Number.parseInt(searchParams.get("page")!)
+      : 1;
+    const skip = (page - 1) * limit;
+    const search = searchParams.get("search");
+    const status = searchParams.get("status");
+    const includeOwnerships = searchParams.get("includeOwnerships") === "true";
+    const fetchAll = searchParams.get("fetchAll") === "true";
 
-    // Filtre oluştur
-    const filter: any = {};
-    if (activeOnly) {
-      filter.status = "ACTIVE";
-    }
-    if (seasonId) {
-      filter.seasonId = seasonId;
-    }
-    if (ownerId) {
-      filter.owners = {
-        some: {
-          userId: ownerId,
-        },
-      };
-    }
-    // Güncellendi: Filtreleme fieldWells üzerinden yapılıyor
-    if (wellId) {
-      filter.fieldWells = {
-        some: {
-          wellId: wellId,
-        },
-      };
-    }
-    if (processType) {
-      filter.processingLogs = {
-        some: {
-          processType,
-        },
-      };
-    }
-    if (searchTerm) {
-      filter.OR = [
-        {
-          name: {
-            contains: searchTerm,
-            mode: "insensitive",
-          },
-        },
-        {
-          location: {
-            contains: searchTerm,
-            mode: "insensitive",
-          },
-        },
+    // Filtreleme koşulları
+    const where: any = {};
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: "insensitive" } },
+        { location: { contains: search, mode: "insensitive" } },
       ];
     }
 
-    // Kullanıcı rolüne göre tarlaları getir
-    let fields;
-    if (userRole === "ADMIN" || userRole === "OWNER") {
-      // Admin ve Owner tüm tarlaları görebilir
-      fields = await prisma.field.findMany({
-        where: filter,
-        include: {
-          owners: {
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true,
-                },
-              },
-            },
-          },
-          season: true,
-          // Güncellendi: wells -> fieldWells
-          fieldWells: { 
-            include: {
-              well: true,
-            },
-          },
-          processingLogs: {
-            take: 5,
-            orderBy: {
-              date: "desc",
-            },
-          },
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
-    } else {
-      // Worker sadece kendisine atanmış tarlaları görebilir
-      fields = await prisma.field.findMany({
-        where: {
-          ...filter,
-          OR: [
-            {
-              workerAssignments: {
-                some: {
-                  userId,
-                },
-              },
-            },
-          ],
-        },
-        include: {
-          owners: {
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true,
-                },
-              },
-            },
-          },
-          season: true,
-          // Güncellendi: wells -> fieldWells
-          fieldWells: { 
-            include: {
-              well: true,
-            },
-          },
-          processingLogs: {
-            take: 5,
-            orderBy: {
-              date: "desc",
-            },
-          },
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
+    if (status) {
+      where.status = status;
     }
 
-    return NextResponse.json(fields);
+    // Kullanıcı rolüne göre filtreleme (Sadece fetchAll false ise uygula)
+    if (!fetchAll) {
+      if (session.role === "OWNER") {
+        where.owners = {
+          some: {
+            userId: session.id,
+          },
+        };
+      } else if (session.role === "WORKER") {
+        where.workerAssignments = {
+          some: {
+            userId: session.id,
+          },
+        };
+      }
+    }
+
+    // Toplam kayıt sayısını al
+    const totalCount = await prisma.field.count({ where });
+
+    // Tarlaları getir
+    const fields: FieldWithRelations[] = await prisma.field.findMany({
+      where,
+      include: {
+        season: true,
+        fieldWells: {
+          include: {
+            well: true,
+          },
+        },
+        ...(includeOwnerships
+          ? {
+              owners: {
+                include: {
+                  user: {
+                    select: {
+                      id: true,
+                      name: true,
+                      email: true,
+                    },
+                  },
+                },
+              },
+            }
+          : { owners: false }),
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      skip,
+      take: limit,
+    });
+
+    // Prisma'dan gelen 'fields' dizisi doğrudan kullanılacak.
+    // formattedFields map işlemi kaldırıldı.
+
+    return NextResponse.json({
+      data: fields, // Doğrudan 'fields' dizisini kullan
+      meta: {
+        total: totalCount,
+        page,
+        limit,
+        pages: Math.ceil(totalCount / limit),
+      },
+    });
   } catch (error) {
-    console.error("Error fetching fields:", error);
-    return NextResponse.json(
-      { error: "Tarlalar getirilirken bir hata oluştu" },
-      { status: 500 }
-    );
+    console.error("Tarlaları çekerken hata:", error);
+    return NextResponse.json({ error: "Tarlalar çekilemedi" }, { status: 500 });
   }
 }
 
-// Yeni tarla oluştur
 export async function POST(request: Request) {
   try {
     const userId = request.headers.get("x-user-id");
@@ -194,7 +150,7 @@ export async function POST(request: Request) {
       soilType,
       notes,
       seasonId,
-      wellIds, // wellIds dizisi olarak değiştirildi
+      wellId,
       ownerships,
     } = await request.json();
 
@@ -226,9 +182,7 @@ export async function POST(request: Request) {
       (sum: number, o: any) => sum + o.percentage,
       0
     );
-    // Kayan nokta hatalarını tolere etmek için küçük bir epsilon değeri
-    const epsilon = 0.01;
-    if (Math.abs(totalPercentage - 100) > epsilon) {
+    if (totalPercentage !== 100) {
       return NextResponse.json(
         { error: "Sahiplik yüzdeleri toplamı %100 olmalıdır" },
         { status: 400 }
@@ -268,18 +222,22 @@ export async function POST(request: Request) {
             percentage: ownership.percentage,
           })),
         },
-        // FieldWell kayıtları burada oluşturulacak
-        fieldWells: wellIds && wellIds.length > 0 ? {
-          create: wellIds.map((id: string) => ({
-            well: { connect: { id: id } },
-          })),
-        } : undefined,
       },
     });
 
+    // Kuyu bağlantısı varsa FieldWell kaydı oluştur
+    if (wellId) {
+      await prisma.fieldWell.create({
+        data: {
+          field: { connect: { id: field.id } },
+          well: { connect: { id: wellId } },
+        },
+      });
+    }
+
     return NextResponse.json(field);
   } catch (error) {
-    console.error("Error creating field:", error);
+    console.error("Tarla oluşturulurken hata:", error);
     return NextResponse.json(
       { error: "Tarla oluşturulurken bir hata oluştu" },
       { status: 500 }

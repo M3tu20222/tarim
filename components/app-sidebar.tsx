@@ -17,6 +17,7 @@ import {
   SettingsIcon,
   UserIcon,
   LogOutIcon,
+  WavesIcon, // Sulama ikonu eklendi
 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
@@ -81,6 +82,7 @@ const ownerLinks: LinkItem[] = [
     icon: CreditCard,
     badge: "5",
   },
+  { href: "/dashboard/owner/irrigation", label: "Sulama", icon: WavesIcon }, // Sulama linki eklendi
   { href: "/dashboard/owner/seasons", label: "Sezonlar", icon: Calendar },
   {
     href: "/dashboard/owner/notifications",

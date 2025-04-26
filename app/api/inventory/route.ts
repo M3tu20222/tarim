@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import type { InventoryCategory, InventoryStatus, Unit } from "@prisma/client";
+import { InventoryCategory, InventoryStatus, Unit } from "@prisma/client"; // Import the actual enum
 
 // Tüm envanter öğelerini getir
 export async function GET(request: Request) {
@@ -20,15 +20,34 @@ export async function GET(request: Request) {
     const category = searchParams.get("category");
     const status = searchParams.get("status");
     const showAll = searchParams.get("showAll") === "true";
+    const fetchAll = searchParams.get("fetchAll") === "true"; // fetchAll parametresini ekle
     const userIdsParam = searchParams.get("userIds"); // userIds parametresini al
 
     // Filtre oluştur
     const filter: any = {};
+
+    // Kategori filtresi
     if (category) {
-      filter.category = category;
+      const categories = category
+        .split(',')
+        .map(cat => cat.trim().toUpperCase()) // Trim whitespace and convert to uppercase for case-insensitivity
+        .filter(cat => cat in InventoryCategory); // Filter only valid enum keys
+
+      if (categories.length > 0) {
+        filter.category = {
+          in: categories as InventoryCategory[], // Cast to InventoryCategory array
+        };
+      } else {
+        // Geçersiz kategori(ler) varsa veya hiç geçerli kategori yoksa, boş sonuç döndür
+        // veya isteğe bağlı olarak hatayı yoksayabilirsiniz. Şimdilik boş döndürelim.
+        return NextResponse.json([]);
+      }
     }
+
+    // Durum filtresi (status için de benzer bir enum kontrolü gerekebilir)
     if (status) {
-      filter.status = status;
+      // TODO: status için de enum kontrolü ekle (InventoryStatus enum'u varsa)
+      filter.status = status; // Şimdilik olduğu gibi bırakıldı
     }
 
     // Filtreleme Mantığı Düzeltmesi:
@@ -48,11 +67,11 @@ export async function GET(request: Request) {
         return NextResponse.json([]);
       }
     }
-    // 2. userIds yoksa, showAll=true veya rol ADMIN ise filtre uygulama
-    else if (showAll || userRole === "ADMIN") {
+    // 2. userIds yoksa, (showAll=true VEYA fetchAll=true) veya rol ADMIN ise filtre uygulama
+    else if (showAll || fetchAll || userRole === "ADMIN") { // fetchAll kontrolü eklendi
       // Sahiplik filtresi uygulanmaz, tüm envanter (kategori/status varsa onlara göre filtrelenmiş) gelir.
     }
-    // 3. userIds yoksa, showAll=false ve rol ADMIN değilse, isteği yapan kullanıcıya göre filtrele
+    // 3. userIds yoksa, showAll/fetchAll=false ve rol ADMIN değilse, isteği yapan kullanıcıya göre filtrele
     else {
       filter.ownerships = {
         some: {
@@ -88,7 +107,14 @@ export async function GET(request: Request) {
       },
     });
 
-    return NextResponse.json(inventory);
+    // Map costPrice to unitPrice for frontend compatibility
+    const formattedInventory = inventory.map(item => ({
+      ...item,
+      unitPrice: item.costPrice ?? 0, // Map costPrice to unitPrice, default to 0 if null/undefined
+    }));
+
+
+    return NextResponse.json(formattedInventory); // Return formatted data
   } catch (error) {
     console.error("Error fetching inventory:", error);
     return NextResponse.json(
@@ -130,10 +156,11 @@ export async function POST(request: Request) {
       purchaseDate,
       expiryDate,
       notes,
+      costPrice, // costPrice eklendi
     } = await request.json();
 
     // Veri doğrulama
-    if (!name || !category || totalQuantity === undefined || !unit || !status) {
+    if (!name || !category || totalQuantity === undefined || !unit || !status || costPrice === undefined) { // costPrice kontrolü eklendi
       return NextResponse.json(
         { error: "Gerekli alanlar eksik" },
         { status: 400 }
@@ -150,6 +177,7 @@ export async function POST(request: Request) {
         status: status as InventoryStatus,
         purchaseDate: purchaseDate ? new Date(purchaseDate) : null,
         expiryDate: expiryDate ? new Date(expiryDate) : null,
+        costPrice: Number(costPrice), // costPrice eklendi
         notes,
         ownerships: {
           create: {

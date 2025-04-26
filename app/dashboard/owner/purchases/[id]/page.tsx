@@ -2,21 +2,21 @@ import { PurchaseDetails } from "@/components/purchases/purchase-details";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 
-export default async function PurchaseDetailsPage({
-  params,
-}: {
+export default async function PurchaseDetailsPage(props: {
   params: { id: string };
 }) {
-  const purchaseId = await Promise.resolve(params.id);
+  const { id } = await props.params; // Destructure params inside the function body
+  // Destructured 'id' directly from params
 
-  if (!purchaseId) {
+  if (!id) {
+    // Use 'id' directly
     notFound();
   }
 
   try {
     // Alış kaydını tüm ilişkili verilerle birlikte al
     const purchase = await prisma.purchase.findUnique({
-      where: { id: purchaseId },
+      where: { id: id }, // Use 'id' directly
       include: {
         contributors: {
           include: {

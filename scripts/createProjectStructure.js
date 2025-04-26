@@ -3,18 +3,16 @@ const path = require('path');
 
 // Oluşturulacak dosya ve klasör yapısı
 const projectStructure =[
-  'prisma/schema.prisma',
   'app/api/irrigation/route.ts',
   'app/api/irrigation/[id]/route.ts',
-  'app/api/irrigation/stats/route.ts',
+  'app/api/billing/well-periods/route.ts',
+  'app/api/billing/well-periods/[id]/route.ts',
   'components/irrigation/irrigation-form.tsx',
   'components/irrigation/irrigation-list.tsx',
-  'components/irrigation/irrigation-stats.tsx',
   'app/dashboard/owner/irrigation/page.tsx',
   'app/dashboard/owner/irrigation/new/page.tsx',
   'app/dashboard/owner/irrigation/[id]/page.tsx',
-  'app/dashboard/owner/irrigation/[id]/edit/page.tsx',
-  'app/dashboard/owner/irrigation/stats/page.tsx'
+  'app/dashboard/owner/irrigation/[id]/edit/page.tsx'
 ];
 
 // Boş dosya içerikleri

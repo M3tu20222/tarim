@@ -53,10 +53,22 @@ export default async function FieldPage({ params }: FieldPageProps) {
           well: true, // İlişkili kuyu bilgilerini getir
         },
       },
-      irrigationLogs: {
+      irrigationFieldUsages: { // 'irrigationLogs' yerine 'irrigationFieldUsages' kullanıldı
         take: 5,
         orderBy: {
-          date: "desc",
+          irrigationLog: { // İlişkili log'un tarihine göre sırala
+            startDateTime: "desc",
+          },
+        },
+        include: {
+          irrigationLog: { // İlişkili sulama logunu dahil et
+            include: {
+              well: true, // Sulama logundaki kuyu bilgisini de alalım
+              user: { // Sulamayı yapan kullanıcıyı alalım
+                select: { name: true }
+              }
+            }
+          },
         },
       },
       processes: { // Changed from processingLogs to processes
@@ -274,29 +286,35 @@ export default async function FieldPage({ params }: FieldPageProps) {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Son Sulama İşlemleri</CardTitle>
+            <CardTitle>Son Sulama Kayıtları</CardTitle> {/* Başlık güncellendi */}
           </CardHeader>
           <CardContent>
-            {field.irrigationLogs.length === 0 ? (
+            {field.irrigationFieldUsages.length === 0 ? ( // 'irrigationLogs' -> 'irrigationFieldUsages'
               <div className="flex h-24 items-center justify-center rounded-md border border-dashed">
                 <p className="text-sm text-muted-foreground">
-                  Bu tarlada henüz sulama işlemi yapılmamış.
+                  Bu tarlada henüz sulama kaydı bulunmuyor. {/* Mesaj güncellendi */}
                 </p>
               </div>
             ) : (
               <div className="space-y-2">
-                {field.irrigationLogs.map((log) => (
+                {field.irrigationFieldUsages.map((usage) => ( // 'log' -> 'usage'
                   <div
-                    key={log.id}
+                    key={usage.irrigationLog.id} // log.id -> usage.irrigationLog.id
                     className="flex items-center justify-between rounded-lg border p-3"
                   >
                     <div>
-                      <p className="font-medium">{formatDate(log.date)}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Miktar: {log.amount} {log.method} | Süre: {log.duration}{" "}
-                        dakika
+                      <p className="font-medium">
+                        {formatDate(usage.irrigationLog.startDateTime)} {/* log.date -> usage.irrigationLog.startDateTime */}
                       </p>
+                      <p className="text-sm text-muted-foreground">
+                        Kuyu: {usage.irrigationLog.well.name} | Süre: {usage.irrigationLog.duration}{" "} {/* Miktar/Metod yerine Kuyu/Süre */}
+                        dakika | Yapan: {usage.irrigationLog.user.name}
+                      </p>
+                      {usage.irrigationLog.notes && (
+                         <p className="text-xs text-gray-500 pt-1">Not: {usage.irrigationLog.notes}</p>
+                      )}
                     </div>
+                     <Badge variant="secondary">{usage.percentage}%</Badge> {/* Tarla kullanım yüzdesi */}
                   </div>
                 ))}
               </div>

@@ -1,74 +1,81 @@
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { type NextRequest, NextResponse } from "next/server";
+import { PrismaClient } from "@prisma/client";
+import { getServerSideSession } from "@/lib/session"; // Updated import
 
-// Aktif sezonu bul
-async function getActiveSeasonId(fieldId: string): Promise<string | null> {
-  try {
-    // Önce tarlanın bağlı olduğu sezonu kontrol et
-    const field = await prisma.field.findUnique({
-      where: { id: fieldId },
-      select: { seasonId: true },
-    });
-
-    if (field?.seasonId) {
-      return field.seasonId;
-    }
-
-    // Tarlanın sezonu yoksa, aktif sezonu bul
-    const activeSeason = await prisma.season.findFirst({
-      where: { isActive: true },
-      select: { id: true },
-    });
-
-    return activeSeason?.id || null;
-  } catch (error) {
-    console.error("Error getting active season:", error);
-    return null;
-  }
-}
+const prisma = new PrismaClient();
 
 // Belirli bir sulama kaydını getir
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const userId = request.headers.get("x-user-id");
-    const userRole = request.headers.get("x-user-role");
-
-    if (!userId || !userRole) {
-      return NextResponse.json(
-        { error: "Kullanıcı ID'si veya rolü eksik" },
-        { status: 401 }
-      );
+    const session = await getServerSideSession(); // Use custom session function
+    if (!session || !session.id) { // Check for session.id instead of session.user
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const irrigation = await prisma.irrigationLog.findUnique({
-      where: { id: params.id },
+    const id = params.id;
+
+    const irrigationLog = await prisma.irrigationLog.findUnique({
+      where: { id },
       include: {
-        field: true,
-        worker: {
+        well: true,
+        season: true,
+        user: {
           select: {
             id: true,
             name: true,
             email: true,
           },
         },
+        fieldUsages: {
+          include: {
+            field: true,
+            ownerUsages: {
+              include: {
+                owner: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        inventoryUsages: {
+          include: {
+            inventory: true,
+            ownerUsages: {
+              include: {
+                owner: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
 
-    if (!irrigation) {
+    if (!irrigationLog) {
       return NextResponse.json(
-        { error: "Sulama kaydı bulunamadı" },
+        { error: "Irrigation log not found" },
         { status: 404 }
       );
     }
 
-    return NextResponse.json(irrigation);
+    return NextResponse.json({ data: irrigationLog });
   } catch (error) {
     console.error("Error fetching irrigation log:", error);
     return NextResponse.json(
-      { error: "Sulama kaydı getirilirken bir hata oluştu" },
+      { error: "Failed to fetch irrigation log" },
       { status: 500 }
     );
   }
@@ -76,62 +83,46 @@ export async function GET(
 
 // Sulama kaydını güncelle
 export async function PUT(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const userId = request.headers.get("x-user-id");
-    const userRole = request.headers.get("x-user-role");
-
-    if (!userId || !userRole) {
-      return NextResponse.json(
-        { error: "Kullanıcı ID'si veya rolü eksik" },
-        { status: 401 }
-      );
+    const session = await getServerSideSession(); // Use custom session function
+    if (!session || !session.id) { // Check for session.id instead of session.user
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Sadece admin ve sahip kullanıcılar sulama kaydı güncelleyebilir
-    if (userRole !== "ADMIN" && userRole !== "OWNER") {
-      return NextResponse.json(
-        { error: "Bu işlem için yetkiniz yok" },
-        { status: 403 }
-      );
-    }
-
-    const { date, amount, duration, method, notes, fieldId } =
-      await request.json();
+    const id = params.id;
+    const data = await request.json();
+    const { startDateTime, duration, wellId, notes, status, seasonId } = data;
 
     // Veri doğrulama
-    if (!date || !amount || !duration || !method || !fieldId) {
+    if (!startDateTime || !duration || !wellId) {
       return NextResponse.json(
-        { error: "Gerekli alanlar eksik" },
+        { error: "Missing required fields" },
         { status: 400 }
       );
     }
 
-    // Aktif sezonu bul
-    const seasonId = await getActiveSeasonId(fieldId);
-
     // Sulama kaydını güncelle
-    const updatedIrrigation = await prisma.irrigationLog.update({
-      where: { id: params.id },
+    const updatedIrrigationLog = await prisma.irrigationLog.update({
+      where: { id },
       data: {
-        date: new Date(date),
-        amount,
+        startDateTime: new Date(startDateTime),
         duration,
-        method,
+        wellId,
         notes,
-        fieldId,
-        workerId: userId,
+        status,
         seasonId,
+        updatedAt: new Date(),
       },
     });
 
-    return NextResponse.json(updatedIrrigation);
+    return NextResponse.json({ data: updatedIrrigationLog });
   } catch (error) {
     console.error("Error updating irrigation log:", error);
     return NextResponse.json(
-      { error: "Sulama kaydı güncellenirken bir hata oluştu" },
+      { error: "Failed to update irrigation log" },
       { status: 500 }
     );
   }
@@ -139,38 +130,67 @@ export async function PUT(
 
 // Sulama kaydını sil
 export async function DELETE(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const userId = request.headers.get("x-user-id");
-    const userRole = request.headers.get("x-user-role");
-
-    if (!userId || !userRole) {
-      return NextResponse.json(
-        { error: "Kullanıcı ID'si veya rolü eksik" },
-        { status: 401 }
-      );
+    const session = await getServerSideSession(); // Use custom session function
+    if (!session || !session.id) { // Check for session.id instead of session.user
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Sadece admin ve sahip kullanıcılar sulama kaydı silebilir
-    if (userRole !== "ADMIN" && userRole !== "OWNER") {
-      return NextResponse.json(
-        { error: "Bu işlem için yetkiniz yok" },
-        { status: 403 }
-      );
-    }
+    const id = params.id;
 
-    // Sulama kaydını sil
-    await prisma.irrigationLog.delete({
-      where: { id: params.id },
+    // Transaction ile tüm ilişkili kayıtları sil
+    await prisma.$transaction(async (tx) => {
+      // 1. Envanter sahip kullanımlarını sil
+      const inventoryUsages = await tx.irrigationInventoryUsage.findMany({
+        where: { irrigationLogId: id },
+      });
+
+      for (const usage of inventoryUsages) {
+        await tx.irrigationInventoryOwnerUsage.deleteMany({
+          where: { irrigationInventoryUsageId: usage.id },
+        });
+      }
+
+      // 2. Envanter kullanımlarını sil
+      await tx.irrigationInventoryUsage.deleteMany({
+        where: { irrigationLogId: id },
+      });
+
+      // 3. Tarla sahip kullanımlarını sil
+      const fieldUsages = await tx.irrigationFieldUsage.findMany({
+        where: { irrigationLogId: id },
+      });
+
+      for (const usage of fieldUsages) {
+        await tx.irrigationOwnerUsage.deleteMany({
+          where: { irrigationFieldUsageId: usage.id },
+        });
+      }
+
+      // 4. Tarla kullanımlarını sil
+      await tx.irrigationFieldUsage.deleteMany({
+        where: { irrigationLogId: id },
+      });
+
+      // 5. Kuyu fatura kullanımlarını sil
+      await tx.wellBillingIrrigationUsage.deleteMany({
+        where: { irrigationLogId: id },
+      });
+
+      // 6. Sulama kaydını sil
+      await tx.irrigationLog.delete({
+        where: { id },
+      });
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error deleting irrigation log:", error);
     return NextResponse.json(
-      { error: "Sulama kaydı silinirken bir hata oluştu" },
+      { error: "Failed to delete irrigation log" },
       { status: 500 }
     );
   }

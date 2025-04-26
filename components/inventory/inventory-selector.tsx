@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
-import { FormLabel } from "@/components/ui/form";
+// FormLabel removed from here
 
 interface InventorySelectorProps {
   onSelect: (id: string) => void;
@@ -46,40 +46,53 @@ export function InventorySelector({
 
   // ownerIds veya category değiştiğinde envanteri yeniden yükle
   useEffect(() => {
-    // ownerIds boş bir dizi ise veya hiç yoksa fetch yapma (veya tümünü getir?)
-    // Şimdilik ownerIds varsa fetch yapacak şekilde ayarlayalım.
-    // if (ownerIds && ownerIds.length > 0) {
-       fetchInventory();
-    // } else {
-    //   setInventory([]); // Sahip yoksa listeyi boşalt
-    //   setLoading(false);
-    // }
+    // Loglar kaldırıldı
+    // Sadece ownerIds varsa ve boş değilse fetch yap
+    if (ownerIds && ownerIds.length > 0) {
+      fetchInventory();
+    } else {
+      // ownerIds yoksa veya boşsa, listeyi temizle ve yüklemeyi durdur
+      setInventory([]);
+      setLoading(false);
+    }
   }, [category, ownerIds]); // ownerIds dependency eklendi
 
   const fetchInventory = async () => {
-    // Eğer ownerIds belirtilmemişse veya boşsa, belki hiçbir şey getirmemeliyiz?
-    // Veya tüm uygun envanteri mi getirmeli? Şimdilik tümünü getiriyor.
+    // ownerIds kontrolü useEffect içinde yapıldığı için burada tekrar gerekmez,
+    // ama URL oluştururken hala gerekli.
     // API'nin userIds parametresini işlemesi GEREKİR.
     // Örnek: /api/inventory?category=PESTICIDE&status=AVAILABLE&userIds=id1,id2
+    if (!ownerIds || ownerIds.length === 0) {
+      // Bu durumun oluşmaması gerekir çünkü useEffect kontrol ediyor, ama garanti olsun.
+      setInventory([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       let url = `/api/inventory?status=AVAILABLE`;
       if (category) {
         url += `&category=${category}`;
       }
-      // ownerIds varsa ve boş değilse, URL'ye ekle
-      if (ownerIds && ownerIds.length > 0) {
-        url += `&userIds=${ownerIds.join(',')}`; // Virgülle ayrılmış ID listesi
-      }
+      // ownerIds varsa ve boş değilse, URL'ye ekle (useEffect'de kontrol edildi ama burada da kalsın)
+      url += `&userIds=${ownerIds.join(',')}`; // Virgülle ayrılmış ID listesi
 
       const response = await fetch(url);
       if (!response.ok) {
-        throw new Error("Envanter verileri alınamadı");
+        // 404 Not Found durumunu özel olarak ele alabiliriz, belki sahip için envanter yoktur.
+        if (response.status === 404) {
+          setInventory([]); // Envanter bulunamadı olarak ayarla
+        } else {
+          throw new Error(`Envanter verileri alınamadı (Status: ${response.status})`);
+        }
       }
       const data = await response.json();
-      setInventory(data);
+      // Gelen verinin bir dizi olduğundan emin olalım
+      setInventory(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Error fetching inventory:", error);
+      setInventory([]); // Hata durumunda listeyi boşalt
       toast({
         title: "Hata",
         description: "Envanter verileri yüklenirken bir hata oluştu.",
@@ -114,22 +127,10 @@ export function InventorySelector({
   };
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center">
-        <FormLabel
-          className={
-            required
-              ? "after:content-['*'] after:text-red-500 after:ml-0.5"
-              : ""
-          }
-        >
-          {label}
-        </FormLabel>
-      </div>
-
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
+    // Removed the outer div and FormLabel wrapper
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
             variant="outline"
             role="combobox"
             aria-expanded={open}
@@ -186,6 +187,6 @@ export function InventorySelector({
           </Command>
         </PopoverContent>
       </Popover>
-    </div>
+    // Removed orphaned closing div tag
   );
 }

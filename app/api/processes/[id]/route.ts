@@ -13,12 +13,14 @@ export async function GET(
     // Token kontrolü
     const cookieStore = await cookies(); // Await cookies()
     const token = cookieStore.get("token")?.value;
+    // const processIdParam = params.id; // Bu satır kaldırıldı, params.id'ye daha sonra erişilecek
 
-    // Access params *after* the first await
-    const processId = params.id;
+    // params.id erişimini sonraya taşı
+    // const processId = params.id; // Buradan kaldırıldı
 
     // Özel durum: unread-count için farklı endpoint kullanılmalı
-    if (processId === "unread-count") { // Use processId variable
+    // Doğrudan params.id kullan (ilk await'ten sonra olduğu için sorun olmamalı)
+    if (params.id === "unread-count") {
       return NextResponse.json(
         {
           error: "Geçersiz endpoint. /api/notifications/unread-count kullanın",
@@ -27,11 +29,8 @@ export async function GET(
       );
     }
 
-    // Token kontrolü (zaten yukarıda yapıldı, bu blok kaldırılacak)
-    // const cookieStore = await cookies(); // Await cookies()
-    // const token = cookieStore.get("token")?.value; // Bu satır da kaldırılacak
-
-    if (!token) { // Yukarıdaki token değişkeni kullanılacak
+    // Token kontrolü
+    if (!token) {
       console.error("Token bulunamadı:", request.url);
       return NextResponse.json(
         { error: "Kimlik doğrulama gerekli" },
@@ -53,12 +52,15 @@ export async function GET(
     const userId = decoded.id;
     const userRole = decoded.role as Role;
 
+    // processId'yi burada, kullanmadan hemen önce al
+    const processId = params.id; // params.id'ye burada erişiliyor (token doğrulamasından sonra)
+
     console.log(
-      `API isteği (/api/processes/${processId}): Kullanıcı ID: ${userId}, Rol: ${userRole}` // Use processId variable
+      `API isteği (/api/processes/${processId}): Kullanıcı ID: ${userId}, Rol: ${userRole}`
     );
 
     // Rol bazlı erişim kontrolü
-    const whereClause: any = { id: processId }; // Use processId variable
+    const whereClause: any = { id: processId };
 
     if (userRole === "WORKER") {
       // İşçi sadece kendisine atanmış işlemleri görebilir
@@ -107,11 +109,13 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const processId = params.id; // Extract id from params at the beginning
+  // processId'yi ilk await'ten SONRA al
+  // const processId = params.id; // Buradan kaldırıldı
 
   try {
     // Token kontrolü
     const cookieStore = await cookies(); // Await cookies()
+    // processId'yi burada alma, token doğrulamasından sonra al
     const tokenCookie = cookieStore.get("token"); // Get the cookie object
     const token = tokenCookie?.value; // Extract the value
 
@@ -134,6 +138,7 @@ export async function PUT(
 
     const userId = decoded.id;
     const userRole = decoded.role as Role;
+    const processId = params.id; // processId'yi burada al (token doğrulamasından sonra)
 
     // İşlemi bul
     const existingProcess = await prisma.process.findUnique({
@@ -355,11 +360,13 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } } // Destructure params object
 ) {
-  const processId = params.id; // Get id from params object
+  // processId'yi ilk await'ten SONRA al
+  // const processId = params.id; // Buradan kaldırıldı
 
   try {
     // Token kontrolü
     const cookieStore = await cookies(); // Await cookies()
+    const processId = params.id; // processId'yi burada al
     const token = cookieStore.get("token")?.value;
 
     if (!token) {

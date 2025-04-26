@@ -12,10 +12,16 @@ export const metadata: Metadata = {
   description: "Tarla işlemini düzenleyin",
 };
 
+// Fonksiyonu tekrar id: string alacak şekilde geri döndür
 async function getProcess(id: string) {
+  // id kontrolü burada tekrar yapılabilir veya çağıran yerde yapılır
+  if (!id) {
+    console.error("getProcess içinde İşlem ID'si eksik");
+    return null;
+  }
   try {
     // Cookie'den token'ı al
-    const cookieStore = await cookies(); // await eklendi
+    const cookieStore = await cookies(); // Dinamik fonksiyon
     const token = cookieStore.get("token")?.value;
 
     if (!token) {
@@ -54,16 +60,20 @@ export default async function EditProcessPage({
 }: {
   params: { id: string };
 }) {
-  // params.id'yi kullanmadan önce kontrol et
-  if (!params?.id) {
-    console.error("İşlem ID'si bulunamadı");
+  // params nesnesini await ile bekle (Dinamik fonksiyonlardan sonra erişim için)
+  const awaitedParams = await params;
+
+  // awaitedParams.id'yi kontrol et
+  if (!awaitedParams?.id) {
+    console.error("İşlem ID'si bulunamadı (await sonrası)");
     notFound();
   }
 
-  const processId = params.id;
-  const process = await getProcess(processId);
+  const processId = awaitedParams.id; // Beklenmiş params'tan id'yi al
+  const process = await getProcess(processId); // id'yi string olarak geç
 
   if (!process) {
+    // Hata mesajında processId kullan
     console.error(`ID: ${processId} ile işlem bulunamadı`);
     notFound();
   }
@@ -79,15 +89,16 @@ export default async function EditProcessPage({
     processedArea: process.processedArea || 0,
     processedPercentage: process.processedPercentage || 100,
     description: process.description || "",
-    // Ekipman ve envanter kullanımları
-    equipmentUsages: process.equipmentUsages || [],
-    inventoryUsages: process.inventoryUsages || [],
+    // Ekipman ID'sini equipmentUsages'dan çıkar (varsa ilk elemanı al)
+    equipmentId: process.equipmentUsages?.[0]?.equipmentId || null,
+    inventoryUsages: process.inventoryUsages || [], // Bu ProcessForm'da işlenecek
   };
 
   return (
     <div className="container mx-auto py-6 space-y-6">
       <div>
         <Button variant="outline" size="sm" className="mb-2" asChild>
+          {/* Linkte processId kullan (veya process?.id) */}
           <a href={`/dashboard/owner/processes/${processId}`}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             İşlem Detaylarına Dön

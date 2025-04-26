@@ -165,9 +165,8 @@ export async function POST(request: Request) {
             expectedContribution: contribution, // Başlangıçta beklenen ve katkı aynı
             hasPaid: partner.hasPaid ?? false,
             paymentDate: partner.hasPaid ? new Date() : undefined,
-            // isCreditor alanı borç yönetimi ile ilgili, şimdilik false
-            isCreditor: false,
-            // remainingAmount borç yönetimi ile ilgili
+            isCreditor: partner.isCreditor ?? false, // Frontend'den gelen isCreditor bilgisini kullan
+            remainingAmount: partner.hasPaid ? 0 : contribution, // Kalan miktar hesaplaması eklendi
           },
         });
       });
@@ -234,8 +233,48 @@ export async function POST(request: Request) {
       // 4.6. (Opsiyonel) Bildirim Oluşturma
       // TODO: İlgili kullanıcılara (ortaklar, adminler vb.) bildirim gönderilebilir.
 
-      // 4.7. (Opsiyonel) Borç Kaydı Oluşturma
-      // TODO: Eğer partner.hasPaid false ise ve paymentMethod 'CREDIT' ise Debt kaydı oluşturulabilir.
+      // 4.7. Borç Kaydı Oluşturma
+      // Önce alacaklıyı belirle: Katılımcılardan biri işaretlenmişse o, değilse işlemi yapan kullanıcı
+      let creditorId = createdContributors.find(c => c.isCreditor)?.userId;
+      if (!creditorId) {
+          // Eğer katılımcılardan hiçbiri alacaklı değilse, işlemi yapan kullanıcıyı alacaklı kabul et
+          // Ancak işlemi yapan kullanıcı aynı zamanda ödeme yapmayan bir katılımcıysa, bu durumda alacaklı belirsizdir.
+          const requestUserIsUnpaidContributor = createdContributors.some(c => c.userId === userId && !c.hasPaid);
+          if (!requestUserIsUnpaidContributor) {
+              creditorId = userId; // İşlemi yapan kullanıcı alacaklı
+              console.log(`Purchase ${purchase.id}: No explicit creditor found, assuming requesting user (${userId}) is the creditor.`);
+          } else {
+              console.warn(`Purchase ${purchase.id}: Cannot determine creditor. Requesting user (${userId}) is also an unpaid contributor.`);
+          }
+      }
+
+      if (creditorId) { // Alacaklı belirlenebildiyse borçları oluştur
+        const debtPromises = createdContributors
+          .filter(contributor => !contributor.hasPaid && contributor.userId !== creditorId) // Ödeme yapmamış VE alacaklı olmayanlar
+          .map(debtor => {
+            // Vade tarihini belirle: Alışta varsa onu kullan, yoksa bugünden 3 ay sonrası
+            const dueDate = purchase.dueDate ? new Date(purchase.dueDate) : new Date(new Date().setMonth(new Date().getMonth() + 3));
+
+            console.log(`Creating debt for Purchase ${purchase.id}: Debtor=${debtor.userId}, Creditor=${creditorId}, Amount=${debtor.contribution}`); // Log eklendi
+
+            return tx.debt.create({
+              data: {
+                amount: debtor.contribution, // Borç miktarı, katkı payı kadar
+                dueDate: dueDate,
+                status: 'PENDING',
+                description: `${purchase.product} alışı için borç`,
+                reason: 'PURCHASE', // Borç nedeni: Alış
+                creditorId: creditorId, // Belirlenen alacaklı ID'si
+                debtorId: debtor.userId, // Borçlu ID'si
+                purchaseId: purchase.id, // İlişkili alış ID'si
+              },
+            });
+          });
+        await Promise.all(debtPromises);
+      } else if (createdContributors.some(c => !c.hasPaid)) {
+          // Alacaklı belirlenemedi ve ödenmemiş pay var
+          console.error(`Purchase ${purchase.id}: Debts could not be created because the creditor could not be determined.`);
+      }
 
       return { purchase, contributors: createdContributors, inventory };
     }); // Transaction sonu
