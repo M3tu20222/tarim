@@ -29,7 +29,10 @@
 |  |  |  +--periods
 |  |  |  |  +--[id]
 |  |  |  |  \--route.ts
-|  |  |  \--well-bills
+|  |  |  +--well-bills
+|  |  |  |  +--[id]
+|  |  |  |  \--route.ts
+|  |  |  \--well-periods
 |  |  |     +--[id]
 |  |  |     \--route.ts
 |  |  +--cron
@@ -66,6 +69,8 @@
 |  |  |  +--mark-all-read
 |  |  |  |  \--route.ts
 |  |  |  +--summary
+|  |  |  |  \--route.ts
+|  |  |  +--unread-count
 |  |  |  |  \--route.ts
 |  |  |  +--[id]
 |  |  |  \--route.ts
@@ -231,6 +236,7 @@
 |  |  +--irrigation-list.tsx
 |  |  \--irrigation-stats.tsx
 |  +--notifications
+|  |  +--notification-counter.tsx
 |  |  +--notification-dropdown.tsx
 |  |  \--notification-list.tsx
 |  +--payments
@@ -294,6 +300,7 @@
 |  |  +--skeleton.tsx
 |  |  +--slider.tsx
 |  |  +--sonner.tsx
+|  |  +--stepper.tsx
 |  |  +--switch.tsx
 |  |  +--table.tsx
 |  |  +--tabs.tsx
@@ -379,6 +386,7 @@
 +--.eslintrc.json
 +--.gitignore
 +--components.json
++--erDiagram.md
 +--eslint.config.mjs
 +--generate_tree.ps1
 +--middleware.ts

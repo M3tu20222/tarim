@@ -252,10 +252,23 @@ export async function POST(request: Request) {
         const debtPromises = createdContributors
           .filter(contributor => !contributor.hasPaid && contributor.userId !== creditorId) // Ödeme yapmamış VE alacaklı olmayanlar
           .map(debtor => {
-            // Vade tarihini belirle: Alışta varsa onu kullan, yoksa bugünden 3 ay sonrası
-            const dueDate = purchase.dueDate ? new Date(purchase.dueDate) : new Date(new Date().setMonth(new Date().getMonth() + 3));
+            // Borçlu ortağın formdan gelen verisini bul (dueDate için)
+            const partnerData = partners.find((p: any) => p.userId === debtor.userId);
 
-            console.log(`Creating debt for Purchase ${purchase.id}: Debtor=${debtor.userId}, Creditor=${creditorId}, Amount=${debtor.contribution}`); // Log eklendi
+            // Vade tarihini belirle:
+            // 1. Ortağa özel vade tarihi var mı? (Formdan gelen)
+            // 2. Alışın genel vade tarihi var mı?
+            // 3. Hiçbiri yoksa varsayılan (3 ay sonrası)
+            let dueDate;
+            if (partnerData?.dueDate) {
+              dueDate = new Date(partnerData.dueDate);
+            } else if (purchase.dueDate) { // purchase (yeni oluşturulan alış) nesnesini kullan
+              dueDate = new Date(purchase.dueDate);
+            } else {
+              dueDate = new Date(new Date().setMonth(new Date().getMonth() + 3));
+            }
+
+            console.log(`Creating debt for Purchase ${purchase.id}: Debtor=${debtor.userId}, Creditor=${creditorId}, Amount=${debtor.contribution}, DueDate=${dueDate}`); // Log güncellendi
 
             return tx.debt.create({
               data: {

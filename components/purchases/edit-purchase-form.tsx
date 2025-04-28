@@ -38,7 +38,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { Unit } from "@prisma/client"; // Keep Unit enum
+import { Unit, InventoryCategory } from "@prisma/client"; // Keep Unit enum, Add InventoryCategory
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 // Removed NextRequest, NextResponse, prisma imports
 
@@ -67,6 +67,9 @@ const partnerSchema = z.object({
 const formSchema = z.object({
   product: z.string().min(2, {
     message: "Ürün adı en az 2 karakter olmalıdır.",
+  }),
+  category: z.nativeEnum(InventoryCategory, { // Add category field
+    required_error: "Lütfen bir ürün kategorisi seçin.",
   }),
   quantity: z.coerce.number().positive({
     message: "Miktar pozitif bir sayı olmalıdır.",
@@ -119,6 +122,7 @@ export function EditPurchaseForm({ purchase }: { purchase: any }) {
     resolver: zodResolver(formSchema),
     defaultValues: {
       product: purchase.product,
+      category: purchase.category as InventoryCategory, // Add category default value
       quantity: purchase.quantity,
       unit: purchase.unit as Unit,
       unitPrice: purchase.unitPrice,
@@ -316,6 +320,36 @@ export function EditPurchaseForm({ purchase }: { purchase: any }) {
                     {...field}
                   />
                 </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Add Category Field Here */}
+          <FormField
+            control={form.control}
+            name="category"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Ürün Kategorisi</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Kategori seçin" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="FERTILIZER">Gübre</SelectItem>
+                    <SelectItem value="SEED">Tohum</SelectItem>
+                    <SelectItem value="PESTICIDE">İlaç</SelectItem>
+                    <SelectItem value="FUEL">Yakıt</SelectItem>
+                    <SelectItem value="EQUIPMENT">Ekipman</SelectItem>
+                    <SelectItem value="OTHER">Diğer</SelectItem>
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}
