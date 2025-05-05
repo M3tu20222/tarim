@@ -7,20 +7,26 @@ import type { ProcessType, Role } from "@prisma/client";
 // Belirli bir işlemi getir
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> } // Tip güncellendi
 ) {
   try {
     // Token kontrolü
     const cookieStore = await cookies(); // Await cookies()
+    const { id: processId } = await params; // ✅ params nesnesini await ile çözümlüyoruz
     const token = cookieStore.get("token")?.value;
-    // const processIdParam = params.id; // Bu satır kaldırıldı, params.id'ye daha sonra erişilecek
 
-    // params.id erişimini sonraya taşı
-    // const processId = params.id; // Buradan kaldırıldı
+    // Özel durum kontrolünü ilk await'ten sonraya taşı
+    // if (processId === "unread-count") { // Bu kontrol processId'ye bağlı, aşağı taşınacak
+    //   return NextResponse.json(
+    //     {
+    //       error: "Geçersiz endpoint. /api/notifications/unread-count kullanın",
+    //     },
+    //     { status: 400 }
+    //   );
+    // }
 
-    // Özel durum: unread-count için farklı endpoint kullanılmalı
-    // Doğrudan params.id kullan (ilk await'ten sonra olduğu için sorun olmamalı)
-    if (params.id === "unread-count") {
+    // Token kontrolü
+    if (!token) {
       return NextResponse.json(
         {
           error: "Geçersiz endpoint. /api/notifications/unread-count kullanın",
@@ -51,9 +57,17 @@ export async function GET(
 
     const userId = decoded.id;
     const userRole = decoded.role as Role;
+    // const processId = params.id; // <<< Buradan kaldırıldı
 
-    // processId'yi burada, kullanmadan hemen önce al
-    const processId = params.id; // params.id'ye burada erişiliyor (token doğrulamasından sonra)
+    // Özel durum kontrolünü processId tanımlandıktan sonraya taşı
+    if (processId === "unread-count") { // processId artık burada mevcut
+      return NextResponse.json(
+        {
+          error: "Geçersiz endpoint. /api/notifications/unread-count kullanın",
+        },
+        { status: 400 }
+      );
+    }
 
     console.log(
       `API isteği (/api/processes/${processId}): Kullanıcı ID: ${userId}, Rol: ${userRole}`
@@ -107,7 +121,7 @@ export async function GET(
 // İşlemi güncelle
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> } // Tip güncellendi
 ) {
   // processId'yi ilk await'ten SONRA al
   // const processId = params.id; // Buradan kaldırıldı
@@ -115,7 +129,7 @@ export async function PUT(
   try {
     // Token kontrolü
     const cookieStore = await cookies(); // Await cookies()
-    // processId'yi burada alma, token doğrulamasından sonra al
+    const { id: processId } = await params; // ✅ params nesnesini await ile çözümlüyoruz
     const tokenCookie = cookieStore.get("token"); // Get the cookie object
     const token = tokenCookie?.value; // Extract the value
 
@@ -138,10 +152,10 @@ export async function PUT(
 
     const userId = decoded.id;
     const userRole = decoded.role as Role;
-    const processId = params.id; // processId'yi burada al (token doğrulamasından sonra)
+    // const processId = params.id; // <<< Buradan kaldırıldı
 
     // İşlemi bul
-    const existingProcess = await prisma.process.findUnique({
+    const existingProcess = await prisma.process.findUnique({ // processId artık burada mevcut
       where: { id: processId }, // Use processId variable
       include: {
         field: { select: { id: true } },
@@ -153,26 +167,40 @@ export async function PUT(
     }
 
     // Yetki kontrolü
+    // Yetki kontrolü - Güncellendi: OWNER tüm işlemleri güncelleyebilir
+    console.log(`Yetki Kontrolü Başladı: userId=${userId}, userRole=${userRole}, processId=${processId}`);
     let canUpdate = false;
-    if (userRole === "ADMIN") {
+    if (userRole === "ADMIN" || userRole === "OWNER") { // OWNER kontrolü basitleştirildi
+      console.log(`Kullanıcı ${userRole}, güncelleme yetkisi verildi.`);
       canUpdate = true;
-    } else if (userRole === "OWNER" && existingProcess.fieldId) { // Check if fieldId exists
-      // Tarla sahibi kontrolü
-      const fieldOwnership = await prisma.fieldOwnership.findFirst({
-        where: {
-          fieldId: existingProcess.fieldId, // Use checked fieldId
-          userId: userId,
-        },
-      });
-      if (fieldOwnership) {
-        canUpdate = true;
-      }
+    // } else if (userRole === "OWNER" && existingProcess.fieldId) { // Eski OWNER kontrolü kaldırıldı
+    //   console.log(`Kullanıcı OWNER, fieldId kontrol ediliyor: ${existingProcess.fieldId}`);
+    //   // Tarla sahibi kontrolü
+    //   const fieldOwnership = await prisma.fieldOwnership.findFirst({
+    //     where: {
+    //       fieldId: existingProcess.fieldId,
+    //       userId: userId,
+    //     },
+    //   });
+    //   console.log(`Tarla Sahipliği Sorgu Sonucu (fieldId: ${existingProcess.fieldId}, userId: ${userId}):`, fieldOwnership);
+    //   if (fieldOwnership) {
+    //     console.log("Tarla sahipliği bulundu, güncelleme yetkisi verildi.");
+    //     canUpdate = true;
+    //   } else {
+    //     console.log("Tarla sahipliği bulunamadı.");
+    //   }
     } else if (userRole === "WORKER" && existingProcess.workerId === userId) {
+      console.log(`Kullanıcı WORKER, kendi işlemi kontrol ediliyor: process.workerId=${existingProcess.workerId}, userId=${userId}`);
       // İşçi kendi işlemini güncelleyebilir
       canUpdate = true;
+      console.log("İşçi kendi işlemini güncelleyebilir, yetki verildi."); // Log Eklendi
+    } else {
+       console.log(`Diğer durumlar veya eksik fieldId: userRole=${userRole}, existingProcess.fieldId=${existingProcess.fieldId}`); // Log Eklendi
     }
 
+
     if (!canUpdate) {
+      console.log("Güncelleme yetkisi verilmedi (canUpdate=false). 403 Forbidden döndürülüyor."); // Log Eklendi
       return NextResponse.json(
         { error: "Bu işlemi güncelleme yetkiniz yok" },
         { status: 403 }
@@ -358,15 +386,15 @@ export async function PUT(
 // İşlemi sil
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } } // Destructure params object
+  { params }: { params: Promise<{ id: string }> } // Tip güncellendi
 ) {
   // processId'yi ilk await'ten SONRA al
-  // const processId = params.id; // Buradan kaldırıldı
+  // const processId = await params.id; // Buradan kaldırıldı
 
   try {
     // Token kontrolü
     const cookieStore = await cookies(); // Await cookies()
-    const processId = params.id; // processId'yi burada al
+    const { id: processId } = await params; // ✅ params nesnesini await ile çözümlüyoruz
     const token = cookieStore.get("token")?.value;
 
     if (!token) {
@@ -388,9 +416,10 @@ export async function DELETE(
 
     const userId = decoded.id;
     const userRole = decoded.role as Role;
+    // const processId = params.id; // <<< Buradan kaldırıldı
 
     // İşlemi bul
-    const existingProcess = await prisma.process.findUnique({
+    const existingProcess = await prisma.process.findUnique({ // processId artık burada mevcut
       where: { id: processId }, // Use processId variable
       include: {
         field: { select: { id: true } },

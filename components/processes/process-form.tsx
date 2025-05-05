@@ -163,8 +163,9 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
     const fetchData = async () => {
       try {
         const [fieldsRes, workersRes, ownersRes, equipmentRes, seasonsRes] = await Promise.all([
+          // bilgi: fieldOwnerShip - Tüm tarlaları getirmek için fetchAll=true eklendi.
           // Tarla verisini çekerken sahip bilgilerini de iste (InventorySelector için gerekli)
-          fetch("/api/fields?includeOwnerships=true"),
+          fetch("/api/fields?includeOwnerships=true&fetchAll=true"),
           fetch("/api/users?role=WORKER"),
           fetch("/api/users/owners"),
           fetch("/api/equipment?status=ACTIVE"),

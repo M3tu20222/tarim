@@ -1,10 +1,50 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-// NotificationSummary importu kaldırıldı, tip çıkarımı kullanılacak
+// PrismaNotification ve NotificationType'ı Prisma'dan import et
+import { Notification as PrismaNotification, NotificationType } from "@prisma/client";
+import {
+  Notification as FrontendNotification, // Frontend türünü ayrı bir adla import et
+  NotificationSummary,
+  NotificationStatus, // Bu hala hata verebilir, sonra bakacağız
+} from "@/types/notification-types";
 
-export async function GET(request: NextRequest) {
+// Prisma modelini Frontend türüne dönüştüren yardımcı fonksiyon
+function mapPrismaToFrontend(
+  prismaNotification: PrismaNotification
+): FrontendNotification {
+  let status: NotificationStatus = "UNREAD";
+  if (prismaNotification.isArchived) {
+    status = "ARCHIVED";
+  } else if (prismaNotification.isRead) {
+    status = "READ";
+  }
+
+  // FrontendNotification türündeki 'type' alanının Prisma'nın NotificationType enum'u ile uyumlu olması gerekir.
+  // Eğer types/notification-types.ts içindeki NotificationType farklıysa, onu da güncellemek gerekecek.
+  // Şimdilik doğrudan atama yapıyoruz, çünkü Prisma'dan gelen type zaten doğru enum türünde.
+  return {
+    id: prismaNotification.id, // _id yerine id kullanılıyor Prisma'da
+    userId: prismaNotification.receiverId, // receiverId -> userId
+    type: prismaNotification.type, // Prisma'dan gelen enum değerini doğrudan kullan
+    title: prismaNotification.title, // title eşleşiyor
+    body: prismaNotification.message, // message -> body
+    link: prismaNotification.link ?? undefined, // link eşleşiyor (null ise undefined)
+    priority: prismaNotification.priority, // priority eşleşiyor
+    status: status, // isRead/isArchived -> status
+    methods: [], // Veritabanında yok, varsayılan boş dizi
+    metadata: undefined, // Veritabanında yok, varsayılan undefined
+    createdAt: prismaNotification.createdAt, // createdAt eşleşiyor
+    updatedAt: prismaNotification.updatedAt, // updatedAt eşleşiyor
+    readAt: prismaNotification.isRead ? prismaNotification.updatedAt : undefined, // Okunduysa updatedAt'i kullanabiliriz
+  };
+}
+
+export async function GET(request: Request) {
   try {
-    const userId = request.headers.get("x-user-id");
+    const session = await getSession();
+    // Hata mesajına göre session objesi doğrudan id içeriyor
+    const userId = session?.id;
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -13,15 +53,17 @@ export async function GET(request: NextRequest) {
     // Okunmamış bildirim sayısını hesapla
     const unreadCount = await prisma.notification.count({
       where: {
-        receiverId: userId, // userId -> receiverId
-        isRead: false,      // status: "UNREAD" -> isRead: false
+        receiverId: userId,
+        isRead: false,
+        isArchived: false, // Arşivlenmemişleri de say
       },
     });
 
-    // Son 5 bildirimi getir
-    const recentNotifications = await prisma.notification.findMany({
+    // Son 5 okunmamış veya okunmuş (arşivlenmemiş) bildirimi getir
+    const recentPrismaNotifications = await prisma.notification.findMany({
       where: {
-        receiverId: userId, // userId -> receiverId
+        receiverId: userId,
+        isArchived: false, // Arşivlenmemişleri getir
       },
       orderBy: {
         createdAt: "desc",
@@ -29,17 +71,24 @@ export async function GET(request: NextRequest) {
       take: 5,
     });
 
-    // Tip tanımı kaldırıldı, TypeScript tipi otomatik algılayacak
-    const summary = {
+    // Prisma sonuçlarını frontend türüne dönüştür
+    const recentNotifications: FrontendNotification[] =
+      recentPrismaNotifications.map(mapPrismaToFrontend);
+
+    // Frontend'in beklediği summary nesnesini oluştur
+    const summary: NotificationSummary = {
       unreadCount,
-      recentNotifications, // Tip uyuşmazlığı hatasını gidermek için explicit tip kaldırıldı
+      recentNotifications,
     };
 
     return NextResponse.json(summary);
   } catch (error) {
     console.error("Error fetching notification summary:", error);
+    // Hata durumunda daha açıklayıcı bir mesaj döndür
+    const errorMessage =
+      error instanceof Error ? error.message : "Bilinmeyen bir hata oluştu";
     return NextResponse.json(
-      { error: "Failed to fetch notification summary" },
+      { error: "Failed to fetch notification summary", details: errorMessage },
       { status: 500 }
     );
   }

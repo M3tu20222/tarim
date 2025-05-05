@@ -3,18 +3,17 @@ const path = require('path');
 
 // Oluşturulacak dosya ve klasör yapısı
 const projectStructure =[
-  'app/api/irrigation/route.ts',
-  'app/api/irrigation/[id]/route.ts',
-  'app/api/billing/well-periods/route.ts',
-  'app/api/billing/well-periods/[id]/route.ts',
-  'components/irrigation/irrigation-form.tsx',
-  'components/irrigation/irrigation-list.tsx',
-  'app/dashboard/owner/irrigation/page.tsx',
-  'app/dashboard/owner/irrigation/new/page.tsx',
-  'app/dashboard/owner/irrigation/[id]/page.tsx',
-  'app/dashboard/owner/irrigation/[id]/edit/page.tsx'
+  'components/app-sidebar.tsx',
+  'prisma/schema.prisma',
+  'app/dashboard/worker/settings/page.tsx',
+  'components/worker/worker-settings.tsx',
+  'app/api/worker/well-assignment/route.ts',
+  'app/dashboard/worker/page.tsx',
+  'components/worker/worker-overview.tsx',
+  'components/worker/worker-fields-list.tsx',
+  'app/dashboard/worker/fields/[id]/page.tsx',
+  'components/worker/worker-field-detail.tsx'
 ];
-
 // Boş dosya içerikleri
 const templates = {
   'route.ts': `import { NextResponse } from "next/server";
@@ -62,3 +61,4 @@ function createProjectStructure() {
 // Script'i çalıştır
 createProjectStructure();
 console.log('İşlem tamamlandı!');
+// node scripts/createProjectStructure.js

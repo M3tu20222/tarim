@@ -1,0 +1,189 @@
+@startuml
+' User Model
+class User {
+  +id: String
+  +name: String
+  +email: String
+  +password: String
+  +role: Role
+  +status: Status
+  +createdAt: DateTime
+  +updatedAt: DateTime
+  +irrigationLogs: IrrigationLog[]
+  +ownedFields: FieldOwnership[]
+  +assignedFields: FieldWorkerAssignment[]
+  +inventoryOwnership: InventoryOwnership[]
+  +debtsAsCreditor: Debt[]
+  +debtsAsDebtor: Debt[]
+  +purchaseContributions: PurchaseContributor[]
+  +receivedNotifications: Notification[]
+  +sentNotifications: Notification[]
+  +inventoryUsages: InventoryUsage[]
+  +processes: Process[]
+  +invoicesPurchased: Invoice[]
+  +paymentsMade: PaymentHistory[]
+  +paymentsReceived: PaymentHistory[]
+  +inventoryTransactions: InventoryTransaction[]
+  +seasons: Season[]
+  +purchaseApprovals: PurchaseApproval[]
+  +equipmentOwnerships: EquipmentOwnership[]
+  +equipmentUsages: EquipmentUsage[]
+  +fieldOwnerExpenses: FieldOwnerExpense[]
+  +notificationPreferences: NotificationPreference?
+}
+
+' Season Model
+class Season {
+  +id: String
+  +name: String
+  +startDate: DateTime
+  +endDate: DateTime
+  +description: String?
+  +isActive: Boolean
+  +createdAt: DateTime
+  +updatedAt: DateTime
+  +creator: User
+  +fields: Field[]
+  +crops: Crop[]
+  +purchases: Purchase[]
+  +inventoryTransactions: InventoryTransaction[]
+  +processes: Process[]
+  +irrigationLogs: IrrigationLog[]
+  +fieldExpenses: FieldExpense[]
+  +notifications: Notification[]
+}
+
+' Field Model
+class Field {
+  +id: String
+  +name: String
+  +location: String
+  +size: Float
+  +coordinates: String?
+  +status: String
+  +createdAt: DateTime
+  +updatedAt: DateTime
+  +seasonId: String?
+  +season: Season?
+  +owners: FieldOwnership[]
+  +workerAssignments: FieldWorkerAssignment[]
+  +crops: Crop[]
+  +fieldWells: FieldWell[]
+  +processingLogs: ProcessingLog[]
+  +processCosts: ProcessCost[]
+  +inventoryUsages: InventoryUsage[]
+  +processes: Process[]
+  +fieldExpenses: FieldExpense[]
+  +notifications: Notification[]
+  +irrigationFieldUsages: IrrigationFieldUsage[]
+}
+
+' Well Model
+class Well {
+  +id: String
+  +name: String
+  +depth: Float
+  +capacity: Float
+  +status: String
+  +createdAt: DateTime
+  +updatedAt: DateTime
+  +fieldWells: FieldWell[]
+  +irrigationLogs: IrrigationLog[]
+  +wellBillingPeriods: WellBillingPeriod[]
+  +notifications: Notification[]
+}
+
+' Crop Model
+class Crop {
+  +id: String
+  +name: String
+  +plantedDate: DateTime
+  +harvestDate: DateTime?
+  +status: CropStatus
+  +notes: String?
+  +createdAt: DateTime
+  +updatedAt: DateTime
+  +field: Field
+  +season: Season?
+  +notifications: Notification[]
+}
+
+' Inventory Model
+class Inventory {
+  +id: String
+  +name: String
+  +category: InventoryCategory
+  +totalQuantity: Float
+  +unit: Unit
+  +purchaseDate: DateTime?
+  +expiryDate: DateTime?
+  +status: InventoryStatus
+  +costPrice: Float?
+  +notes: String?
+  +createdAt: DateTime
+  +updatedAt: DateTime
+  +ownerships: InventoryOwnership[]
+  +usages: InventoryUsage[]
+  +inventoryTransactions: InventoryTransaction[]
+  +irrigationInventoryUsages: IrrigationInventoryUsage[]
+  +notifications: Notification[]
+}
+
+' Purchase Model
+class Purchase {
+  +id: String
+  +product: String
+  +category: ProductCategory
+  +quantity: Float
+  +unit: Unit
+  +unitPrice: Float
+  +totalCost: Float
+  +paymentMethod: PaymentMethod
+  +dueDate: DateTime?
+  +description: String?
+  +createdAt: DateTime
+  +isTemplate: Boolean
+  +templateName: String?
+  +approvalStatus: ApprovalStatus
+  +approvalRequired: Boolean
+  +approvalThreshold: Float
+  +season: Season?
+  +contributors: PurchaseContributor[]
+  +debts: Debt[]
+  +invoices: Invoice[]
+  +inventoryTransactions: InventoryTransaction[]
+  +approvals: PurchaseApproval[]
+  +notifications: Notification[]
+}
+
+' Notification Model
+class Notification {
+  +id: String
+  +type: NotificationType
+  +priority: NotificationPriority
+  +message: String
+  +read: Boolean
+  +createdAt: DateTime
+  +user: User
+  +relatedEntity: String
+  +relatedId: String
+}
+
+' Relationship Definitions
+User "1" -- "0..*" IrrigationLog : has
+User "1" -- "0..*" FieldOwnership : owns
+User "1" -- "0..*" FieldWorkerAssignment : assigns
+User "1" -- "0..*" Purchase : created
+Season "1" -- "0..*" Field : belongsTo
+Field "1" -- "0..*" FieldOwnership : owns
+Field "1" -- "0..*" FieldWorkerAssignment : assigns
+Field "1" -- "0..*" Crop : has
+Well "1" -- "0..*" IrrigationLog : uses
+IrrigationLog "1" -- "0..*" IrrigationFieldUsage : records
+IrrigationLog "1" -- "0..*" IrrigationInventoryUsage : records
+Purchase "1" -- "0..*" PurchaseContributor : involves
+Purchase "1" -- "0..*" Debt : relates
+Purchase "1" -- "0..*" Invoice : generates
+Inventory "1" -- "0..*" InventoryUsage : consumes
+Inventory "1" -- "0..*" InventoryTransaction : tracks
+@enduml

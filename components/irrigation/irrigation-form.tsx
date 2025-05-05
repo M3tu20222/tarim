@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react"; // Import useMemo
 import { useRouter } from "next/navigation";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray, useWatch } from "react-hook-form"; // Import useWatch
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { format } from "date-fns";
@@ -151,14 +151,16 @@ type FieldDetailForApi = {
 
 interface IrrigationFormProps {
   initialData?: Partial<IrrigationFormValues>;
+  irrigationId?: string; // Add irrigationId for edit mode identification
 }
 
-export function IrrigationForm({ initialData }: IrrigationFormProps) {
+export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProps) {
   const router = useRouter();
   const [fields, setFields] = useState<Field[]>([]);
-  const [inventories, setInventories] = useState<Inventory[]>([]);
-  const [loading, setLoading] = useState(false);
-  // Removed calculatedData state as calculations will happen in onSubmit
+  const [inventories, setInventories] = useState<Inventory[]>([]); // State for inventory list
+  const [loadingFields, setLoadingFields] = useState(false); // Loading state for fields
+  const [loadingInventories, setLoadingInventories] = useState(false); // Loading state for inventories
+  const [loadingSubmit, setLoadingSubmit] = useState(false); // Loading state for form submission
 
   const form = useForm<IrrigationFormValues>({
     resolver: zodResolver(irrigationFormSchema),
@@ -184,52 +186,144 @@ export function IrrigationForm({ initialData }: IrrigationFormProps) {
     name: "inventoryUsages",
   });
 
-  // Fetch initial data (fields and inventories)
+  // Watch selected fields to trigger inventory fetching
+  const watchedFieldIrrigations = useWatch({
+    control: form.control,
+    name: "fieldIrrigations",
+  });
+
+  // Fetch initial fields data
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true); // Start loading
+    const fetchFields = async () => {
+      setLoadingFields(true);
       try {
-        const [fieldsRes, inventoriesRes] = await Promise.all([
-          fetch("/api/fields?includeOwnerships=true&fetchAll=true"),
-          fetch("/api/inventory?category=FERTILIZER,PESTICIDE&fetchAll=true")
-        ]);
-
+        const fieldsRes = await fetch("/api/fields?includeOwnerships=true&fetchAll=true");
         if (!fieldsRes.ok) throw new Error('Tarlalar yüklenemedi');
-        if (!inventoriesRes.ok) throw new Error('Envanter yüklenemedi');
-
         const fieldsData = await fieldsRes.json();
-        const inventoriesData = await inventoriesRes.json();
-
         setFields(fieldsData.data || []);
-        // Ensure inventoriesData includes unitPrice (mapped from costPrice in API)
-        setInventories(inventoriesData || []);
-
       } catch (error: any) {
-        console.error("Veri yükleme hatası:", error);
+        console.error("Tarla yükleme hatası:", error);
         toast({
           title: "Hata",
-          description: error.message || "Veriler yüklenirken bir hata oluştu.",
+          description: error.message || "Tarlalar yüklenirken bir hata oluştu.",
           variant: "destructive",
         });
       } finally {
-        setLoading(false); // End loading
+        setLoadingFields(false);
+      }
+    };
+    fetchFields();
+  }, []);
+
+  // Calculate selected owner IDs based on watched fields
+  const selectedOwnerIds = useMemo(() => {
+    const ownerIdSet = new Set<string>();
+    if (watchedFieldIrrigations && fields.length > 0) {
+      watchedFieldIrrigations.forEach(irrigation => {
+        if (irrigation.fieldId) {
+          const field = fields.find(f => f.id === irrigation.fieldId);
+          if (field && field.owners) {
+            field.owners.forEach(owner => ownerIdSet.add(owner.userId));
+          }
+        }
+      });
+    }
+    return Array.from(ownerIdSet);
+  }, [watchedFieldIrrigations, fields]);
+
+  // Fetch inventories based on selected owner IDs and initial data (if editing)
+  useEffect(() => {
+    const fetchInventories = async () => {
+      setLoadingInventories(true);
+      setInventories([]); // Clear previous inventories
+
+      const isEditMode = !!initialData;
+      const initialInventoryIds = isEditMode
+        ? initialData.inventoryUsages
+            ?.map(usage => usage.inventoryId)
+            .filter((id): id is string => !!id) ?? []
+        : [];
+
+      let finalInventories: Inventory[] = [];
+      const fetchedInventoryMap = new Map<string, Inventory>();
+
+      try {
+        // 1. Fetch inventories based on selected owners
+        if (selectedOwnerIds.length > 0) {
+          const ownerIdsParam = selectedOwnerIds.join(',');
+          const ownerInventoriesRes = await fetch(`/api/inventory?category=FERTILIZER,PESTICIDE&userIds=${ownerIdsParam}`);
+          if (ownerInventoriesRes.ok) {
+            const ownerInventoriesData = await ownerInventoriesRes.json();
+            (ownerInventoriesData || []).forEach((inv: Inventory) => {
+              if (!fetchedInventoryMap.has(inv.id)) {
+                fetchedInventoryMap.set(inv.id, inv);
+              }
+            });
+          } else {
+            console.error("Sahip bazlı envanter yüklenemedi:", ownerInventoriesRes.statusText);
+            // Optionally show a less critical toast here
+          }
+        }
+
+        // 2. Fetch all inventories in category if in edit mode to ensure initial selections are available
+        //    (Alternative: Fetch only specific initialInventoryIds if API supported it)
+        if (isEditMode && initialInventoryIds.length > 0) {
+           // Check if initial IDs are already fetched via owner filter
+           const missingInitialIds = initialInventoryIds.filter(id => !fetchedInventoryMap.has(id));
+
+           if (missingInitialIds.length > 0) {
+             // Fetch all relevant inventories and filter client-side
+             // Consider adding an API parameter like &ids=... in the future for efficiency
+             const allInventoriesRes = await fetch(`/api/inventory?category=FERTILIZER,PESTICIDE&fetchAll=true`);
+             if (allInventoriesRes.ok) {
+               const allInventoriesData = await allInventoriesRes.json();
+               (allInventoriesData || []).forEach((inv: Inventory) => {
+                 // Add if it's one of the initially used ones and not already added
+                 if (initialInventoryIds.includes(inv.id) && !fetchedInventoryMap.has(inv.id)) {
+                   fetchedInventoryMap.set(inv.id, inv);
+                 }
+               });
+             } else {
+               console.error("Tüm kategori envanterleri yüklenemedi:", allInventoriesRes.statusText);
+               toast({
+                 title: "Uyarı",
+                 description: "Başlangıçta kullanılan bazı envanterler yüklenememiş olabilir.",
+                 variant: "destructive",
+               });
+             }
+           }
+        }
+
+        finalInventories = Array.from(fetchedInventoryMap.values());
+        setInventories(finalInventories);
+
+      } catch (error: any) {
+        console.error("Envanter yükleme sırasında genel hata:", error);
+        toast({
+          title: "Hata",
+          description: error.message || "Envanter listesi güncellenirken bir hata oluştu.",
+          variant: "destructive",
+        });
+        setInventories([]); // Clear inventories on error
+      } finally {
+        setLoadingInventories(false);
       }
     };
 
-    fetchData();
-  }, []); // Fetch only once on mount
+    fetchInventories();
+  // Depend on selectedOwnerIds AND initialData to refetch when mode changes or owners change
+  }, [selectedOwnerIds, initialData]);
 
 
-  // Form gönderme - Hesaplamalar buraya taşındı
   const onSubmit = async (data: IrrigationFormValues) => {
-    setLoading(true);
-    try {
-      // --- Start Calculations within onSubmit ---
+    const isEditMode = !!irrigationId;
+    setLoadingSubmit(true);
 
-      // 1. Calculate Total Irrigated Area and Field Data
+    try {
+      // --- Start Calculations (Moved from previous version, needed for API) ---
       let totalIrrigatedArea = 0;
       const fieldDataForApi = data.fieldIrrigations
-        .map((irrigation): FieldDetailForApi | null => { // Add return type hint
+        .map((irrigation): FieldDetailForApi | null => {
           const field = fields.find((f) => f.id === irrigation.fieldId);
           if (!field) return null;
           const irrigatedArea = (field.size * irrigation.percentage) / 100;
@@ -240,31 +334,25 @@ export function IrrigationForm({ initialData }: IrrigationFormProps) {
             irrigatedArea: round(irrigatedArea),
             wellId: field.fieldWells?.[0]?.well?.id || null,
             seasonId: field.seasonId,
-            // We need owners here for the next calculation step
-            owners: field.owners,
+            owners: field.owners, // Keep owners for next calculation
           };
         })
-        .filter((item): item is FieldDetailForApi => item !== null); // Use type predicate for filtering
+        .filter((item): item is FieldDetailForApi => item !== null);
 
-      if (totalIrrigatedArea <= 0) {
+      if (totalIrrigatedArea <= 0 && data.fieldIrrigations.length > 0) { // Allow submission if no fields yet
         toast({ title: "Hata", description: "Toplam sulanan alan sıfırdan büyük olmalıdır.", variant: "destructive" });
-        setLoading(false);
+        setLoadingSubmit(false);
         return;
       }
 
-      // 2. Calculate Owner Durations and Areas
       const ownerDataMap: Record<string, OwnerData> = {};
-      // Now fieldDetail is guaranteed to be non-null here
       fieldDataForApi.forEach((fieldDetail) => {
-         // Add null/undefined check for owners array itself, just in case
-        if (!Array.isArray(fieldDetail.owners)) {
-             console.warn(`Owners array is missing or not an array for fieldDetail:`, fieldDetail);
-             return; // Skip if owners array is missing
-        }
+        if (!Array.isArray(fieldDetail.owners)) return;
         fieldDetail.owners.forEach((ownership) => {
-          if (!ownership.user) return; // Skip if user data is missing
+          if (!ownership.user) return;
           const ownerIrrigatedArea = (fieldDetail.irrigatedArea * ownership.percentage) / 100;
-          const ownerDuration = (data.duration * ownerIrrigatedArea) / totalIrrigatedArea;
+          // Avoid division by zero if totalIrrigatedArea is 0 (e.g., initial state)
+          const ownerDuration = totalIrrigatedArea > 0 ? (data.duration * ownerIrrigatedArea) / totalIrrigatedArea : 0;
 
           if (ownerDataMap[ownership.userId]) {
             ownerDataMap[ownership.userId].duration += ownerDuration;
@@ -286,16 +374,15 @@ export function IrrigationForm({ initialData }: IrrigationFormProps) {
           irrigatedArea: round(owner.irrigatedArea),
       }));
 
-
-      // 3. Prepare Inventory Usages with Owner Costs
       const inventoryUsagesForApi = data.inventoryUsages
         ?.map((usage) => {
-          if (!usage.inventoryId || !usage.quantity) return null; // Skip incomplete entries
+          if (!usage.inventoryId || !usage.quantity) return null;
           const inventoryItem = inventories.find((i) => i.id === usage.inventoryId);
           const unitPrice = inventoryItem?.unitPrice ?? 0;
 
           const ownerUsagesData = Object.values(ownerDataMap).map((owner) => {
-            const ownerShareQuantity = (usage.quantity! * owner.irrigatedArea) / totalIrrigatedArea;
+             // Avoid division by zero
+            const ownerShareQuantity = totalIrrigatedArea > 0 ? (usage.quantity! * owner.irrigatedArea) / totalIrrigatedArea : 0;
             const ownerCost = ownerShareQuantity * unitPrice;
             return {
               userId: owner.userId,
@@ -311,10 +398,8 @@ export function IrrigationForm({ initialData }: IrrigationFormProps) {
             ownerUsages: ownerUsagesData,
           };
         })
-        .filter((item): item is NonNullable<typeof item> => item !== null); // Filter out nulls and assert non-null
-
-
-      // --- End Calculations within onSubmit ---
+        .filter((item): item is NonNullable<typeof item> => item !== null);
+      // --- End Calculations ---
 
 
       // Başlangıç tarih ve saatini birleştir
@@ -322,51 +407,66 @@ export function IrrigationForm({ initialData }: IrrigationFormProps) {
       const [hours, minutes] = data.startTime.split(":").map(Number);
       startDate.setHours(hours, minutes, 0, 0);
 
-      // API'ye gönderilecek veriyi hazırla
+      // API'ye gönderilecek veriyi hazırla (backend'in beklediği yapı)
       const formData = {
         startDateTime: startDate.toISOString(),
         duration: data.duration,
         notes: data.notes,
-        // Remove owners from fieldDataForApi before sending
-        fieldIrrigations: fieldDataForApi.map(({ owners, ...rest }) => rest),
-        ownerDurations: ownerDurationsForApi,
-        inventoryUsages: inventoryUsagesForApi,
+        // fieldIrrigations: data.fieldIrrigations.map(({ fieldId, percentage }) => ({ // Simplified version from feedback - Reverting to calculated
+        //   fieldId,
+        //   percentage,
+        // })),
+        // inventoryUsages: data.inventoryUsages?.map(({ inventoryId, quantity }) => ({ // Simplified version from feedback - Reverting to calculated
+        //   inventoryId,
+        //   quantity,
+        // })),
+        fieldIrrigations: fieldDataForApi.map(({ owners, ...rest }) => rest), // Send calculated data without owners
+        ownerDurations: ownerDurationsForApi, // Send calculated owner durations
+        inventoryUsages: inventoryUsagesForApi, // Send calculated inventory usages with owner costs
       };
 
-      // API isteği
-      const response = await fetch("/api/irrigation", {
-        method: "POST",
+      // API isteği - Düzenleme veya Yeni Kayıt
+      const apiUrl = isEditMode ? `/api/irrigation/${irrigationId}` : "/api/irrigation";
+      const apiMethod = isEditMode ? "PUT" : "POST";
+
+      const response = await fetch(apiUrl, {
+        method: apiMethod,
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(formData), // Send the full calculated data
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(
-          error.error || "Sulama kaydı oluşturulurken bir hata oluştu."
-        );
+        // Try to parse error message from backend
+        let errorMessage = `Sulama kaydı ${isEditMode ? 'güncellenirken' : 'oluşturulurken'} bir hata oluştu.`;
+        try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+        } catch (parseError) {
+            // Ignore if response is not JSON or empty
+            console.error("Could not parse error response:", parseError);
+        }
+        throw new Error(errorMessage);
       }
 
       toast({
         title: "Başarılı",
-        description: "Sulama kaydı başarıyla oluşturuldu.",
+        description: `Sulama kaydı başarıyla ${isEditMode ? 'güncellendi' : 'oluşturuldu'}.`,
       });
 
       router.push("/dashboard/owner/irrigation");
       router.refresh();
 
-    } catch (error: any) {
-      console.error("Form gönderme hatası:", error);
+    } catch (error: any) { // Catch block expects 'any' or 'unknown'
+      console.error(`Form gönderme hatası (${isEditMode ? 'PUT' : 'POST'}):`, error);
       toast({
         title: "Hata",
-        description:
-          error.message || "Sulama kaydı oluşturulurken bir hata oluştu.",
+        description: error.message || `Sulama kaydı ${isEditMode ? 'güncellenirken' : 'oluşturulurken'} bilinmeyen bir hata oluştu.`, // Provide a fallback message
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      setLoadingSubmit(false);
     }
   };
 
@@ -563,20 +663,23 @@ export function IrrigationForm({ initialData }: IrrigationFormProps) {
                       Tarla
                     </Label>
                     <Select
-                      onValueChange={(value) =>
+                      onValueChange={(value) => {
+                        // Reset inventory selection when field changes? Optional.
+                        // form.setValue(`inventoryUsages`, []); // Example reset
                         form.setValue(
                           `fieldIrrigations.${index}.fieldId`,
                           value, { shouldValidate: true }
-                        )
-                      }
-                      // Use watch to get the current value for defaultValue
+                        );
+                      }}
                       defaultValue={form.watch(`fieldIrrigations.${index}.fieldId`)}
+                      disabled={loadingFields} // Disable while loading fields
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Tarla Seçin" />
+                        <SelectValue placeholder={loadingFields ? "Tarlalar yükleniyor..." : "Tarla Seçin"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {fields.map((f) => ( // Use a different variable name 'f'
+                        {!loadingFields && fields.length === 0 && <p className="p-4 text-sm text-muted-foreground">Uygun tarla bulunamadı.</p>}
+                        {fields.map((f) => (
                           <SelectItem key={f.id} value={f.id}>
                             {f.name} ({f.size} dekar)
                           </SelectItem>
@@ -651,107 +754,121 @@ export function IrrigationForm({ initialData }: IrrigationFormProps) {
 
             {/* Inventory Usage */}
             <div className="space-y-4">
-               <div className="flex justify-between items-center">
-                 <h3 className="text-lg font-medium">Envanter Kullanımı</h3>
-                 <Button
-                   type="button"
-                   variant="outline"
-                   size="sm"
-                   onClick={handleAddInventory}
-                 >
-                   <Plus className="h-4 w-4 mr-2" />
-                   Envanter Ekle
-                 </Button>
-               </div>
-              {inventoryUsagesArray.length === 0 && (
-                <div className="p-4 border rounded-md text-center text-gray-500">
-                  <p>
-                    Henüz envanter eklenmedi. Sulama sırasında kullanılan
-                    envanter varsa ekleyin.
-                  </p>
-                </div>
-              )}
-              {inventoryUsagesArray.map((item, index) => ( // Use item and index
-                <div
-                  key={item.id} // Use item.id provided by useFieldArray
-                  className="grid grid-cols-12 gap-4 items-end border p-4 rounded-md"
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-medium">Envanter Kullanımı</h3>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddInventory}
+                  disabled={!watchedFieldIrrigations || watchedFieldIrrigations.length === 0 || watchedFieldIrrigations.every(f => !f.fieldId)} // Disable if no field selected
                 >
-                  <div className="col-span-7 space-y-2">
-                    <Label htmlFor={`inventoryUsages.${index}.inventoryId`}>
-                      Envanter
-                    </Label>
-                    <Select
-                      onValueChange={(value) =>
-                        form.setValue(
-                          `inventoryUsages.${index}.inventoryId`,
-                          value, { shouldValidate: true }
-                        )
-                      }
-                      defaultValue={form.watch(`inventoryUsages.${index}.inventoryId`)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Envanter Seçin" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {inventories.map((inv) => ( // Use inv
-                          <SelectItem key={inv.id} value={inv.id}>
-                            {inv.name} ({inv.totalQuantity}{" "}
-                            {inv.unit})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {form.formState.errors.inventoryUsages?.[index]
-                      ?.inventoryId && (
-                      <p className="text-sm text-red-500">
-                        {
-                          form.formState.errors.inventoryUsages[index]
-                            ?.inventoryId?.message
+                  <Plus className="h-4 w-4 mr-2" />
+                  Envanter Ekle
+                </Button>
+              </div>
+              {/* Conditional rendering based on field selection and loading state */}
+              {!watchedFieldIrrigations || watchedFieldIrrigations.length === 0 || watchedFieldIrrigations.every(f => !f.fieldId) ? (
+                 <div className="p-4 border rounded-md text-center text-gray-500">
+                   <p>Lütfen önce envanterleri görmek için bir veya daha fazla tarla seçin.</p>
+                 </div>
+              ) : loadingInventories ? (
+                 <div className="p-4 border rounded-md text-center text-gray-500">
+                   <p>Seçili tarlaların sahiplerine ait envanterler yükleniyor...</p>
+                 </div>
+              ) : inventories.length === 0 ? (
+                 <div className="p-4 border rounded-md text-center text-gray-500">
+                   <p>Seçili tarlaların sahiplerine ait uygun (Gübre/Pestisit) envanter bulunamadı.</p>
+                 </div>
+              ) : (
+                inventoryUsagesArray.map((item, index) => (
+                  <div
+                    key={item.id}
+                    className="grid grid-cols-12 gap-4 items-end border p-4 rounded-md"
+                  >
+                    <div className="col-span-7 space-y-2">
+                      <Label htmlFor={`inventoryUsages.${index}.inventoryId`}>
+                        Envanter
+                      </Label>
+                      <Select
+                        onValueChange={(value) =>
+                          form.setValue(
+                            `inventoryUsages.${index}.inventoryId`,
+                            value, { shouldValidate: true }
+                          )
                         }
-                      </p>
-                    )}
-                  </div>
-                  <div className="col-span-4 space-y-2">
-                    <Label htmlFor={`inventoryUsages.${index}.quantity`}>
-                      Miktar
-                    </Label>
-                    <Input
-                      id={`inventoryUsages.${index}.quantity`}
-                      type="number"
-                      step="0.01"
-                      {...form.register(
-                        `inventoryUsages.${index}.quantity` as const,
-                        { valueAsNumber: true }
+                        defaultValue={form.watch(`inventoryUsages.${index}.inventoryId`)}
+                        disabled={loadingInventories || inventories.length === 0} // Disable if loading or no inventory
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={loadingInventories ? "Yükleniyor..." : "Envanter Seçin"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {inventories.map((inv) => (
+                            <SelectItem key={inv.id} value={inv.id}>
+                              {inv.name} (Stok: {inv.totalQuantity} {inv.unit})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {form.formState.errors.inventoryUsages?.[index]
+                        ?.inventoryId && (
+                        <p className="text-sm text-red-500">
+                          {
+                            form.formState.errors.inventoryUsages[index]
+                              ?.inventoryId?.message
+                          }
+                        </p>
                       )}
-                    />
-                    {form.formState.errors.inventoryUsages?.[index]
-                      ?.quantity && (
-                      <p className="text-sm text-red-500">
-                        {
-                          form.formState.errors.inventoryUsages[index]
-                            ?.quantity?.message
-                        }
-                      </p>
-                    )}
+                    </div>
+                    <div className="col-span-4 space-y-2">
+                      <Label htmlFor={`inventoryUsages.${index}.quantity`}>
+                        Miktar ({inventories.find(inv => inv.id === form.watch(`inventoryUsages.${index}.inventoryId`))?.unit || 'Birim'})
+                      </Label>
+                      <Input
+                        id={`inventoryUsages.${index}.quantity`}
+                        type="number"
+                        step="0.01"
+                        {...form.register(
+                          `inventoryUsages.${index}.quantity` as const,
+                          { valueAsNumber: true }
+                        )}
+                        disabled={!form.watch(`inventoryUsages.${index}.inventoryId`)} // Disable if no inventory selected
+                      />
+                      {form.formState.errors.inventoryUsages?.[index]
+                        ?.quantity && (
+                        <p className="text-sm text-red-500">
+                          {
+                            form.formState.errors.inventoryUsages[index]
+                              ?.quantity?.message
+                          }
+                        </p>
+                      )}
+                    </div>
+                    <div className="col-span-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeInventory(index)}
+                        className="text-red-500"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="col-span-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeInventory(index)}
-                      className="text-red-500"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))
+              )}
+              {inventoryUsagesArray.length > 0 && inventories.length === 0 && !loadingInventories && (
+                 <div className="p-4 border rounded-md text-center text-red-500">
+                   <p>Uyarı: Seçili tarlaların sahiplerine ait envanter bulunamadığı için eklenen envanter satırları geçersiz olabilir.</p>
+                 </div>
+              )}
+            </div> {/* End of Inventory Usage Section */}
 
             {/* Calculated Values Preview */}
             {displayTotalIrrigatedArea > 0 && ( // Show only if calculations are valid
-              <div className="space-y-4 border p-4 rounded-md bg-gray-50">
+              <div className="space-y-4 border p-4 rounded-md bg-gray-50 mt-6"> {/* Added mt-6 for spacing */}
                 <h3 className="text-lg font-medium">Hesaplanan Değerler (Önizleme)</h3>
                 <div className="space-y-2">
                   <h4 className="font-medium">Toplam Sulanan Alan</h4>
@@ -816,18 +933,18 @@ export function IrrigationForm({ initialData }: IrrigationFormProps) {
                 )}
               </div>
             )}
-          </CardContent>
+          </CardContent> {/* Ensure CardContent closes correctly */}
           <CardFooter className="flex justify-end gap-4">
             <Button
               type="button"
               variant="outline"
               onClick={() => router.push("/dashboard/owner/irrigation")}
-              disabled={loading}
+              disabled={loadingSubmit} // Use specific loading state
             >
               İptal
             </Button>
-            <Button type="submit" disabled={loading || !form.formState.isValid}> {/* Disable if form is invalid */}
-              {loading ? "Kaydediliyor..." : "Kaydet"}
+            <Button type="submit" disabled={loadingSubmit || loadingFields || loadingInventories || !form.formState.isValid}> {/* Disable if loading anything or form invalid */}
+              {loadingSubmit ? "Kaydediliyor..." : "Kaydet"}
             </Button>
           </CardFooter>
         </Card>

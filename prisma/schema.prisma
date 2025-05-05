@@ -44,6 +44,7 @@ model User {
   equipmentOwnerships EquipmentOwnership[] // Sahip olunan ekipmanlar
   equipmentUsages     EquipmentUsage[] // Kullanılan ekipmanlar
   fieldOwnerExpenses  FieldOwnerExpense[] // Tarla sahibi giderleri
+  wellAssignments     WorkerWellAssignment[] // İşçiye atanan kuyular
 
   // YENİ: Bildirim tercihleri
   notificationPreferences NotificationPreference?
@@ -169,6 +170,21 @@ model FieldWell {
   @@unique([fieldId, wellId])
 }
 
+// YENİ: İşçi Kuyu Atama Modeli
+model WorkerWellAssignment {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // İlişkiler
+  worker   User   @relation(fields: [workerId], references: [id])
+  workerId String @db.ObjectId
+  well     Well   @relation(fields: [wellId], references: [id])
+  wellId   String @db.ObjectId
+
+  @@unique([workerId, wellId]) // Bir işçi bir kuyuya sadece bir kez atanabilir
+}
+
 // Kuyu modeli - güncellendi
 model Well {
   id         String      @id @default(auto()) @map("_id") @db.ObjectId
@@ -191,6 +207,7 @@ model Well {
   // Yeni eklenen sulama ilişkileri
   irrigationLogs IrrigationLog[]
   wellBillingPeriods WellBillingPeriod[]
+  workerAssignments WorkerWellAssignment[] // Kuyuya atanan işçiler
 }
 
 // Ürün modeli

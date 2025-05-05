@@ -22,10 +22,22 @@ async function getIrrigationLog(id: string) {
     const startDate = new Date(irrigationLog.startDateTime);
     const startTime = `${startDate.getHours().toString().padStart(2, "0")}:${startDate.getMinutes().toString().padStart(2, "0")}`;
 
+    // Form için veriyi IrrigationFormValues'a uygun hale getir
     return {
-      ...irrigationLog,
-      startDate,
-      startTime,
+      id: irrigationLog.id, // ID'yi ekle
+      date: startDate,
+      startTime: startTime,
+      duration: irrigationLog.duration,
+      notes: irrigationLog.notes ?? undefined, // null ise undefined yap
+      fieldIrrigations: irrigationLog.fieldUsages.map(fu => ({
+        fieldId: fu.fieldId,
+        percentage: fu.percentage,
+      })),
+      inventoryUsages: irrigationLog.inventoryUsages.map(iu => ({
+        inventoryId: iu.inventoryId,
+        quantity: iu.quantity,
+        // unitPrice burada eksik, formda gerekirse API'den çekilmeli veya farklı yönetilmeli
+      })),
     };
   } catch (error) {
     console.error("Error fetching irrigation log:", error);
@@ -36,18 +48,20 @@ async function getIrrigationLog(id: string) {
 export default async function EditIrrigationPage({
   params,
 }: {
-  params: { id: string };
+  params: { id: string }; // Doğru fonksiyon imzası
 }) {
-  const irrigationLog = await getIrrigationLog(params.id);
+  const { id } = params; // ID'yi doğru şekilde al
+  const formattedIrrigationLog = await getIrrigationLog(id); // Formatlanmış veriyi al
 
-  if (!irrigationLog) {
+  if (!formattedIrrigationLog) {
     notFound();
   }
 
   return (
     <div className="container mx-auto py-6">
       <h1 className="text-2xl font-bold mb-6">Sulama Kaydını Düzenle</h1>
-      <IrrigationForm initialData={irrigationLog} />
+      {/* Formatlanmış veriyi IrrigationForm'a aktar */}
+      <IrrigationForm initialData={formattedIrrigationLog} />
     </div>
   );
 }

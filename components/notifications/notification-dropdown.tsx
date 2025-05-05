@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Bell } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
-import { Notification, NotificationSummary } from "@/types/notification-types";
+import { Notification, NotificationSummary } from "@/types/notification-types"; // İthalat satırını yeniden yazıyoruz
 import { formatDistanceToNow } from "date-fns";
 import { tr } from "date-fns/locale";
 import { useToast } from "@/components/ui/use-toast";
@@ -40,7 +40,7 @@ export function NotificationDropdown() {
     try {
       const response = await fetch("/api/notifications/summary");
       if (!response.ok) throw new Error("Bildirim özeti yüklenemedi");
-      const data = await response.json();
+      const data: NotificationSummary = await response.json(); // Dönen veriye açıkça tür atandı
       setNotificationSummary(data);
     } catch (error) {
       console.error("Bildirim özeti yükleme hatası:", error);
@@ -60,10 +60,10 @@ export function NotificationDropdown() {
       if (!response.ok) throw new Error("Bildirim güncellenemedi");
 
       // Bildirimleri güncelle
-      setNotificationSummary((prev) => ({
+      setNotificationSummary((prev: NotificationSummary) => ({
         ...prev,
         unreadCount: Math.max(0, prev.unreadCount - 1),
-        recentNotifications: prev.recentNotifications.map((n) =>
+        recentNotifications: prev.recentNotifications.map((n: Notification) =>
           n.id === id ? { ...n, status: "READ", readAt: new Date() } : n
         ),
       }));
@@ -86,10 +86,10 @@ export function NotificationDropdown() {
       if (!response.ok) throw new Error("Bildirimler güncellenemedi");
 
       // Tüm bildirimleri okundu olarak işaretle
-      setNotificationSummary((prev) => ({
+      setNotificationSummary((prev: NotificationSummary) => ({
         ...prev,
         unreadCount: 0,
-        recentNotifications: prev.recentNotifications.map((n) => ({
+        recentNotifications: prev.recentNotifications.map((n: Notification) => ({
           ...n,
           status: "READ",
           readAt: new Date(),
@@ -152,7 +152,7 @@ export function NotificationDropdown() {
           </div>
         ) : (
           <>
-            {notificationSummary.recentNotifications.map((notification) => (
+            {notificationSummary.recentNotifications.map((notification: Notification) => (
               <DropdownMenuItem
                 key={notification.id}
                 className="flex flex-col items-start p-3"

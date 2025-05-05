@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
-import type { Purchase, InventoryTransaction, Debt, PurchaseContributor } from "@prisma/client"; // Gerekli tipleri import et
+import { Prisma, InventoryCategory, InventoryStatus, Unit, PaymentMethod, ApprovalStatus, ProductCategory } from "@prisma/client"; // Eksik tipler eklendi
+import type { Purchase, InventoryTransaction, Debt, PurchaseContributor, Inventory, InventoryOwnership } from "@prisma/client"; // Inventory ve InventoryOwnership tipleri eklendi
 
 // Alış detaylarını getir (Opsiyonel, gerekirse eklenebilir)
 // export async function GET(request: NextRequest, { params }: { params: { id: string } }) { ... }
@@ -30,7 +30,7 @@ export async function PUT(
 
   try {
     // params bir Promise olabilir, await ile çözülmeli (Kullanıcı geri bildirimine göre)
-    const { id: purchaseId } = await params; 
+    const { id: purchaseId } = await params;
     const userId = request.headers.get("x-user-id");
     const userRole = request.headers.get("x-user-role");
 
@@ -74,44 +74,72 @@ export async function PUT(
     // Toplam Maliyeti Hesapla (Güncel verilerden)
     const totalCost = (purchaseData.quantity || 0) * (purchaseData.unitPrice || 0);
 
+    // Transaction öncesi: Eski envanter ID'lerini bul (Purchase ile ilişkili transaction'lardan)
+    const oldInventoryTransactions = await prisma.inventoryTransaction.findMany({
+      where: { purchaseId: purchaseId },
+      select: { inventoryId: true },
+    });
+    const inventoryIdsToDelete: string[] = [
+      ...new Set(oldInventoryTransactions.map(t => t.inventoryId).filter((id): id is string => id !== null)),
+    ];
+    console.log(`Purchase ${purchaseId} update: Found old inventory IDs to delete: ${inventoryIdsToDelete.join(', ')}`);
+
     // Transaction ile güncelleme
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Eski Katılımcıları ve Borçları Sil
-      // Önce borçları sil (katılımcı ilişkisi nedeniyle)
-      await tx.debt.deleteMany({
-        where: { purchaseId: purchaseId },
-      });
-      // Sonra katılımcıları sil
-      await tx.purchaseContributor.deleteMany({
-        where: { purchaseId: purchaseId },
-      });
+      // 1. Eski Borçları ve Katılımcıları ve İlişkili Ödeme Geçmişini Sil
+       const oldDebts = await tx.debt.findMany({ where: { purchaseId: purchaseId }, select: { id: true } });
+       const oldDebtIds = oldDebts.map(d => d.id);
+       if (oldDebtIds.length > 0) {
+         await tx.paymentHistory.deleteMany({ where: { debtId: { in: oldDebtIds } } }); // Ödeme geçmişini sil
+         await tx.debt.deleteMany({ where: { purchaseId: purchaseId } });
+         console.log(`Purchase ${purchaseId} update: Deleted old debts and related payment history.`);
+       }
 
-      // 2. Alış Ana Bilgilerini Güncelle
+       const oldContributors = await tx.purchaseContributor.findMany({ where: { purchaseId: purchaseId }, select: { id: true } });
+       const oldContributorIds = oldContributors.map(c => c.id);
+       if (oldContributorIds.length > 0) {
+          await tx.paymentHistory.deleteMany({ where: { contributorId: { in: oldContributorIds } } }); // Ödeme geçmişini sil
+          await tx.purchaseContributor.deleteMany({ where: { purchaseId: purchaseId } });
+          console.log(`Purchase ${purchaseId} update: Deleted old contributors and related payment history.`);
+       }
+
+       // 2. Eski Envanter Kayıtlarını ve İlişkili Verileri Sil (DELETE rotasındaki mantık)
+       // Bu işlem, transaction başlamadan önce bulunan inventoryIdsToDelete listesini kullanır.
+       if (inventoryIdsToDelete.length > 0) {
+           console.log(`Purchase ${purchaseId} update: Deleting old inventory data for IDs: ${inventoryIdsToDelete.join(', ')}`);
+           await tx.inventoryUsage.deleteMany({ where: { inventoryId: { in: inventoryIdsToDelete } } });
+           await tx.inventoryTransaction.deleteMany({ where: { inventoryId: { in: inventoryIdsToDelete } } }); // purchaseId ile ilişkili olanları da siler
+           await tx.inventoryOwnership.deleteMany({ where: { inventoryId: { in: inventoryIdsToDelete } } });
+           await tx.inventory.deleteMany({ where: { id: { in: inventoryIdsToDelete } } });
+           console.log(`Purchase ${purchaseId} update: Deleted ${inventoryIdsToDelete.length} old inventory records and related data.`);
+       }
+
+      // 3. Alış Ana Bilgilerini Güncelle
       const updatedPurchase = await tx.purchase.update({
         where: { id: purchaseId },
         data: {
           product: purchaseData.product,
-          category: purchaseData.category,
+          category: purchaseData.category as ProductCategory, // Cast eklendi
           quantity: purchaseData.quantity,
-          unit: purchaseData.unit,
+          unit: purchaseData.unit as Unit, // Cast eklendi
           unitPrice: purchaseData.unitPrice,
           totalCost: totalCost, // Hesaplanan yeni toplam maliyet
-          paymentMethod: purchaseData.paymentMethod,
+          paymentMethod: purchaseData.paymentMethod as PaymentMethod, // Cast eklendi
           dueDate: purchaseData.dueDate ? new Date(purchaseData.dueDate) : null,
           description: purchaseData.description,
-          approvalStatus: purchaseData.approvalStatus,
+          approvalStatus: purchaseData.approvalStatus as ApprovalStatus, // Cast eklendi
           approvalRequired: purchaseData.approvalRequired,
           approvalThreshold: purchaseData.approvalThreshold,
           seasonId: purchaseData.seasonId,
         },
       });
 
-      // 3. Yeni Katılımcıları Oluştur (POST'taki mantıkla aynı)
+      // 4. Yeni Katılımcıları Oluştur
       const contributorPromises = partners.map((partner: any) => {
         const contribution = totalCost * (partner.sharePercentage / 100);
         return tx.purchaseContributor.create({
           data: {
-            purchaseId: updatedPurchase.id, // Güncellenen alışın ID'si
+            purchaseId: updatedPurchase.id,
             userId: partner.userId,
             sharePercentage: partner.sharePercentage,
             contribution: contribution,
@@ -124,33 +152,25 @@ export async function PUT(
         });
       });
       const createdContributors = await Promise.all(contributorPromises);
+      console.log(`Purchase ${updatedPurchase.id} update: Created ${createdContributors.length} new contributors.`);
 
-      // 4. Yeni Borçları Oluştur
-      // Önce alacaklıyı belirle: Katılımcılardan biri işaretlenmişse o, değilse işlemi yapan kullanıcı
-      let creditorId = createdContributors.find(c => c.isCreditor)?.userId;
-      if (!creditorId) {
-          // Eğer katılımcılardan hiçbiri alacaklı değilse, işlemi yapan kullanıcıyı alacaklı kabul et
-          // Ancak işlemi yapan kullanıcı aynı zamanda ödeme yapmayan bir katılımcıysa, bu durumda alacaklı belirsizdir.
-          const requestUserIsUnpaidContributor = createdContributors.some(c => c.userId === userId && !c.hasPaid);
-          if (!requestUserIsUnpaidContributor) {
-              creditorId = userId; // İşlemi yapan kullanıcı alacaklı
-              console.log(`Purchase ${updatedPurchase.id} (updated): No explicit creditor found, assuming requesting user (${userId}) is the creditor.`);
-          } else {
-              console.warn(`Purchase ${updatedPurchase.id} (updated): Cannot determine creditor. Requesting user (${userId}) is also an unpaid contributor.`);
-          }
+
+      // 5. Yeni Borçları Oluştur (Alacaklı belirleme mantığı ile)
+      const determinedPaidContributor = createdContributors.find(c => c.hasPaid);
+      let determinedCreditorId: string | undefined | null = determinedPaidContributor?.userId;
+
+      if (!determinedCreditorId) {
+          determinedCreditorId = userId;
+          console.log(`Purchase ${updatedPurchase.id} (updated): No contributor marked as paid, assuming requesting user (${userId}) is the creditor.`);
+      } else {
+          console.log(`Purchase ${updatedPurchase.id} (updated): Creditor identified as contributor ${determinedCreditorId} (hasPaid=true).`);
       }
 
-      if (creditorId) { // Alacaklı belirlenebildiyse borçları oluştur
+      if (determinedCreditorId) {
         const debtPromises = createdContributors
-          .filter(contributor => !contributor.hasPaid && contributor.userId !== creditorId) // Ödeme yapmamış VE alacaklı olmayanlar
+          .filter(contributor => !contributor.hasPaid && contributor.userId !== determinedCreditorId)
           .map(debtorContributor => {
-            // Borçlu ortağın formdan gelen verisini bul (dueDate için)
             const partnerData = partners.find((p: any) => p.userId === debtorContributor.userId);
-
-            // Vade tarihini belirle:
-            // 1. Ortağa özel vade tarihi var mı? (Formdan gelen)
-            // 2. Alışın genel vade tarihi var mı?
-            // 3. Hiçbiri yoksa varsayılan (3 ay sonrası)
             let dueDate;
             if (partnerData?.dueDate) {
               dueDate = new Date(partnerData.dueDate);
@@ -159,35 +179,79 @@ export async function PUT(
             } else {
               dueDate = new Date(new Date().setMonth(new Date().getMonth() + 3));
             }
-
-            console.log(`Creating/Updating debt for Purchase ${updatedPurchase.id}: Debtor=${debtorContributor.userId}, Creditor=${creditorId}, Amount=${debtorContributor.contribution}, DueDate=${dueDate}`); // Log güncellendi
-
-            return tx.debt.create({ // create kullanıyoruz çünkü eskileri sildik
+            console.log(`Creating/Updating debt for Purchase ${updatedPurchase.id}: Debtor=${debtorContributor.userId}, Creditor=${determinedCreditorId}, Amount=${debtorContributor.contribution}, DueDate=${dueDate}`);
+            return tx.debt.create({
               data: {
                 amount: debtorContributor.contribution,
-                dueDate: dueDate, // Belirlenen vade tarihini kullan
+                dueDate: dueDate,
                 status: 'PENDING',
                 description: `${updatedPurchase.product} alışı için borç (güncellendi)`,
                 reason: 'PURCHASE',
-                creditorId: creditorId, // Belirlenen alacaklı ID'si
+                creditorId: determinedCreditorId, // Prisma string bekliyor, null olamaz. Zaten yukarıda userId atanıyor.
                 debtorId: debtorContributor.userId,
                 purchaseId: updatedPurchase.id,
               },
             });
           });
         await Promise.all(debtPromises);
+        console.log(`Purchase ${updatedPurchase.id} update: Created/Updated debts.`);
       } else if (createdContributors.some(c => !c.hasPaid)) {
-          // Alacaklı belirlenemedi ve ödenmemiş pay var
           console.error(`Purchase ${updatedPurchase.id} (updated): Debts could not be created because the creditor could not be determined.`);
       }
 
-      // TODO: Envanter güncelleme mantığı da buraya eklenebilir.
-      // Eğer alış miktarı veya ürünü değiştiyse, ilişkili envanter kaydının
-      // ve envanter sahipliklerinin de güncellenmesi gerekebilir.
-      // Şimdilik bu kısım eklenmedi.
+      // 6. Yeni Envanter Kaydı, Sahiplikleri ve İşlemi Oluştur
+      let newInventory: Inventory | null = null;
+      if (!updatedPurchase.isTemplate) { // Şablon değilse envanter oluştur
+          console.log(`Purchase ${updatedPurchase.id} update: Creating new inventory record.`);
+          newInventory = await tx.inventory.create({
+              data: {
+                  name: updatedPurchase.product,
+                  category: updatedPurchase.category as InventoryCategory,
+                  totalQuantity: updatedPurchase.quantity,
+                  unit: updatedPurchase.unit as Unit,
+                  purchaseDate: purchaseData.purchaseDate ? new Date(purchaseData.purchaseDate) : new Date(), // Formdan gelen tarihi veya şimdiki zamanı kullan
+                  costPrice: updatedPurchase.unitPrice,
+                  status: InventoryStatus.AVAILABLE,
+                  notes: `"${updatedPurchase.id}" ID'li alış güncellemesi ile oluşturuldu.`,
+              },
+          });
+          console.log(`Purchase ${updatedPurchase.id} update: Created new inventory record with ID: ${newInventory.id}`);
 
-      return updatedPurchase; // Güncellenen alış bilgisini döndür
-    }); // Transaction sonu
+          // Yeni Envanter Sahiplikleri
+          const ownershipPromises = createdContributors.map((contributor) => {
+              const shareQuantity = updatedPurchase.quantity * (contributor.sharePercentage / 100);
+              return tx.inventoryOwnership.create({
+                  data: {
+                      inventoryId: newInventory!.id, // Non-null assertion
+                      userId: contributor.userId,
+                      shareQuantity: shareQuantity,
+                  },
+              });
+          });
+          await Promise.all(ownershipPromises);
+          console.log(`Purchase ${updatedPurchase.id} update: Created ${createdContributors.length} ownership records for inventory ${newInventory.id}.`);
+
+          // Yeni Envanter İşlemi (Alış Tipi)
+          await tx.inventoryTransaction.create({
+              data: {
+                  inventoryId: newInventory!.id, // Non-null assertion
+                  type: 'PURCHASE',
+                  quantity: updatedPurchase.quantity,
+                  date: new Date(), // Güncelleme tarihi
+                  userId: userId, // İşlemi yapan kullanıcı
+                  purchaseId: updatedPurchase.id,
+                  seasonId: updatedPurchase.seasonId || undefined,
+                  notes: `"${updatedPurchase.id}" ID'li alış güncellemesi.`
+              }
+          });
+          console.log(`Purchase ${updatedPurchase.id} update: Created transaction log for inventory ${newInventory.id}.`);
+      }
+
+      return updatedPurchase;
+    }, {
+        maxWait: 15000, // ms cinsinden maksimum bekleme süresi (varsayılan 2000)
+        timeout: 45000, // ms cinsinden maksimum işlem süresi (varsayılan 5000)
+    }); // Transaction sonu, zaman aşımları eklendi
 
     return NextResponse.json(result, { status: 200 });
 
@@ -253,7 +317,7 @@ export async function DELETE(
       ...new Set(
         purchaseToDelete.inventoryTransactions.map(
           (t) => t.inventoryId // t'nin tipi PurchaseWithRelations sayesinde biliniyor
-        )
+        ).filter((id): id is string => id !== null) // null kontrolü eklendi
       ),
     ];
     // İlişkili borç ID'lerini topla

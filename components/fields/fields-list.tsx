@@ -182,13 +182,16 @@ export default function FieldsList() {
   const fetchFields = async () => {
     try {
       setLoading(true);
-      const response = await fetch("/api/fields");
+      // includeOwnerships=true ve fetchAll=true parametrelerini ekle
+      const response = await fetch("/api/fields?includeOwnerships=true&fetchAll=true");
       if (!response.ok) {
         throw new Error("Tarlalar yüklenirken bir hata oluştu");
       }
-      const data = await response.json();
-      setFields(data);
-      setFilteredFields(data);
+      const responseData = await response.json();
+      // API'den gelen yanıtın 'data' özelliğini kullan
+      const fieldsData = responseData.data || []; // Eğer data yoksa boş dizi ata
+      setFields(fieldsData);
+      setFilteredFields(fieldsData);
     } catch (error) {
       console.error("Error fetching fields:", error);
       toast({
@@ -459,7 +462,8 @@ export default function FieldsList() {
                   <TableCell>{field.size}</TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-1">
-                      {field.owners.map((owner) => (
+                      {/* field.owners var mı ve dizi mi diye kontrol et, yoksa boş dizi kullan */}
+                      {(field.owners || []).map((owner) => (
                         <div
                           key={owner.id}
                           className="text-xs flex items-center gap-1"
