@@ -289,6 +289,61 @@ export async function POST(request: Request) {
           console.error(`Purchase ${purchase.id}: Debts could not be created because the creditor could not be determined.`);
       }
 
+      // Bildirimleri Oluştur
+      const senderUser = await tx.user.findUnique({ where: { id: userId } }); // İşlemi başlatan kullanıcı
+
+      // 1. Alış Ortaklarına Bildirim
+      for (const contributor of createdContributors) {
+        if (contributor.userId !== userId) { // Alışı oluşturan kişiye tekrar bildirim gitmesin
+          await tx.notification.create({
+            data: {
+              title: "Yeni Alıma Dahil Edildiniz",
+              message: `${purchase.product} alımına %${contributor.sharePercentage} pay ile dahil edildiniz. Katkı payınız: ${contributor.contribution.toFixed(2)} TL.`,
+              type: "SYSTEM", // Veya daha spesifik bir tip e.g., PURCHASE_PARTICIPATION
+              receiverId: contributor.userId,
+              senderId: userId,
+              purchaseId: purchase.id,
+              link: `/dashboard/owner/purchases/${purchase.id}`,
+              priority: "NORMAL",
+            },
+          });
+        }
+      }
+
+      // 2. Yöneticilere (ADMIN) Genel Bilgilendirme ve Onay Bildirimi
+      const admins = await tx.user.findMany({ where: { role: "ADMIN" } });
+      for (const admin of admins) {
+        if (admin.id !== userId) { // Alışı oluşturan admin ise tekrar bildirim gitmesin
+          if (purchase.approvalStatus === ApprovalStatus.PENDING && purchase.approvalRequired) {
+            await tx.notification.create({
+              data: {
+                title: "Onay Bekleyen Yeni Alış",
+                message: `${purchase.product} için ${purchase.totalCost.toFixed(2)} TL değerinde bir alış (${senderUser?.name || 'bir kullanıcı'} tarafından oluşturuldu) onayınızı bekliyor.`,
+                type: "APPROVAL",
+                receiverId: admin.id,
+                senderId: userId,
+                purchaseId: purchase.id,
+                link: `/dashboard/admin/purchases/${purchase.id}/approve`, // Örnek onay linki
+                priority: "HIGH",
+              },
+            });
+          } else {
+            await tx.notification.create({
+              data: {
+                title: "Yeni Alış Kaydı Oluşturuldu",
+                message: `${purchase.product} için ${purchase.totalCost.toFixed(2)} TL değerinde yeni bir alış kaydı (${senderUser?.name || 'bir kullanıcı'} tarafından) oluşturuldu.`,
+                type: "SYSTEM", // Veya daha spesifik bir tip e.g., NEW_PURCHASE
+                receiverId: admin.id,
+                senderId: userId,
+                purchaseId: purchase.id,
+                link: `/dashboard/owner/purchases/${purchase.id}`,
+                priority: "NORMAL",
+              },
+            });
+          }
+        }
+      }
+
       return { purchase, contributors: createdContributors, inventory };
     }); // Transaction sonu
 

@@ -1004,6 +1004,8 @@ enum NotificationType {
   IRRIGATION_SCHEDULED // YENİ: Sulama planlandı bildirimi
   IRRIGATION_COMPLETED // YENİ: Sulama tamamlandı bildirimi
   SYSTEM_ALERT // YENİ: Sistem uyarısı
+  TASK_UPDATED // YENİ: Görev güncellendi bildirimi
+  PROCESS_UPDATED // YENİ: İşlem güncellendi bildirimi
   OTHER
 }
 

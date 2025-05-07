@@ -149,6 +149,7 @@ export async function POST(request: Request) {
       equipmentId, // Ekipman ID'si
       inventoryItems,
       seasonId,
+      workerId: selectedWorkerId, // Formdan gelen workerId'yi al (opsiyonel)
     } = await request.json();
 
     // Veri doğrulama
@@ -274,7 +275,8 @@ export async function POST(request: Request) {
         const process = await tx.process.create({
           data: {
             fieldId,
-            workerId: userId,
+            // Eğer formdan workerId gelmişse onu kullan, yoksa isteği yapanı ata
+            workerId: selectedWorkerId || userId,
             seasonId: seasonId || activeSeason!.id,
             type: type as ProcessType,
             date: new Date(date),
@@ -450,9 +452,9 @@ export async function POST(request: Request) {
         // Ekipman maliyeti (örnek olarak sabit bir değer - Geliştirilmeli)
         const equipmentCost = equipmentUsageRecords.length > 0 ? 50 : 0; // TODO: Gerçek ekipman maliyeti/amortisman hesaplaması eklenmeli
 
-        // Envanter ve Yakıt Maliyeti (Purchase'dan unitPrice alınarak hesaplanacak)
+        // Envanter ve Yakıt Maliyeti (Önce Inventory.costPrice, sonra Purchase.unitPrice)
         let inventoryCost = 0;
-        console.log("--- Calculating Process Cost (Fetching from Purchase) ---"); // Log Başlangıç
+        console.log("--- Calculating Process Cost (Prioritizing Inventory.costPrice) ---"); // Log Başlangıç
         console.log("Inventory Usage Records:", JSON.stringify(inventoryUsageRecords, null, 2)); // Log: Kullanım kayıtları
 
         // 1. Benzersiz inventoryId'leri topla
@@ -465,62 +467,57 @@ export async function POST(request: Request) {
         ];
         console.log("Unique Inventory IDs:", uniqueInventoryIds); // Log
 
-        // 2. İlgili InventoryTransaction'ları bul (Purchase tipinde olanları)
-        let inventoryToPurchaseMap = new Map<string, string>(); // inventoryId -> purchaseId
+        // 2. İlgili Envanter kayıtlarını (costPrice ile) ve Alış İşlemlerini (purchaseId için) getir
+        let inventoryMap = new Map<string, { costPrice: number | null }>(); // inventoryId -> { costPrice }
+        let inventoryToPurchaseMap = new Map<string, string>(); // inventoryId -> purchaseId (yedek için)
         if (uniqueInventoryIds.length > 0) {
+          // Envanterleri getir
+          const inventories = await tx.inventory.findMany({
+            where: { id: { in: uniqueInventoryIds } },
+            select: { id: true, costPrice: true },
+          });
+          inventories.forEach((inv) => {
+            inventoryMap.set(inv.id, { costPrice: inv.costPrice });
+          });
+          console.log("Inventory ID to Cost Price Map:", inventoryMap); // Log
+
+          // Alış İşlemlerini getir (yedek olarak)
           const transactions = await tx.inventoryTransaction.findMany({
             where: {
               inventoryId: { in: uniqueInventoryIds },
               type: "PURCHASE",
-              purchaseId: { not: null }, // purchaseId'si null olmayanları al
+              purchaseId: { not: null },
             },
-            select: {
-              inventoryId: true,
-              purchaseId: true,
-            },
-            // Belki aynı envanter için birden fazla alış işlemi olabilir,
-            // en sonuncusunu almak mantıklı olabilir ama şimdilik ilk bulduğunu alalım.
-            // Daha sağlam bir çözüm için Inventory ve Purchase arasında doğrudan ilişki gerekebilir.
-            distinct: ["inventoryId"], // Her inventoryId için sadece bir kayıt almayı dene (ilk bulduğunu alır genelde)
+            select: { inventoryId: true, purchaseId: true },
+            distinct: ["inventoryId"], // Her envanter için bir tane al (genelde ilk/en eski)
           });
-          console.log("Found Transactions linking Inventory to Purchase:", transactions); // Log
-
           transactions.forEach((t) => {
-            // purchaseId'nin null olmadığını tekrar kontrol et (distinct sonrası garanti değil)
             if (t.purchaseId) {
               inventoryToPurchaseMap.set(t.inventoryId, t.purchaseId);
             }
           });
-          console.log("Inventory ID to Purchase ID Map:", inventoryToPurchaseMap); // Log
+          console.log("Inventory ID to Purchase ID Map (Fallback):", inventoryToPurchaseMap); // Log
         }
 
-        // 3. İlgili Purchase kayıtlarından unitPrice'ları al
-        const uniquePurchaseIds = [...new Set(inventoryToPurchaseMap.values())];
+        // 3. Yedek için ilgili Purchase kayıtlarından unitPrice'ları al
+        const uniquePurchaseIdsForFallback = [...new Set(inventoryToPurchaseMap.values())];
         let purchasePriceMap = new Map<string, number>(); // purchaseId -> unitPrice
-        if (uniquePurchaseIds.length > 0) {
+        if (uniquePurchaseIdsForFallback.length > 0) {
           const purchases = await tx.purchase.findMany({
-            where: {
-              id: { in: uniquePurchaseIds },
-            },
-            select: {
-              id: true,
-              unitPrice: true,
-            },
+            where: { id: { in: uniquePurchaseIdsForFallback } },
+            select: { id: true, unitPrice: true },
           });
-          console.log("Found Purchases with Unit Prices:", purchases); // Log
-
           purchases.forEach((p) => {
-            // unitPrice null veya undefined değilse ekle
             if (p.unitPrice !== null && p.unitPrice !== undefined) {
-               purchasePriceMap.set(p.id, p.unitPrice);
+              purchasePriceMap.set(p.id, p.unitPrice);
             } else {
-               console.warn(`Purchase record ${p.id} is missing unitPrice.`); // Log
+              console.warn(`(Fallback) Purchase record ${p.id} is missing unitPrice.`); // Log
             }
           });
-           console.log("Purchase ID to Unit Price Map:", purchasePriceMap); // Log
+          console.log("Purchase ID to Unit Price Map (Fallback):", purchasePriceMap); // Log
         }
 
-        // 4. Maliyet Hesaplama Döngüsü (Yeni Mantıkla)
+        // 4. Maliyet Hesaplama Döngüsü (Yeni Önceliklendirme Mantığıyla)
         for (const usage of inventoryUsageRecords) {
           console.log(`Processing usage record ID: ${usage.id}, Inventory ID: ${usage.inventoryId}, Quantity: ${usage.usedQuantity}`); // Log: Her kullanım kaydı
           if (!usage.inventoryId || usage.usedQuantity === null || usage.usedQuantity === undefined) {
@@ -528,22 +525,40 @@ export async function POST(request: Request) {
             continue;
           }
 
-          const purchaseId = inventoryToPurchaseMap.get(usage.inventoryId);
-          if (!purchaseId) {
-            console.warn(`Could not find Purchase Transaction for Inventory ID: ${usage.inventoryId}. Cannot calculate cost.`);
-            continue;
+          let unitCost: number | null | undefined = undefined;
+          let costSource: string = "Not Found";
+
+          // Öncelik 1: Inventory.costPrice'ı kullan
+          const inventoryData = inventoryMap.get(usage.inventoryId);
+          if (inventoryData?.costPrice !== null && inventoryData?.costPrice !== undefined) {
+            unitCost = inventoryData.costPrice;
+            costSource = "Inventory.costPrice";
           }
 
-          const unitPrice = purchasePriceMap.get(purchaseId);
-          if (unitPrice === undefined || unitPrice === null) {
-            console.warn(`Could not find unitPrice for Purchase ID: ${purchaseId} (linked to Inventory ID: ${usage.inventoryId}). Cannot calculate cost.`);
-            continue;
+          // Öncelik 2: Purchase.unitPrice'ı kullan (Eğer Inventory.costPrice yoksa)
+          if (unitCost === undefined) {
+            const purchaseId = inventoryToPurchaseMap.get(usage.inventoryId);
+            if (purchaseId) {
+              const fallbackPrice = purchasePriceMap.get(purchaseId);
+              if (fallbackPrice !== undefined && fallbackPrice !== null) {
+                unitCost = fallbackPrice;
+                costSource = "Purchase.unitPrice (Fallback)";
+              } else {
+                 console.warn(`(Fallback) Could not find unitPrice for Purchase ID: ${purchaseId} (linked to Inventory ID: ${usage.inventoryId}).`);
+              }
+            } else {
+               console.warn(`(Fallback) Could not find Purchase Transaction for Inventory ID: ${usage.inventoryId}.`);
+            }
           }
 
-          // Maliyeti hesapla ve ekle
-          const itemCost = usage.usedQuantity * unitPrice;
-          inventoryCost += itemCost;
-          console.log(`  Found Purchase ID: ${purchaseId}, Unit Price: ${unitPrice}. Calculated item cost: ${itemCost}. New total inventoryCost: ${inventoryCost}`); // Log: Maliyet hesaplandı
+          // Maliyeti hesapla ve ekle (eğer birim maliyet bulunduysa)
+          if (unitCost !== undefined && unitCost !== null) {
+            const itemCost = usage.usedQuantity * unitCost;
+            inventoryCost += itemCost;
+            console.log(`  Source: ${costSource}, Unit Cost: ${unitCost}. Calculated item cost: ${itemCost}. New total inventoryCost: ${inventoryCost}`); // Log: Maliyet hesaplandı
+          } else {
+            console.error(`Could not determine unit cost for Inventory ID: ${usage.inventoryId}. Cannot calculate cost for this item.`); // Hata logu
+          }
         }
 
         // Toplam maliyet (Yakıt maliyeti artık inventoryCost içinde)
@@ -629,9 +644,26 @@ export async function POST(request: Request) {
                 receiverId: owner.id,
                 senderId: userId,
                 processId: process.id,
+                link: `/dashboard/owner/processes/${process.id}`, // Bildirim linki eklendi
               },
             });
           }
+        }
+
+        // 8. Atanan işçiye bildirim gönder (eğer varsa ve işlemi başlatan kişi değilse)
+        if (selectedWorkerId && selectedWorkerId !== userId) {
+          await tx.notification.create({
+            data: {
+              title: "Yeni İşlem Atandı",
+              message: `${field.name} tarlası için size yeni bir ${processTypeName} işlemi atandı.`,
+              type: "TASK_ASSIGNED", // Hata düzeltildi: TASK_ASSIGNMENT -> TASK_ASSIGNED
+              receiverId: selectedWorkerId,
+              senderId: userId, // İşlemi oluşturan yönetici/sahip
+              processId: process.id,
+              link: `/dashboard/worker/processes/${process.id}`, // İşçinin işlem detay sayfası
+              priority: "HIGH", 
+            },
+          });
         }
 
         return {

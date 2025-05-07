@@ -7,6 +7,24 @@ const prisma = new PrismaClient();
 // Helper function to round to 2 decimal places
 const round = (num: number) => Math.round((num + Number.EPSILON) * 100) / 100;
 
+// Helper function to extract error message
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string' && error.trim() !== '') {
+    return error;
+  }
+  // Check for object with a string message property
+  if (error && typeof error === 'object' && 'message' in error) {
+    const msg = (error as { message: unknown }).message;
+    if (typeof msg === 'string') {
+      return msg;
+    }
+  }
+  return "Sulama kaydı oluşturulurken bilinmeyen bir hata oluştu.";
+}
+
 // Tüm sulama kayıtlarını getir (ownerSummaries eklendi)
 export async function GET(request: NextRequest) {
   try {
@@ -281,13 +299,62 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Bildirimleri Oluştur
+      const createdByUser = await tx.user.findUnique({ where: { id: session.id } });
+      const well = await tx.well.findUnique({ where: { id: irrigationLog.wellId! } }); // wellId null olabilir, kontrol et
+
+      // 1. Tarla Sahiplerine Bildirim
+      // ownerSummaries üzerinden benzersiz sahip ID'lerini al
+      const uniqueOwnerIds = [...new Set(ownerDurations.map((os: any) => os.userId))];
+
+      for (const ownerId of uniqueOwnerIds) {
+        // Sahibe ait sulanan tarlaları bulmak için fieldIrrigations ve field.owners ilişkisi kullanılabilir.
+        // Şimdilik genel bir mesaj gönderelim.
+        if (ownerId !== session.id) { // Kaydı oluşturan sahipse tekrar bildirim gitmesin
+          await tx.notification.create({
+            data: {
+              title: "Tarlanızda Sulama Yapıldı",
+              message: `${well?.name || 'Bilinmeyen Kuyu'}'dan tarlanız/tarlalarınız için ${irrigationLog.duration} dakika sulama yapıldı.`,
+              type: "IRRIGATION_COMPLETED",
+              receiverId: ownerId as string, // Type assertion eklendi
+              senderId: session.id as string, // Type assertion eklendi
+              irrigationId: irrigationLog.id,
+              link: `/dashboard/owner/irrigation/${irrigationLog.id}`, // Veya ilgili tarla/kuyu linki
+              priority: "NORMAL",
+            },
+          });
+        }
+      }
+
+      // 2. Yöneticilere (ADMIN) Bildirim
+      const admins = await tx.user.findMany({ where: { role: "ADMIN" } });
+      for (const admin of admins) {
+        if (admin.id !== session.id) { // Kaydı oluşturan admin ise tekrar bildirim gitmesin
+          await tx.notification.create({
+            data: {
+              title: "Yeni Sulama Kaydı Oluşturuldu",
+              message: `${well?.name || 'Bilinmeyen Kuyu'}'dan ${irrigationLog.duration} dakika süren yeni bir sulama kaydı (${createdByUser?.name || 'bir kullanıcı'} tarafından) oluşturuldu.`,
+              type: "IRRIGATION_COMPLETED",
+              receiverId: admin.id as string, // Type assertion eklendi
+              senderId: session.id as string, // Type assertion eklendi
+              irrigationId: irrigationLog.id,
+              link: `/dashboard/admin/irrigation/${irrigationLog.id}`, // Admin için farklı bir link olabilir
+              priority: "NORMAL",
+            },
+          });
+        }
+      }
+
       return irrigationLog; // Transaction'dan sonucu döndür
     }); // Transaction sonu
 
     return NextResponse.json({ data: result }); // Başarılı yanıt
-  } catch (error: any) {
-    console.error("Sulama kaydı oluşturma hatası:", error);
-    return NextResponse.json({ error: error.message }, { status: 400 });
+  } catch (caughtError: unknown) {
+    console.error("Sulama kaydı oluşturma hatası:", caughtError);
+    const finalErrorMessage: string = getErrorMessage(caughtError);
+    // Construct the response object with explicit typing for the object itself
+    const errorResponsePayload: { error: string } = { error: finalErrorMessage };
+    return NextResponse.json(errorResponsePayload, { status: 400 });
   } finally {
     await prisma.$disconnect();
   }

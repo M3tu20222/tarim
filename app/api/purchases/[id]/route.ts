@@ -247,6 +247,48 @@ export async function PUT(
           console.log(`Purchase ${updatedPurchase.id} update: Created transaction log for inventory ${newInventory.id}.`);
       }
 
+      // Bildirimleri Gönder
+      const senderUser = await tx.user.findUnique({ where: { id: userId } }); // İşlemi güncelleyen kullanıcı
+
+      // 1. Alış Ortaklarına Bildirim
+      for (const contributor of createdContributors) {
+        if (contributor.userId !== userId) { // Güncelleyen kişiye tekrar bildirim gitmesin
+          await tx.notification.create({
+            data: {
+              title: "Dahil Olduğunuz Alım Güncellendi",
+              message: `${updatedPurchase.product} alımı güncellendi. Detayları kontrol edebilirsiniz.`,
+              type: "SYSTEM", // Veya PURCHASE_UPDATED
+              receiverId: contributor.userId,
+              senderId: userId,
+              purchaseId: updatedPurchase.id,
+              link: `/dashboard/owner/purchases/${updatedPurchase.id}`,
+              priority: "NORMAL",
+            },
+          });
+        }
+      }
+
+      // 2. Yöneticilere (ADMIN) Bildirim
+      const admins = await tx.user.findMany({ where: { role: "ADMIN" } });
+      for (const admin of admins) {
+        if (admin.id !== userId) { // Güncelleyen admin ise tekrar bildirim gitmesin
+           // Onay durumu değişikliği için özel bildirim (opsiyonel, eklenebilir)
+           // if (existingPurchase.approvalStatus !== updatedPurchase.approvalStatus) { ... }
+          await tx.notification.create({
+            data: {
+              title: "Alış Kaydı Güncellendi",
+              message: `${updatedPurchase.product} alım kaydı (${senderUser?.name || 'bir kullanıcı'} tarafından) güncellendi.`,
+              type: "SYSTEM", // Veya PURCHASE_UPDATED
+              receiverId: admin.id,
+              senderId: userId,
+              purchaseId: updatedPurchase.id,
+              link: `/dashboard/owner/purchases/${updatedPurchase.id}`,
+              priority: "NORMAL",
+            },
+          });
+        }
+      }
+
       return updatedPurchase;
     }, {
         maxWait: 15000, // ms cinsinden maksimum bekleme süresi (varsayılan 2000)

@@ -1,295 +1,474 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Avatar } from "@/components/ui/avatar";
-import { useToast } from "@/components/ui/use-toast";
-import {
-  Notification,
-  NotificationPriority,
-  NotificationStatus,
-} from "@/types/notification-types";
+import { useState, useEffect, useCallback } from "react"; // useCallback eklendi
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/auth-provider"; // useAuth import edildi
 import { formatDistanceToNow } from "date-fns";
 import { tr } from "date-fns/locale";
 import {
   Bell,
-  X,
-  CheckCircle,
-  AlertTriangle,
+  Check,
+  CheckCheck,
   Info,
-  AlertCircle,
+  AlertTriangle,
+  DollarSign,
+  Droplet,
+  FileText,
+  Send,
 } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import type {
+  NotificationType,
+  NotificationListType,
+} from "@/types/notification-types";
+
+interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: NotificationType;
+  isRead: boolean;
+  createdAt: string;
+  sender?: {
+    id: string;
+    name: string;
+  } | null;
+  receiver: {
+    id: string;
+    name: string;
+  };
+  relatedEntityId?: string | null;
+  relatedEntityType?: string | null;
+  link?: string;
+}
 
 interface NotificationListProps {
-  initialNotifications?: Notification[];
+  userId?: string;
+  role?: string;
   limit?: number;
+  showActions?: boolean;
+  onlyUnread?: boolean;
+  type?: NotificationListType;
+  showSent?: boolean;
+  className?: string;
 }
 
 export function NotificationList({
-  initialNotifications = [],
+  // userId prop'u korunuyor, ancak context'ten gelen öncelikli olacak
+  userId: propUserId, // Prop adını değiştirelim ki context ile karışmasın
+  role = "USER",
   limit = 10,
-}: NotificationListProps) {
-  const [notifications, setNotifications] =
-    useState<Notification[]>(initialNotifications);
-  const [isLoading, setIsLoading] = useState<boolean>(
-    initialNotifications.length === 0
-  );
-  const { toast } = useToast();
+  showActions = true,
+  onlyUnread = false,
+  type,
+  showSent = false,
+  className = "",
+}: NotificationListProps) { // Props tipi orijinal haliyle kalıyor
+  const { user, isLoading: authLoading } = useAuth(); // useAuth hook'u kullanıldı
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const router = useRouter();
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
-  useEffect(() => {
-    if (initialNotifications.length === 0) {
-      fetchNotifications();
+  // fetchNotifications fonksiyonunu useCallback ile sarmala
+  const fetchNotifications = useCallback(async (newPage = 1, currentUserId?: string) => {
+    // Eğer geçerli bir kullanıcı ID'si yoksa veya auth hala yükleniyorsa fetch etme
+    if (!currentUserId) {
+       console.log("Fetch notifications skipped: No user ID provided.");
+       setLoading(false); // Yükleniyor durumunu kapat
+       setNotifications([]); // Listeyi temizle
+       setHasMore(false);
+       return;
     }
-  }, [initialNotifications]);
+     console.log(`Fetching notifications for user: ${currentUserId}, page: ${newPage}`);
 
-  const fetchNotifications = async () => {
-    setIsLoading(true);
     try {
-      const response = await fetch(`/api/notifications?limit=${limit}`);
-      if (!response.ok) throw new Error("Bildirimler yüklenemedi");
-      const data = await response.json();
-      setNotifications(data);
+      setLoading(true);
+      const queryParams = new URLSearchParams();
+
+      // userId query parametresi eklenmiyor, header'a eklenecek
+
+      if (limit) queryParams.append("limit", limit.toString());
+      if (onlyUnread) queryParams.append("isRead", "false");
+      if (type) {
+        if (type === "received" || type === "sent" || type === "system") {
+          queryParams.append("listType", type);
+        } else {
+          queryParams.append("type", type);
+        }
+      }
+      if (newPage > 1) queryParams.append("page", newPage.toString());
+      if (showSent) queryParams.append("showSent", "true");
+
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      };
+
+      // Header'a kullanıcı ID'sini ekle
+      if (currentUserId) {
+        headers["x-user-id"] = currentUserId;
+      } else {
+         // Bu durum yukarıdaki kontrolle engellendi, ancak yine de log bırakalım
+         console.warn("User ID became unavailable unexpectedly before fetch header.");
+         setLoading(false);
+         return;
+      }
+
+
+      const response = await fetch(
+        `${apiUrl}/api/notifications?${queryParams.toString()}`,
+        {
+          headers,
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+
+        if (newPage === 1) {
+          setNotifications(data.notifications || []);
+        } else {
+          setNotifications((prev) => [...prev, ...(data.notifications || [])]);
+        }
+
+        setHasMore(data.pagination?.page < data.pagination?.totalPages);
+        setPage(data.pagination?.page || 1);
+      }
     } catch (error) {
-      console.error("Bildirim yükleme hatası:", error);
-      toast({
-        variant: "destructive",
-        title: "Hata",
-        description: "Bildirimler yüklenirken bir hata oluştu",
-      });
+      console.error("Error fetching notifications:", error);
+      // Hata durumunda da yükleniyor durumunu kapat
+      setNotifications([]); // Hata durumunda listeyi temizle
+      setHasMore(false);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
+    }
+  // useCallback bağımlılıkları: prop'lardan gelenler ve apiUrl
+  }, [limit, onlyUnread, type, showSent, apiUrl]);
+
+
+  // useEffect'i user.id (context) ve propUserId'ye bağımlı hale getir
+  useEffect(() => {
+    // Kullanılacak ID'yi belirle: Önce context, sonra prop
+    const effectiveUserId = user?.id || propUserId;
+
+    // Auth yükleniyorsa veya geçerli bir ID yoksa bekle
+    if (authLoading) {
+      console.log("Auth is loading, waiting to fetch notifications...");
+      setLoading(true); // Yükleniyor durumunu göster
+      return;
+    }
+
+    if (effectiveUserId) {
+      console.log(`User ID available (${effectiveUserId}), triggering initial fetch.`);
+      fetchNotifications(1, effectiveUserId); // İlk sayfayı geçerli ID ile fetch et
+    } else {
+       // Auth yüklendi ama geçerli ID yok
+       console.log("Auth loaded but no effective user ID, clearing notifications.");
+       setNotifications([]); // Bildirimleri temizle
+       setLoading(false); // Yükleniyor durumunu kapat
+       setHasMore(false);
+    }
+  // Bağımlılıklar: context'ten user.id, prop'tan userId, authLoading ve fetchNotifications
+  }, [user?.id, propUserId, authLoading, fetchNotifications]);
+
+  const loadMore = () => {
+    if (!loading && hasMore) {
+      fetchNotifications(page + 1);
     }
   };
 
   const markAsRead = async (id: string) => {
     try {
-      const response = await fetch(`/api/notifications/${id}`, {
+      const response = await fetch(`${apiUrl}/api/notifications/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "READ" }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ isRead: true }),
       });
 
-      if (!response.ok) throw new Error("Bildirim güncellenemedi");
-
-      // Bildirimleri güncelle
-      setNotifications(
-        notifications.map((n) =>
-          n.id === id
-            ? { ...n, status: "READ" as NotificationStatus, readAt: new Date() }
-            : n
-        )
-      );
-
-      toast({
-        title: "Bildirim okundu olarak işaretlendi",
-        duration: 3000,
-      });
+      if (response.ok) {
+        setNotifications((prev) =>
+          prev.map((notification) =>
+            notification.id === id
+              ? { ...notification, isRead: true }
+              : notification
+          )
+        );
+      }
     } catch (error) {
-      console.error("Bildirim güncelleme hatası:", error);
-      toast({
-        variant: "destructive",
-        title: "Hata",
-        description: "Bildirim güncellenirken bir hata oluştu",
-      });
+      console.error("Error marking notification as read:", error);
     }
   };
 
   const markAllAsRead = async () => {
     try {
-      const response = await fetch("/api/notifications/mark-all-read", {
-        method: "POST",
-      });
-
-      if (!response.ok) throw new Error("Bildirimler güncellenemedi");
-
-      // Tüm bildirimleri okundu olarak işaretle
-      setNotifications(
-        notifications.map((n) =>
-          n.status === "UNREAD"
-            ? { ...n, status: "READ" as NotificationStatus, readAt: new Date() }
-            : n
-        )
+      const response = await fetch(
+        `${apiUrl}/api/notifications/mark-all-read`,
+        {
+          method: "POST",
+        }
       );
 
-      const data = await response.json();
-      toast({
-        title: `${data.count} bildirim okundu olarak işaretlendi`,
-        duration: 3000,
-      });
+      if (response.ok) {
+        setNotifications((prev) =>
+          prev.map((notification) => ({ ...notification, isRead: true }))
+        );
+      }
     } catch (error) {
-      console.error("Toplu bildirim güncelleme hatası:", error);
-      toast({
-        variant: "destructive",
-        title: "Hata",
-        description: "Bildirimler güncellenirken bir hata oluştu",
+      console.error("Error marking all notifications as read:", error);
+    }
+  };
+
+  const deleteNotification = async (id: string) => {
+    try {
+      const response = await fetch(`${apiUrl}/api/notifications/${id}`, {
+        method: "DELETE",
       });
+
+      if (response.ok) {
+        setNotifications((prev) =>
+          prev.filter((notification) => notification.id !== id)
+        );
+      }
+    } catch (error) {
+      console.error("Error deleting notification:", error);
     }
   };
 
-  const getPriorityIcon = (priority: NotificationPriority) => {
-    switch (priority) {
-      case "LOW":
-        return <Info className="h-4 w-4 text-blue-400" />;
-      case "MEDIUM":
-        return <Info className="h-4 w-4 text-green-400" />;
-      case "HIGH":
-        return <AlertTriangle className="h-4 w-4 text-amber-400" />;
-      case "URGENT":
-        return <AlertCircle className="h-4 w-4 text-red-400" />;
+  const handleNotificationClick = (notification: Notification) => {
+    if (!notification.isRead) {
+      markAsRead(notification.id);
+    }
+
+    if (notification.link) {
+      router.push(notification.link);
+    } else if (notification.relatedEntityId && notification.relatedEntityType) {
+      // Eğer ilgili entity varsa, ona yönlendir
+      const entityType = notification.relatedEntityType.toLowerCase();
+      router.push(
+        `/dashboard/owner/${entityType}s/${notification.relatedEntityId}`
+      );
+    }
+  };
+
+  const getNotificationIcon = (type: NotificationType) => {
+    switch (type) {
+      case "PAYMENT_DUE":
+      case "PAYMENT_RECEIVED":
+        return <DollarSign className="h-5 w-5 text-blue-500" />;
+      case "PROCESS_COMPLETED":
+        return <CheckCheck className="h-5 w-5 text-green-500" />;
+      case "TASK_ASSIGNED":
+        return <FileText className="h-5 w-5 text-purple-500" />;
+      case "INVENTORY_LOW":
+        return <AlertTriangle className="h-5 w-5 text-amber-500" />;
+      case "DEBT_REMINDER":
+        return <DollarSign className="h-5 w-5 text-red-500" />;
+      case "IRRIGATION_SCHEDULED":
+      case "IRRIGATION_COMPLETED":
+        return <Droplet className="h-5 w-5 text-blue-500" />;
+      case "SYSTEM_ALERT":
+        return <Info className="h-5 w-5 text-red-500" />;
       default:
-        return <Info className="h-4 w-4" />;
+        return <Bell className="h-5 w-5 text-gray-500" />;
     }
   };
 
-  const getPriorityColor = (priority: NotificationPriority) => {
-    switch (priority) {
-      case "LOW":
-        return "bg-blue-100 text-blue-800";
-      case "MEDIUM":
-        return "bg-green-100 text-green-800";
-      case "HIGH":
-        return "bg-amber-100 text-amber-800";
-      case "URGENT":
-        return "bg-red-100 text-red-800";
+  const getNotificationBadge = (type: NotificationType) => {
+    switch (type) {
+      case "PAYMENT_DUE":
+        return <Badge variant="destructive">Ödeme Gerekli</Badge>;
+      case "PAYMENT_RECEIVED":
+        return <Badge variant="success">Ödeme Alındı</Badge>;
+      case "PROCESS_COMPLETED":
+        return <Badge variant="success">Tamamlandı</Badge>;
+      case "TASK_ASSIGNED":
+        return <Badge variant="secondary">Görev</Badge>;
+      case "INVENTORY_LOW":
+        return <Badge variant="warning">Stok Uyarısı</Badge>;
+      case "DEBT_REMINDER":
+        return <Badge variant="destructive">Borç Hatırlatma</Badge>;
+      case "IRRIGATION_SCHEDULED":
+        return <Badge variant="outline">Sulama Planlandı</Badge>;
+      case "IRRIGATION_COMPLETED":
+        return <Badge variant="success">Sulama Tamamlandı</Badge>;
+      case "SYSTEM_ALERT":
+        return <Badge variant="destructive">Sistem Uyarısı</Badge>;
       default:
-        return "";
+        return <Badge variant="secondary">Bildirim</Badge>;
     }
   };
 
-  if (isLoading) {
+  if (loading && notifications.length === 0) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Bell className="h-5 w-5" />
-            Bildirimler
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="flex items-start gap-4 p-4 rounded-lg bg-muted/50 animate-pulse"
-              >
-                <div className="w-10 h-10 rounded-full bg-muted"></div>
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 w-3/4 bg-muted rounded"></div>
-                  <div className="h-3 bg-muted rounded"></div>
-                  <div className="h-3 w-1/2 bg-muted rounded"></div>
-                </div>
+      <div className={className}>
+        {Array.from({ length: 3 }).map((_, index) => (
+          <Card key={index} className="mb-4">
+            <CardHeader className="pb-2">
+              <div className="flex justify-between">
+                <Skeleton className="h-4 w-1/3" />
+                <Skeleton className="h-4 w-1/4" />
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-4 w-full mb-2" />
+              <Skeleton className="h-4 w-2/3" />
+            </CardContent>
+            <CardFooter>
+              <Skeleton className="h-8 w-20 mr-2" />
+              <Skeleton className="h-8 w-20" />
+            </CardFooter>
+          </Card>
+        ))}
+      </div>
     );
   }
 
   if (notifications.length === 0) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Bell className="h-5 w-5" />
-            Bildirimler
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <Bell className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium">Hiç bildiriminiz yok</h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              Yeni bildirimler geldiğinde burada görünecek
-            </p>
-          </div>
+      <Card className={className}>
+        <CardContent className="flex flex-col items-center justify-center py-8">
+          <Bell className="h-10 w-10 text-muted-foreground mb-4" />
+          <p className="text-center text-muted-foreground">
+            {showSent
+              ? "Henüz bildirim göndermediniz."
+              : "Henüz bildiriminiz bulunmamaktadır."}
+          </p>
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center">
-        <div className="flex-1">
-          <CardTitle className="flex items-center gap-2">
-            <Bell className="h-5 w-5" />
-            Bildirimler
-          </CardTitle>
+    <div className={className}>
+      {showActions && notifications.some((n) => !n.isRead) && !showSent && (
+        <div className="flex justify-end mb-4">
+          <Button variant="outline" size="sm" onClick={markAllAsRead}>
+            <Check className="h-4 w-4 mr-2" />
+            Tümünü Okundu İşaretle
+          </Button>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={markAllAsRead}
-          disabled={!notifications.some((n) => n.status === "UNREAD")}
+      )}
+
+      {notifications.map((notification) => (
+        <Card
+          key={notification.id}
+          className={`mb-4 cursor-pointer transition-colors hover:bg-accent/50 ${
+            !notification.isRead && !showSent
+              ? "border-l-4 border-l-primary"
+              : ""
+          }`}
+          onClick={() => !showSent && handleNotificationClick(notification)}
         >
-          <CheckCircle className="h-4 w-4 mr-2" />
-          Tümünü Okundu İşaretle
-        </Button>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {notifications.map((notification) => (
-            <div
-              key={notification.id}
-              className={`flex items-start gap-4 p-4 rounded-lg ${
-                notification.status === "UNREAD" ? "bg-muted/40" : ""
-              }`}
-            >
-              <Avatar
-                className={`${notification.status === "UNREAD" ? "bg-primary/10 text-primary" : "bg-muted/40 text-muted-foreground"}`}
-              >
-                {getPriorityIcon(notification.priority)}
-              </Avatar>
-              <div className="flex-1">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium">{notification.title}</h4>
-                  <Badge
-                    variant="outline"
-                    className={`text-xs ${getPriorityColor(notification.priority)}`}
-                  >
-                    {notification.priority}
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {notification.body}
-                </p>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="text-xs text-muted-foreground">
-                    {formatDistanceToNow(new Date(notification.createdAt), {
-                      addSuffix: true,
-                      locale: tr,
-                    })}
-                  </span>
-                  {notification.status === "UNREAD" && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 py-0 px-2"
-                      onClick={() => markAsRead(notification.id)}
-                    >
-                      <CheckCircle className="h-3 w-3 mr-1" />
-                      <span className="text-xs">Okundu İşaretle</span>
-                    </Button>
-                  )}
-                  {notification.link && (
-                    <Button
-                      variant="link"
-                      size="sm"
-                      className="h-6 py-0 px-2 text-xs"
-                      asChild
-                    >
-                      <a href={notification.link}>Detaylar</a>
-                    </Button>
-                  )}
-                </div>
+          <CardHeader className="pb-2 flex flex-row items-start justify-between">
+            <div className="flex items-start gap-2">
+              <div className="mt-1">
+                {showSent ? (
+                  <Send className="h-5 w-5 text-primary" />
+                ) : (
+                  getNotificationIcon(notification.type)
+                )}
+              </div>
+              <div>
+                <CardTitle className="text-base">
+                  {notification.title}
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  {formatDistanceToNow(new Date(notification.createdAt), {
+                    addSuffix: true,
+                    locale: tr,
+                  })}
+                </CardDescription>
               </div>
             </div>
-          ))}
+            <div>{getNotificationBadge(notification.type)}</div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm">{notification.message}</p>
+
+            {showSent && notification.receiver && (
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Alıcı:</span>
+                <div className="flex items-center gap-1">
+                  <Avatar className="h-5 w-5">
+                    <AvatarFallback>
+                      {notification.receiver.name.charAt(0)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-xs font-medium">
+                    {notification.receiver.name}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {!showSent && notification.sender && (
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Gönderen:</span>
+                <div className="flex items-center gap-1">
+                  <Avatar className="h-5 w-5">
+                    <AvatarFallback>
+                      {notification.sender.name.charAt(0)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-xs font-medium">
+                    {notification.sender.name}
+                  </span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+          {showActions && !showSent && (
+            <CardFooter className="flex justify-end gap-2 pt-0">
+              {!notification.isRead && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    markAsRead(notification.id);
+                  }}
+                >
+                  <Check className="h-4 w-4 mr-2" />
+                  Okundu
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteNotification(notification.id);
+                }}
+              >
+                Sil
+              </Button>
+            </CardFooter>
+          )}
+        </Card>
+      ))}
+
+      {hasMore && (
+        <div className="flex justify-center mt-4">
+          <Button variant="outline" onClick={loadMore} disabled={loading}>
+            {loading ? "Yükleniyor..." : "Daha Fazla Yükle"}
+          </Button>
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 }
