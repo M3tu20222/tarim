@@ -1,20 +1,73 @@
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { NotificationList } from "@/components/notifications/notification-list";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { getSession } from "@/lib/session";
+import { redirect } from "next/navigation";
 
-export const metadata = {
-  title: "Bildirimler",
-  description: "Tüm bildirimlerinizi görüntüleyin ve yönetin",
-};
+export default async function NotificationsPage() {
+  const session = await getSession();
 
-export default function NotificationsPage() {
+  if (!session) {
+    redirect("/login");
+  }
+
+  const userRole = session.role || "USER";
+  const isAdmin = userRole === "ADMIN";
+  const isOwner = userRole === "OWNER";
+  const canSendNotifications = isAdmin || isOwner;
+
   return (
-    <div className="container py-6 space-y-6">
-      <div className="flex flex-col space-y-1">
-        <h2 className="text-3xl font-bold tracking-tight">Bildirimler</h2>
-        <p className="text-muted-foreground">
-          Tüm bildirimlerinizi görüntüleyin ve yönetin
-        </p>
+    <div className="container mx-auto py-6">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Bildirimler</h1>
+        {canSendNotifications && (
+          <Button asChild>
+            <Link href="/dashboard/notifications/send">Bildirim Gönder</Link>
+          </Button>
+        )}
       </div>
-      <NotificationList limit={50} />
+
+      <Tabs defaultValue="received">
+        <TabsList className="mb-4">
+          <TabsTrigger value="received">Gelen Bildirimler</TabsTrigger>
+          {canSendNotifications && (
+            <TabsTrigger value="sent">Gönderilen Bildirimler</TabsTrigger>
+          )}
+          {isAdmin && (
+            <TabsTrigger value="system">Sistem Bildirimleri</TabsTrigger>
+          )}
+        </TabsList>
+
+        <TabsContent value="received">
+          <NotificationList
+            userId={session.id}
+            role={session.role}
+            type="received"
+          />
+        </TabsContent>
+
+        {canSendNotifications && (
+          <TabsContent value="sent">
+            <NotificationList
+              userId={session.id}
+              role={session.role}
+              type="sent"
+              showSent={true}
+            />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="system">
+            <NotificationList
+              userId={session.id}
+              role={session.role}
+              type="system"
+            />
+          </TabsContent>
+        )}
+      </Tabs>
     </div>
   );
 }

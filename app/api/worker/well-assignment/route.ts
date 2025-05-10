@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSideSession } from "@/lib/session";
+import { getUserFromCookie } from "@/lib/auth";
 
 export async function POST(request: Request) {
   try {
-    const user = await getServerSideSession();
+    const user = await getUserFromCookie();
 
     if (!user) {
       return NextResponse.json(

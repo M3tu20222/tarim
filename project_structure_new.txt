@@ -97,9 +97,12 @@
 |  |  +--webhooks
 |  |  |  \--notifications
 |  |  |     \--route.ts
-|  |  \--wells
-|  |     +--[id]
-|  |     \--route.ts
+|  |  +--wells
+|  |  |  +--[id]
+|  |  |  \--route.ts
+|  |  \--worker
+|  |     \--well-assignment
+|  |        \--route.ts
 |  +--auth
 |  |  +--layout.tsx
 |  |  \--page.tsx
@@ -119,6 +122,8 @@
 |  |  |  +--layout.tsx
 |  |  |  \--page.tsx
 |  |  +--notifications
+|  |  |  +--send
+|  |  |  |  \--page.tsx
 |  |  |  \--page.tsx
 |  |  +--owner
 |  |  |  +--debts
@@ -183,6 +188,14 @@
 |  |  |  +--loading.tsx
 |  |  |  \--page.tsx
 |  |  +--worker
+|  |  |  +--fields
+|  |  |  |  \--[id]
+|  |  |  +--irrigation
+|  |  |  |  \--[id]
+|  |  |  +--processes
+|  |  |  |  \--[id]
+|  |  |  +--settings
+|  |  |  |  \--page.tsx
 |  |  |  +--loading.tsx
 |  |  |  \--page.tsx
 |  |  +--DashboardLayoutClient.tsx
@@ -238,7 +251,8 @@
 |  +--notifications
 |  |  +--notification-counter.tsx
 |  |  +--notification-dropdown.tsx
-|  |  \--notification-list.tsx
+|  |  +--notification-list.tsx
+|  |  \--notification-send-form.tsx
 |  +--payments
 |  |  \--payment-form.tsx
 |  +--processes
@@ -321,6 +335,11 @@
 |  +--wells
 |  |  +--well-form.tsx
 |  |  \--well-list.tsx
+|  +--worker
+|  |  +--worker-field-detail.tsx
+|  |  +--worker-fields-list.tsx
+|  |  +--worker-overview.tsx
+|  |  \--worker-settings.tsx
 |  +--admin-activity-chart.tsx
 |  +--admin-overview-stats.tsx
 |  +--admin-recent-users.tsx
@@ -352,6 +371,7 @@
 |  +--use-mobile.tsx
 |  \--use-toast.ts
 +--lib
+|  +--auth.ts
 |  +--jwt.ts
 |  +--notification-service.ts
 |  +--prisma.ts
@@ -385,10 +405,13 @@
 +--.env
 +--.eslintrc.json
 +--.gitignore
++--billing-report.md
++--class-diagram.puml
 +--components.json
 +--erDiagram.md
 +--eslint.config.mjs
 +--generate_tree.ps1
++--irrigation-report.md
 +--middleware.ts
 +--next-env.d.ts
 +--next.config.mjs
@@ -397,7 +420,6 @@
 +--package.json
 +--postcss.config.mjs
 +--project_structure.txt
-+--project_structure_new.txt
 +--README.md
 +--tailwind.config.ts
 +--tsconfig.json

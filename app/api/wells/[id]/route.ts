@@ -17,17 +17,21 @@ export async function GET(
       );
     }
 
-    const wellId = params.id;
+    const { id: wellId } = await params;
 
     const well = await prisma.well.findUnique({
       where: {
         id: wellId,
       },
       include: {
-        field: {
-          select: {
-            id: true,
-            name: true,
+        fieldWells: { // Düzeltildi: field -> fieldWells
+          include: {
+            field: { // Field modeline fieldWells üzerinden erişim
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
       },
@@ -71,8 +75,9 @@ export async function PUT(
       );
     }
 
-    const wellId = params.id;
-    const { name, depth, capacity, status, fieldId } = await request.json();
+    const { id: wellId } = await params;
+    // Düzeltildi: fieldId -> fieldIds (çoğul dizi)
+    const { name, depth, capacity, status, fieldIds } = await request.json();
 
     // Veri doğrulama
     if (!name || !depth || !capacity) {
@@ -92,11 +97,17 @@ export async function PUT(
         depth,
         capacity,
         status,
-        field: fieldId
-          ? {
-              connect: { id: fieldId },
-            }
-          : undefined,
+        // Düzeltildi: fieldWells ilişkisi yönetimi
+        fieldWells: {
+          deleteMany: {}, // Mevcut tüm fieldWell bağlantılarını sil
+          create: Array.isArray(fieldIds) && fieldIds.length > 0
+            ? fieldIds.map((id: string) => ({ // Yeni fieldWell bağlantıları oluştur
+                field: {
+                  connect: { id: id },
+                },
+              }))
+            : [], // fieldIds boş veya dizi değilse yeni bağlantı oluşturma
+        },
       },
     });
 
@@ -134,7 +145,7 @@ export async function DELETE(
       );
     }
 
-    const wellId = params.id;
+    const { id: wellId } = await params;
 
     // Kuyuyu sil
     await prisma.well.delete({

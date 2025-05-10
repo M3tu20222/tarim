@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -18,42 +19,75 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/use-toast";
-import { Droplet } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
-interface WorkerSettingsProps {
-  worker: {
-    id: string;
-    name: string;
-    email: string;
-  };
-  wells: {
-    id: string;
-    name: string;
-    depth: number;
-    capacity: number;
-  }[];
-  assignedWell: {
-    id: string;
-    name: string;
-  } | null;
+interface Well {
+  id: string;
+  name: string;
+  depth: number;
+  capacity: number;
+  status: string;
 }
 
-export function WorkerSettings({
-  worker,
-  wells,
-  assignedWell,
-}: WorkerSettingsProps) {
-  const router = useRouter();
-  const [selectedWellId, setSelectedWellId] = useState<string>(
-    assignedWell?.id || ""
-  );
-  const [isSubmitting, setIsSubmitting] = useState(false);
+interface WorkerSettingsProps {
+  userId: string;
+}
 
-  const handleSubmit = async () => {
+export function WorkerSettings({ userId }: WorkerSettingsProps) {
+  const router = useRouter();
+  const [wells, setWells] = useState<Well[]>([]);
+  const [selectedWellId, setSelectedWellId] = useState<string>("");
+  const [currentAssignment, setCurrentAssignment] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+
+  // Fetch wells and current assignment
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Fetch wells
+        const wellsResponse = await fetch("/api/wells");
+        const wellsData = await wellsResponse.json();
+        setWells(wellsData.data || []);
+
+        // Fetch current assignment
+        const assignmentResponse = await fetch(
+          `/api/worker/well-assignment?workerId=${userId}`
+        );
+        const assignmentData = await assignmentResponse.json();
+
+        if (assignmentData.data) {
+          setCurrentAssignment(assignmentData.data);
+          setSelectedWellId(assignmentData.data.wellId);
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        toast({
+          title: "Hata",
+          description: "Veriler yüklenirken bir hata oluştu.",
+          variant: "destructive",
+        });
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [userId]);
+
+  const handleSave = async () => {
+    if (!selectedWellId) {
+      toast({
+        title: "Hata",
+        description: "Lütfen bir kuyu seçin.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
-      setIsSubmitting(true);
+      setLoading(true);
 
       const response = await fetch("/api/worker/well-assignment", {
         method: "POST",
@@ -61,81 +95,87 @@ export function WorkerSettings({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          workerId: worker.id,
-          wellId: selectedWellId || null, // If empty string, send null to remove assignment
+          workerId: userId,
+          wellId: selectedWellId,
         }),
       });
 
       if (!response.ok) {
         const error = await response.json();
         throw new Error(
-          error.error || "Kuyu ataması yapılırken bir hata oluştu"
+          error.error || "Kuyu ataması yapılırken bir hata oluştu."
         );
       }
 
+      const data = await response.json();
+      setCurrentAssignment(data.data);
+
       toast({
         title: "Başarılı",
-        description: selectedWellId
-          ? "Kuyu ataması başarıyla güncellendi"
-          : "Kuyu ataması kaldırıldı",
+        description: "Kuyu ataması başarıyla güncellendi.",
       });
 
       router.refresh();
     } catch (error: any) {
+      console.error("Error saving well assignment:", error);
       toast({
         title: "Hata",
-        description: error.message || "Kuyu ataması yapılırken bir hata oluştu",
+        description:
+          error.message || "Kuyu ataması yapılırken bir hata oluştu.",
         variant: "destructive",
       });
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
+
+  if (initialLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Kuyu Ataması</CardTitle>
+        <CardTitle>İşçi Ayarları</CardTitle>
         <CardDescription>
-          Çalışacağınız kuyuyu seçin. Bu kuyu ile ilişkili tarlalara erişim
-          sağlayacaksınız.
+          Çalışma ayarlarınızı buradan yapabilirsiniz.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         <div className="space-y-2">
-          <Label htmlFor="well">Kuyu Seçimi</Label>
+          <Label htmlFor="well">Atanmış Kuyu</Label>
           <Select value={selectedWellId} onValueChange={setSelectedWellId}>
-            <SelectTrigger id="well">
-              <SelectValue placeholder="Kuyu seçin" />
+            <SelectTrigger>
+              <SelectValue placeholder="Kuyu Seçin" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="no-well">Kuyu atanmamış</SelectItem>
               {wells.map((well) => (
                 <SelectItem key={well.id} value={well.id}>
-                  {well.name} ({well.depth}m, {well.capacity} lt/dk)
+                  {well.name} ({well.depth} metre, {well.capacity} m³/saat)
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          {currentAssignment && (
+            <p className="text-sm text-muted-foreground mt-2">
+              Şu anda{" "}
+              <span className="font-medium">{currentAssignment.well.name}</span>{" "}
+              kuyusuna atanmışsınız.
+            </p>
+          )}
         </div>
-
-        {assignedWell && (
-          <div className="bg-blue-50 p-4 rounded-md">
-            <div className="flex items-center">
-              <Droplet className="h-5 w-5 text-blue-500 mr-2" />
-              <div>
-                <p className="text-sm font-medium text-blue-800">
-                  Mevcut Kuyu Ataması
-                </p>
-                <p className="text-sm text-blue-700">{assignedWell.name}</p>
-              </div>
-            </div>
-          </div>
-        )}
       </CardContent>
       <CardFooter className="flex justify-end">
-        <Button onClick={handleSubmit} disabled={isSubmitting}>
-          {isSubmitting ? "Kaydediliyor..." : "Kaydet"}
+        <Button
+          onClick={handleSave}
+          disabled={loading || selectedWellId === currentAssignment?.wellId}
+        >
+          {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Kaydet
         </Button>
       </CardFooter>
     </Card>

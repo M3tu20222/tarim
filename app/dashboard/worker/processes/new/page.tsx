@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import { getUserFromCookie } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { WorkerSettings } from "@/components/worker/worker-settings";
+import { WorkerProcessForm } from "@/components/worker/worker-process-form";
 
 export const metadata: Metadata = {
-  title: "İşçi Ayarları | Çiftlik Yönetimi",
-  description: "İşçi ayarları sayfası",
+  title: "Yeni İşlem Kaydı | İşçi Paneli",
+  description: "Yeni işlem kaydı oluştur",
 };
 
-export default async function WorkerSettingsPage() {
+export default async function NewProcessPage() {
   const user = await getUserFromCookie();
 
   if (!user) {
@@ -21,8 +21,8 @@ export default async function WorkerSettingsPage() {
 
   return (
     <div className="container mx-auto py-10">
-      <h1 className="text-2xl font-bold mb-6">İşçi Ayarları</h1>
-      <WorkerSettings userId={user.id} />
+      <h1 className="text-2xl font-bold mb-6">Yeni İşlem Kaydı</h1>
+      <WorkerProcessForm userId={user.id} />
     </div>
   );
 }

@@ -88,10 +88,10 @@ export function WellForm({ wellId, defaultValues }: WellFormProps = {}) {
   useEffect(() => {
     const fetchFields = async () => {
       try {
-        const response = await fetch("/api/fields");
+        const response = await fetch("/api/fields?fetchAll=true"); // fetchAll=true eklendi
         if (response.ok) {
           const data = await response.json();
-          setFields(data);
+          setFields(data.data);
         } else {
           toast({
             title: "Hata",

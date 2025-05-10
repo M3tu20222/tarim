@@ -42,15 +42,21 @@ export async function GET(req: NextRequest) {
           },
         },
         crops: true,
+        season: true, // Sezon bilgisi GET isteğine eklendi
         // wells: true, // Hatalı include kaldırıldı
         fieldWells: { // Doğru include eklendi
           include: {
             well: true,
           },
         },
-        irrigationLogs: {
-          orderBy: {
-            date: "desc",
+        irrigationFieldUsages: { // irrigationLogs -> irrigationFieldUsages olarak düzeltildi
+          orderBy: { // orderBy buraya taşındı
+            irrigationLog: { // irrigationLog içindeki alana göre sıralama
+              startDateTime: "desc",
+            },
+          },
+          include: { // include ayrıca belirtilmeli
+            irrigationLog: true,
           },
         },
         processingLogs: {
@@ -81,8 +87,9 @@ export async function PUT(req: NextRequest) {
 
   try {
     // wellIds dizisini request body'den al
-    const { name, location, size, coordinates, status, workerIds, wellIds } =
-      await req.json(); // wellId -> wellIds
+    // ownerIds -> fieldOwnershipsData olarak değiştirildi, artık {userId, percentage} objeleri içerecek
+    const { name, location, size, coordinates, status, workerIds, wellIds, fieldOwnershipsData, cropData, seasonId } = // seasonId eklendi
+      await req.json();
 
     // Mevcut tarlayı fieldWells ile birlikte getir
     const existingField = await prisma.field.findUnique({
@@ -109,11 +116,13 @@ export async function PUT(req: NextRequest) {
     if (size !== undefined) updateData.size = size;
     if (coordinates !== undefined) updateData.coordinates = coordinates;
     if (status !== undefined) updateData.status = status;
+    if (seasonId !== undefined) updateData.seasonId = seasonId; // seasonId güncellemesi eklendi
 
     // Mevcut kuyu ID'lerini al
     const currentWellIds = existingField.fieldWells.map(fw => fw.wellId);
     // Gelen yeni kuyu ID'leri (boş veya null değilse)
     const newWellIds = Array.isArray(wellIds) ? wellIds.filter(id => id) : []; // Gelen ID'leri filtrele
+    console.log("newWellIds:", newWellIds); // Kullanıcının önerdiği log eklendi
 
     // Atomik işlem için transaction başlat
     const transactionOperations = [];
@@ -141,30 +150,112 @@ export async function PUT(req: NextRequest) {
             fieldId: id,
             wellId: wellId,
           })),
+          // skipDuplicates: true, // MongoDB provider'ı için createMany'de doğrudan desteklenmiyor olabilir.
         })
       );
     }
 
-
     // 3. İşçi atamalarını güncelle (varsa)
     if (Array.isArray(workerIds)) {
-       // Önce mevcut atamaları sil (sadece bu tarla için)
-       transactionOperations.push(
-         prisma.fieldWorkerAssignment.deleteMany({
-           where: { fieldId: id },
-         })
-       );
-       // Sonra yeni atamaları ekle (eğer workerIds boş değilse)
-       if (workerIds.length > 0) {
-         transactionOperations.push(
-           prisma.fieldWorkerAssignment.createMany({
-             data: workerIds.map((userId: string) => ({
-               fieldId: id,
-               userId,
-             })),
-           })
-         );
-       }
+      // Önce mevcut atamaları sil (sadece bu tarla için)
+      transactionOperations.push(
+        prisma.fieldWorkerAssignment.deleteMany({
+          where: { fieldId: id },
+        })
+      );
+      // Sonra yeni atamaları ekle (eğer workerIds boş değilse)
+      if (workerIds.length > 0) {
+        transactionOperations.push(
+          prisma.fieldWorkerAssignment.createMany({
+            data: workerIds.map((userId: string) => ({
+              fieldId: id,
+              userId,
+            })),
+          })
+        );
+      }
+    }
+
+    // 4. Tarla sahipliklerini güncelle (varsa)
+    if (Array.isArray(fieldOwnershipsData)) { // ownerIds -> fieldOwnershipsData
+      // Önce mevcut sahiplikleri sil (sadece bu tarla için)
+      transactionOperations.push(
+        prisma.fieldOwnership.deleteMany({
+          where: { fieldId: id },
+        })
+      );
+      // Sonra yeni sahiplikleri ekle (eğer fieldOwnershipsData boş değilse)
+      if (fieldOwnershipsData.length > 0) {
+        transactionOperations.push(
+          prisma.fieldOwnership.createMany({
+            data: fieldOwnershipsData.map((ownership: { userId: string, percentage: number }) => ({
+              fieldId: id,
+              userId: ownership.userId,
+              percentage: ownership.percentage, // Yüzde değeri eklendi
+            })),
+          })
+        );
+      }
+    }
+
+    // 5. Ekim bilgilerini (Crop) güncelle (varsa)
+    if (cropData && cropData.plantedDate) {
+      const { cropId, name, plantedDate, harvestDate, status: cropStatus, notes } = cropData;
+      const newPlantedDate = new Date(plantedDate);
+
+      if (cropId) {
+        // Mevcut Crop kaydını güncelle
+        transactionOperations.push(
+          prisma.crop.update({
+            where: { id: cropId, fieldId: id }, // fieldId ile de kontrol et
+            data: {
+              plantedDate: newPlantedDate,
+              ...(harvestDate && { harvestDate: new Date(harvestDate) }),
+              ...(cropStatus && { status: cropStatus }),
+              ...(notes && { notes: notes }),
+              ...(name && { name: name }), // Eğer isim de güncelleniyorsa
+            },
+          })
+        );
+      } else if (name) {
+        // İsimle Crop kaydını bul ve güncelle, yoksa oluştur (opsiyonel)
+        // Bu senaryo için, öncelikle var olan bir ürünü güncellemeye odaklanalım.
+        // Eğer isimle bulunup güncellenmesi gerekiyorsa, önce o ürünü bulup ID'sini almak daha güvenli olabilir.
+        // Şimdilik, eğer cropId yoksa ve isim varsa, ve tarlanın TEK bir ürünü varsa onu güncelleyebiliriz.
+        // Ya da daha iyisi, client tarafında cropId'nin gönderilmesini sağlamak.
+        // Geçici çözüm: Eğer tarlanın bir ürünü varsa ve adı eşleşiyorsa onu güncelle.
+        const existingCrops = await prisma.crop.findMany({ where: { fieldId: id, name: name } });
+        if (existingCrops.length === 1) {
+          transactionOperations.push(
+            prisma.crop.update({
+              where: { id: existingCrops[0].id },
+              data: {
+                plantedDate: newPlantedDate,
+                ...(harvestDate && { harvestDate: new Date(harvestDate) }),
+                ...(cropStatus && { status: cropStatus }),
+                ...(notes && { notes: notes }),
+              },
+            })
+          );
+        } else if (existingCrops.length === 0) {
+          // Eğer ürün yoksa ve yeni ürün bilgisi geldiyse oluşturulabilir.
+          // Bu kısım isteğe bağlı, şimdilik sadece güncellemeye odaklanalım.
+          // transactionOperations.push(
+          //   prisma.crop.create({
+          //     data: {
+          //       fieldId: id,
+          //       name: name,
+          //       plantedDate: newPlantedDate,
+          //       ...(harvestDate && { harvestDate: new Date(harvestDate) }),
+          //       status: cropStatus || 'GROWING', // Varsayılan durum
+          //       ...(notes && { notes: notes }),
+          //     }
+          //   })
+          // );
+        }
+        // Birden fazla aynı isimde ürün varsa, hangi ürünün güncelleneceği belirsiz olacağı için işlem yapma.
+        // Bu durumda client'ın cropId göndermesi daha doğru olur.
+      }
     }
 
     // Transaction'ı çalıştır
@@ -203,6 +294,8 @@ export async function PUT(req: NextRequest) {
             well: true, // İlişkili kuyu bilgilerini de getir
           },
         },
+        crops: true, // Güncellenmiş ürün bilgilerini de getir
+        season: true, // Sezon bilgisi PUT isteği sonrası yanıta eklendi (zaten vardı, teyit edildi)
       },
     });
 
@@ -236,7 +329,12 @@ export async function DELETE(req: NextRequest) {
       }
 
       // İlişkili kayıtları sırayla sil
-      await tx.irrigationLog.deleteMany({ where: { fieldId: id } });
+      // IrrigationLog'lar doğrudan fieldId ile bağlı değil, IrrigationFieldUsage üzerinden bağlı.
+      // Önce bu tarlaya ait IrrigationFieldUsage kayıtlarını sil.
+      await tx.irrigationFieldUsage.deleteMany({ where: { fieldId: id } });
+      // Not: Eğer bir IrrigationLog sadece bu tarlaya bağlıysa ve başka kullanımı kalmadıysa,
+      // o IrrigationLog'un da silinmesi düşünülebilir, ancak bu daha karmaşık bir mantık gerektirir.
+      // Şimdilik sadece bu tarlayla olan bağlantıyı (IrrigationFieldUsage) kesiyoruz.
       await tx.processingLog.deleteMany({ where: { fieldId: id } });
       await tx.crop.deleteMany({ where: { fieldId: id } });
       await tx.fieldWell.deleteMany({ where: { fieldId: id } });

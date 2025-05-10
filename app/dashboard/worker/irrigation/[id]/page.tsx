@@ -119,6 +119,16 @@ export default async function WorkerIrrigationDetailPage({
 }: {
   params: { id: string };
 }) {
+  // Eğer ID "new" ise, bu sayfa yeni kayıt oluşturmak için değil,
+  // var olan bir kaydın detayını göstermek içindir.
+  // Bu nedenle notFound() çağırarak 404 sayfasına yönlendiriyoruz.
+  // Yeni kayıt oluşturma için ayrı bir sayfa (örn: /dashboard/worker/irrigation/new/page.tsx veya /create)
+  // veya bu sayfada bir form gösterimi düşünülebilir. Şimdilik en basit çözüm notFound().
+  if (params.id === "new") {
+    notFound();
+    return; // notFound() çağrıldıktan sonra fonksiyonun geri kalanının çalışmaması için return ekliyoruz.
+  }
+
   const user = await getServerSideSession(); // Değiştirildi: getUserFromCookie -> getServerSideSession
 
   if (!user) {

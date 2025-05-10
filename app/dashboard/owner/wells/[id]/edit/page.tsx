@@ -29,10 +29,14 @@ export default async function EditWellPage({ params }: EditWellPageProps) {
   const well = await prisma.well.findUnique({
     where: { id: awaitedParams.id },
     include: {
-      field: { // Düzeltildi: 'fields' -> 'field'
+      fieldWells: {
         select: {
-          id: true,
-          name: true,
+          field: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
         },
       },
     },
@@ -49,8 +53,7 @@ export default async function EditWellPage({ params }: EditWellPageProps) {
     depth: well.depth,
     capacity: well.capacity,
     status: well.status,
-    // Düzeltildi: well.fields.map -> well.field ? [well.field.id] : []
-    fieldIds: well.field ? [well.field.id] : [],
+    fieldIds: well.fieldWells.map((fw) => fw.field.id),
   };
 
   return (

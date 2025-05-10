@@ -25,6 +25,7 @@ export type FieldUpdateInput = {
   coordinates?: string | null;
   status?: "ACTIVE" | "FALLOW" | "HARVESTED";
   ownerId?: string;
+  seasonId?: string | null; // seasonId eklendi
 };
 
 export interface InventoryCategoryType {
@@ -32,4 +33,3 @@ export interface InventoryCategoryType {
   name: string;
   description?: string;
 }
-
