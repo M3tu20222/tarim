@@ -7,6 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Settings } from "lucide-react";
 import Link from "next/link";
 
+// Add route segment config to explicitly mark this route as dynamic
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "İşçi Paneli | Çiftlik Yönetimi",
   description: "İşçi paneli genel bakış",

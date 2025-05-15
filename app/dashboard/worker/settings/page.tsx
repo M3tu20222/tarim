@@ -3,6 +3,9 @@ import { getServerSideSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { WorkerSettings } from "@/components/worker/worker-settings";
 
+// Add route segment config to explicitly mark this route as dynamic
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "İşçi Ayarları | Çiftlik Yönetimi",
   description: "İşçi ayarları sayfası",

@@ -2,6 +2,9 @@ import { type NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { getServerSideSession } from "@/lib/session"; // Updated import
 
+// Add route segment config to explicitly mark this route as dynamic
+export const dynamic = 'force-dynamic';
+
 const prisma = new PrismaClient();
 
 // Tüm kuyu fatura dönemlerini getir

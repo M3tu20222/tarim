@@ -3,6 +3,9 @@ import { getServerSideSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { WorkerIrrigationForm } from "@/components/worker/worker-irrigation-form";
 
+// Add route segment config to explicitly mark this route as dynamic
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "Yeni Sulama Kaydı | İşçi Paneli",
   description: "Yeni sulama kaydı oluştur",

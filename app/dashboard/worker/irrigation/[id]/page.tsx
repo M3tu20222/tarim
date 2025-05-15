@@ -18,6 +18,9 @@ import {
 import { Calendar, ChevronLeft, Clock, Droplet } from "lucide-react";
 import Link from "next/link";
 
+// Add route segment config to explicitly mark this route as dynamic
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "Sulama Detayı | Çiftlik Yönetimi",
   description: "Sulama detayları",

@@ -3,6 +3,9 @@ import { getServerSideSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { WorkerProcessForm } from "@/components/worker/worker-process-form";
 
+// Add route segment config to explicitly mark this route as dynamic
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "Yeni İşlem Kaydı | İşçi Paneli",
   description: "Yeni işlem kaydı oluştur",
