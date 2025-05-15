@@ -58,7 +58,9 @@ export default async function EditIrrigationPage({
 }: {
   params: { id: string }; // Doğru fonksiyon imzası
 }) {
-  const { id } = params; // ID'yi doğru şekilde al
+  // Next.js 13+ için params nesnesini await etmemiz gerekiyor
+  const resolvedParams = await params;
+  const id = resolvedParams.id;
   const formattedIrrigationLog = await getIrrigationLog(id); // Formatlanmış veriyi al
 
   if (!formattedIrrigationLog) {
@@ -68,8 +70,11 @@ export default async function EditIrrigationPage({
   return (
     <div className="container mx-auto py-6">
       <h1 className="text-2xl font-bold mb-6">Sulama Kaydını Düzenle</h1>
-      {/* Formatlanmış veriyi IrrigationForm'a aktar */}
-      <IrrigationForm initialData={formattedIrrigationLog} />
+      {/* Formatlanmış veriyi ve ID'yi IrrigationForm'a aktar */}
+      <IrrigationForm
+        initialData={formattedIrrigationLog}
+        irrigationId={id}
+      />
     </div>
   );
 }

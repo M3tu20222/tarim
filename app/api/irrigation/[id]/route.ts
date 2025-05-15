@@ -15,7 +15,9 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const id = params.id;
+    // Next.js 13+ için params nesnesini await etmemiz gerekiyor
+    const resolvedParams = await params;
+    const id = resolvedParams.id;
 
     const irrigationLog = await prisma.irrigationLog.findUnique({
       where: { id },
@@ -92,7 +94,9 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const id = params.id; // IrrigationLog ID
+    // Next.js 13+ için params nesnesini await etmemiz gerekiyor
+    const resolvedParams = await params;
+    const id = resolvedParams.id; // IrrigationLog ID
     const data = await request.json();
     const {
       startDateTime,
@@ -284,7 +288,9 @@ export async function DELETE(
   request: NextRequest, // request parametresi genellikle DELETE için kullanılmaz ama burada kalabilir.
   { params }: { params: { id: string } } // params'ı doğrudan destruct ediyoruz.
 ) {
-  const id = params.id; // id'yi buradan alıyoruz.
+  // Next.js 13+ için params nesnesini await etmemiz gerekiyor
+  const resolvedParams = await params;
+  const id = resolvedParams.id; // id'yi buradan alıyoruz.
 
   try {
     const session = await getServerSideSession();

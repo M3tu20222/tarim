@@ -172,6 +172,9 @@ export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProp
   const [loadingInventories, setLoadingInventories] = useState(false);
   const [loadingSubmit, setLoadingSubmit] = useState(false);
 
+  // Düzenleme modunda olup olmadığını belirle
+  const isEditMode = !!irrigationId;
+
   const form = useForm<IrrigationFormValues>({
     resolver: zodResolver(irrigationFormSchema),
     defaultValues: initialData || defaultValues,
@@ -271,8 +274,12 @@ export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProp
 
 
   const onSubmit = async (data: IrrigationFormValues) => {
-    const isEditMode = !!irrigationId;
     setLoadingSubmit(true);
+
+    // Düzenleme modu için log
+    if (isEditMode) {
+      console.log(`Sulama kaydı düzenleniyor (ID: ${irrigationId})`);
+    }
 
     try {
       let totalIrrigatedArea = 0;
@@ -552,26 +559,44 @@ export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProp
       const apiUrl = isEditMode ? `/api/irrigation/${irrigationId}` : "/api/irrigation";
       const apiMethod = isEditMode ? "PUT" : "POST";
 
-      const response = await fetch(apiUrl, {
-        method: apiMethod,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
+      console.log(`API isteği gönderiliyor: ${apiMethod} ${apiUrl}`);
 
-      if (!response.ok) {
-        let errorMessage = `Sulama kaydı ${isEditMode ? 'güncellenirken' : 'oluşturulurken'} bir hata oluştu.`;
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
-        } catch (parseError) {
-          console.error("Could not parse error response:", parseError);
+      try {
+        const response = await fetch(apiUrl, {
+          method: apiMethod,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(formData),
+        });
+
+        console.log(`API yanıtı alındı: ${response.status} ${response.statusText}`);
+
+        if (!response.ok) {
+          let errorMessage = `Sulama kaydı ${isEditMode ? 'güncellenirken' : 'oluşturulurken'} bir hata oluştu.`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch (parseError) {
+            console.error("Could not parse error response:", parseError);
+          }
+          throw new Error(errorMessage);
         }
-        throw new Error(errorMessage);
+
+        // Başarılı işlem sonrası kullanıcı geri bildirimi
+        toast({
+          title: "Başarılı",
+          description: `Sulama kaydı başarıyla ${isEditMode ? 'güncellendi' : 'oluşturuldu'}.`,
+          variant: "success"
+        });
+
+        // Kullanıcıyı sulama listesine yönlendir
+        router.push("/dashboard/owner/irrigation");
+        router.refresh();
+      } catch (error: any) {
+        console.error(`API isteği hatası (${apiMethod} ${apiUrl}):`, error);
+        throw error; // Üst catch bloğuna ilet
       }
 
-      toast({ title: "Başarılı", description: `Sulama kaydı başarıyla ${isEditMode ? 'güncellendi' : 'oluşturuldu'}.` });
-      router.push("/dashboard/owner/irrigation");
-      router.refresh();
+
 
     } catch (error: any) {
       console.error(`Form gönderme hatası (${isEditMode ? 'PUT' : 'POST'}):`, error);
@@ -693,7 +718,7 @@ export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProp
               });
             }
           }
-          
+
           // Son kontrol ve ayarlama
           const finalTotalDistributed = round(distribution.reduce((sum, item) => sum + item.quantityShare, 0));
           if (finalTotalDistributed !== round(typeUsage.totalQuantityUsedThisType) && distribution.length > 0) {
@@ -726,12 +751,24 @@ export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProp
 
   return (
     <div className="max-w-4xl mx-auto">
+      {isEditMode && (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+          <p className="text-blue-700 flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+            Düzenleme modundasınız. Değişikliklerinizi kaydetmek için formu doldurun ve "Değişiklikleri Kaydet" düğmesine tıklayın.
+          </p>
+        </div>
+      )}
       <form onSubmit={form.handleSubmit(onSubmit)}>
         <Card>
           <CardHeader>
-            <CardTitle>Sulama Kaydı Oluştur</CardTitle>
+            <CardTitle>{isEditMode ? "Sulama Kaydını Düzenle" : "Sulama Kaydı Oluştur"}</CardTitle>
             <CardDescription>
-              Sulama bilgilerini girerek yeni bir sulama kaydı oluşturun.
+              {isEditMode
+                ? "Sulama kaydının bilgilerini güncelleyin."
+                : "Sulama bilgilerini girerek yeni bir sulama kaydı oluşturun."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -963,7 +1000,14 @@ export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProp
           </CardContent>
           <CardFooter className="flex justify-end gap-4">
             <Button type="button" variant="outline" onClick={() => router.push("/dashboard/owner/irrigation")} disabled={loadingSubmit}>İptal</Button>
-            <Button type="submit" disabled={loadingSubmit || loadingFields || loadingInventories || !form.formState.isValid}>{loadingSubmit ? "Kaydediliyor..." : "Kaydet"}</Button>
+            <Button
+              type="submit"
+              disabled={loadingSubmit || loadingFields || loadingInventories || !form.formState.isValid}
+            >
+              {loadingSubmit
+                ? "Kaydediliyor..."
+                : (isEditMode ? "Değişiklikleri Kaydet" : "Kaydet")}
+            </Button>
           </CardFooter>
         </Card>
       </form>

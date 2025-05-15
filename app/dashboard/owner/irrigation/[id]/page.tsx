@@ -257,6 +257,12 @@ export default async function IrrigationDetailPage({
               </div>
               <div className="col-span-2">
                 <h3 className="text-sm font-medium text-muted-foreground">
+                  Kaydı Oluşturan
+                </h3>
+                <p className="mt-1">{irrigationLog.user?.name || "-"}</p>
+              </div>
+              <div className="col-span-2">
+                <h3 className="text-sm font-medium text-muted-foreground">
                   Notlar
                 </h3>
                 <p className="mt-1">{irrigationLog.notes || "-"}</p>

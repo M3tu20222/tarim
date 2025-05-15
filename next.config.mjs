@@ -6,10 +6,8 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  // Add configuration for handling dynamic routes
-  experimental: {
-    serverComponentsExternalPackages: ["bcrypt"],
-  },
+  // External packages configuration (updated from experimental.serverComponentsExternalPackages)
+  serverExternalPackages: ["bcrypt"],
   // Ensure proper output for Vercel deployment
   output: "standalone",
 }
