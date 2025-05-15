@@ -34,6 +34,8 @@ export async function GET(request: NextRequest) {
       take: limit,
     });
 
+    console.log("Fetched notifications from API:", notifications); // Çekilen bildirimleri logla
+
     return NextResponse.json(notifications);
   } catch (error) {
     console.error("Error fetching notifications:", error);

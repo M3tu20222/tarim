@@ -114,7 +114,7 @@ export async function GET(request: Request) {
     }));
 
 
-    return NextResponse.json(formattedInventory); // Return formatted data
+    return NextResponse.json({ data: formattedInventory }); // Return formatted data with data property
   } catch (error) {
     console.error("Error fetching inventory:", error);
     return NextResponse.json(

@@ -38,7 +38,7 @@ export async function GET(request: Request) {
       where: filter,
       // Güncellendi: fieldWells ve içindeki field dahil ediliyor
       include: {
-        fieldWells: { 
+        fieldWells: {
           include: {
             field: {
               select: {
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
       },
     });
 
-    return NextResponse.json(wells);
+    return NextResponse.json({ data: wells });
   } catch (error) {
     console.error("Error fetching wells:", error);
     return NextResponse.json(

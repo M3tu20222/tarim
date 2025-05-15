@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getUserFromCookie } from "@/lib/auth";
+import { getServerSideSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { WorkerFieldDetail } from "@/components/worker/worker-field-detail";
@@ -104,7 +104,10 @@ export default async function FieldDetailPage({
 }: {
   params: { id: string };
 }) {
-  const user = await getUserFromCookie();
+  // params'ı await ile kullanmak için
+  const id = params.id;
+
+  const user = await getServerSideSession();
 
   if (!user) {
     redirect("/auth/login");
@@ -114,7 +117,7 @@ export default async function FieldDetailPage({
     redirect("/dashboard");
   }
 
-  const data = await getFieldData(params.id, user.id);
+  const data = await getFieldData(id, user.id);
 
   if (!data) {
     redirect("/dashboard/worker");

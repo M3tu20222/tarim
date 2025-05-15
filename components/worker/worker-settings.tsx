@@ -49,13 +49,25 @@ export function WorkerSettings({ userId }: WorkerSettingsProps) {
         // Fetch wells
         const wellsResponse = await fetch("/api/wells");
         const wellsData = await wellsResponse.json();
-        setWells(wellsData.data || []);
+        console.log("Wells data:", wellsData); // Debug için log ekleyelim
+
+        if (Array.isArray(wellsData)) {
+          // Eğer doğrudan dizi dönüyorsa
+          setWells(wellsData);
+        } else if (wellsData.data && Array.isArray(wellsData.data)) {
+          // Eğer data property'si içinde dizi dönüyorsa
+          setWells(wellsData.data);
+        } else {
+          console.error("Unexpected wells data format:", wellsData);
+          setWells([]);
+        }
 
         // Fetch current assignment
         const assignmentResponse = await fetch(
           `/api/worker/well-assignment?workerId=${userId}`
         );
         const assignmentData = await assignmentResponse.json();
+        console.log("Assignment data:", assignmentData); // Debug için log ekleyelim
 
         if (assignmentData.data) {
           setCurrentAssignment(assignmentData.data);
@@ -74,7 +86,7 @@ export function WorkerSettings({ userId }: WorkerSettingsProps) {
     };
 
     fetchData();
-  }, [userId]);
+  }, [userId, toast]);
 
   const handleSave = async () => {
     if (!selectedWellId) {

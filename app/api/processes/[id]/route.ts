@@ -97,10 +97,40 @@ export async function GET(
         },
         inventoryUsages: {
           include: {
-            inventory: { select: { id: true, name: true, unit: true } },
+            inventory: {
+              select: {
+                id: true,
+                name: true,
+                unit: true,
+                category: true,
+                costPrice: true,
+                ownerships: {
+                  include: {
+                    user: {
+                      select: { id: true, name: true }
+                    }
+                  }
+                }
+              }
+            },
           },
         },
-        processCosts: true,
+        processCosts: {
+          include: {
+            fieldExpenses: true,
+            ownerExpenses: {
+              include: {
+                fieldOwnership: {
+                  include: {
+                    user: {
+                      select: { id: true, name: true }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
       },
     });
 

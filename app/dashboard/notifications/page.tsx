@@ -2,11 +2,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { NotificationList } from "@/components/notifications/notification-list";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { getSession } from "@/lib/session";
+import { getSession, getServerSideSession } from "@/lib/session"; // getServerSideSession import edildi
 import { redirect } from "next/navigation";
 
 export default async function NotificationsPage() {
-  const session = await getSession();
+  const session = await getServerSideSession(); // getSession yerine getServerSideSession kullanıldı
+
+  console.log("Session object in notifications page:", session); // Session objesini logla
 
   if (!session) {
     redirect("/login");

@@ -25,6 +25,11 @@ export async function middleware(request: NextRequest) {
       console.log(`API isteği: ${request.nextUrl.pathname}`)
       console.log(`Kullanıcı ID: ${decoded.id}, Rol: ${decoded.role}`)
 
+      // Worker'ların irrigation API'lerine erişimini sağla
+      if (decoded.role === "WORKER" && request.nextUrl.pathname.startsWith("/api/irrigation")) {
+        console.log("Worker kullanıcısı irrigation API'sine erişiyor:", request.nextUrl.pathname)
+      }
+
       return NextResponse.next({
         request: {
           headers: requestHeaders,
@@ -38,6 +43,22 @@ export async function middleware(request: NextRequest) {
 
   if (!token && isProtectedRoute) {
     return NextResponse.redirect(new URL("/login", request.url))
+  }
+
+  // Worker'ların irrigation sayfalarına erişimini sağla
+  if (token && isProtectedRoute) {
+    try {
+      const decoded = await verifyToken(token)
+
+      // Worker kullanıcısı irrigation sayfalarına erişmeye çalışıyorsa
+      if (decoded.role === "WORKER" && request.nextUrl.pathname.startsWith("/dashboard/owner/irrigation")) {
+        console.log("Worker kullanıcısı irrigation sayfasına erişiyor:", request.nextUrl.pathname)
+        // Worker'ın kendi dashboard'una yönlendirmek yerine erişime izin ver
+        return NextResponse.next()
+      }
+    } catch (error) {
+      console.error("Token doğrulama hatası:", error)
+    }
   }
 
   if (token && isLoginPage) {

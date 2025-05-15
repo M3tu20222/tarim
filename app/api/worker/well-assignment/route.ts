@@ -1,10 +1,50 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getUserFromCookie } from "@/lib/auth";
+import { getServerSideSession } from "@/lib/session";
+
+export async function GET(request: Request) {
+  try {
+    const user = await getServerSideSession();
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "Oturum açmanız gerekiyor" },
+        { status: 401 }
+      );
+    }
+
+    // URL'den workerId parametresini al
+    const url = new URL(request.url);
+    const workerId = url.searchParams.get("workerId");
+
+    if (!workerId) {
+      return NextResponse.json(
+        { error: "İşçi ID'si gereklidir" },
+        { status: 400 }
+      );
+    }
+
+    // İşçinin kuyu atamasını bul
+    const assignment = await prisma.workerWellAssignment.findFirst({
+      where: { workerId },
+      include: {
+        well: true,
+      },
+    });
+
+    return NextResponse.json({ data: assignment });
+  } catch (error) {
+    console.error("Error fetching well assignment:", error);
+    return NextResponse.json(
+      { error: "Kuyu ataması getirilirken bir hata oluştu" },
+      { status: 500 }
+    );
+  }
+}
 
 export async function POST(request: Request) {
   try {
-    const user = await getUserFromCookie();
+    const user = await getServerSideSession();
 
     if (!user) {
       return NextResponse.json(

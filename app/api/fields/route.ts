@@ -32,11 +32,21 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit;
     const search = searchParams.get("search");
     const status = searchParams.get("status");
+    const wellId = searchParams.get("wellId");
     const includeOwnerships = searchParams.get("includeOwnerships") === "true";
     const fetchAll = searchParams.get("fetchAll") === "true";
 
     // Filtreleme koşulları
     const where: any = {};
+
+    // Kuyu ID'sine göre filtreleme
+    if (wellId) {
+      where.fieldWells = {
+        some: {
+          wellId: wellId
+        }
+      };
+    }
 
     if (search) {
       where.OR = [
@@ -58,11 +68,15 @@ export async function GET(request: NextRequest) {
           },
         };
       } else if (session.role === "WORKER") {
-        where.workerAssignments = {
-          some: {
-            userId: session.id,
-          },
-        };
+        // Worker'lar için filtreleme yapma, tüm tarlaları görebilsinler
+        // Ancak wellId parametresi varsa, o kuyuya bağlı tarlaları göster
+        if (!wellId) {
+          where.workerAssignments = {
+            some: {
+              userId: session.id,
+            },
+          };
+        }
       }
     }
 

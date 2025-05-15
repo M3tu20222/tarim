@@ -131,10 +131,17 @@ export function ProcessDetails({ process }: ProcessDetailsProps) {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {usage.quantity} {formatUnit(usage.inventory.unit)}
+                        {usage.usedQuantity || usage.quantity} {formatUnit(usage.inventory.unit)}
                       </TableCell>
                       <TableCell>
-                        {usage.inventory.owner?.name || "Belirtilmemiş"}
+                        {usage.inventory.ownerships && usage.inventory.ownerships.length > 0
+                          ? usage.inventory.ownerships.map((ownership: any, index: number) => (
+                              <span key={ownership.id}>
+                                {ownership.user.name}
+                                {index < usage.inventory.ownerships.length - 1 ? ", " : ""}
+                              </span>
+                            ))
+                          : "Belirtilmemiş"}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -220,8 +227,8 @@ export function ProcessDetails({ process }: ProcessDetailsProps) {
                                   {expense.description || "Genel Gider"}
                                 </TableCell>
                                 <TableCell>
-                                  {expense.amount != null // Check if amount is not null or undefined
-                                    ? expense.amount.toLocaleString("tr-TR", {
+                                  {expense.totalCost != null // Check if totalCost is not null or undefined
+                                    ? expense.totalCost.toLocaleString("tr-TR", {
                                         style: "currency",
                                         currency: "TRY",
                                       })
@@ -295,28 +302,27 @@ export function ProcessDetails({ process }: ProcessDetailsProps) {
                   <div className="flex justify-between">
                     <span className="font-medium">Toplam Maliyet:</span>
                     <span className="font-bold">
-                      {process.processCosts
-                        .reduce((total: number, cost: any) => {
-                          const fieldExpensesTotal =
-                            cost.fieldExpenses?.reduce(
-                              (sum: number, exp: any) => sum + (exp.amount ?? 0),
+                      {(() => {
+                          // Tarla giderleri toplamı - Bu, toplam maliyeti temsil eder
+                          const fieldExpensesTotal = process.processCosts.reduce((total, cost) => {
+                            const costTotal = cost.fieldExpenses?.reduce(
+                              (sum, exp) => sum + (exp.totalCost ?? 0),
                               0
                             ) || 0;
+                            return total + costTotal;
+                          }, 0);
 
-                          const ownerExpensesTotal =
-                            cost.ownerExpenses?.reduce(
-                              (sum: number, exp: any) => sum + (exp.amount ?? 0),
-                              0
-                            ) || 0;
+                          // NOT: Sahip giderleri, tarla giderlerinin sahipler arasında dağıtılmış halidir
+                          // Bu nedenle toplam maliyete eklemiyoruz, çünkü bu çift sayım olur
 
-                          return (
-                            total + fieldExpensesTotal + ownerExpensesTotal
-                          );
-                        }, 0)
-                        .toLocaleString("tr-TR", {
-                          style: "currency",
-                          currency: "TRY",
-                        })}
+                          // Toplam maliyet sadece tarla giderleridir
+                          const totalCost = fieldExpensesTotal;
+
+                          return totalCost.toLocaleString("tr-TR", {
+                            style: "currency",
+                            currency: "TRY",
+                          });
+                        })()}
                     </span>
                   </div>
                 </div>

@@ -22,6 +22,7 @@ import {
   Computer,
   LogOut,
 } from "lucide-react";
+import { useAuth } from "@/components/auth-provider";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -74,6 +75,7 @@ export function AppSidebar() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const { setTheme, theme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const { user } = useAuth();
 
   // Tema değişikliğini işlemek için useEffect
   useEffect(() => {
@@ -400,6 +402,16 @@ export function AppSidebar() {
                       Yeni Sulama Planı
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>
+                  {user?.role === "WORKER" && (
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        onClick={() => router.push("/dashboard/worker/irrigation/new")}
+                        isActive={isActive("/dashboard/worker/irrigation/new")}
+                      >
+                        Yeni Sulama Kaydı (İşçi)
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  )}
                 </SidebarMenuSub>
               )}
             </SidebarMenuItem>

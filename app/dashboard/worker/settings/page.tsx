@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getUserFromCookie } from "@/lib/auth";
+import { getServerSideSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { WorkerSettings } from "@/components/worker/worker-settings";
 
@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default async function WorkerSettingsPage() {
-  const user = await getUserFromCookie();
+  const user = await getServerSideSession();
 
   if (!user) {
     redirect("/auth/login");

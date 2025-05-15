@@ -81,7 +81,8 @@ export function NotificationList({
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const router = useRouter();
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+  // API URL'yi doğrudan boş string olarak ayarla, çünkü Next.js API'leri için tam URL gerekmez
+  const apiUrl = "";
 
   // fetchNotifications fonksiyonunu useCallback ile sarmala
   const fetchNotifications = useCallback(async (newPage = 1, currentUserId?: string) => {
@@ -128,27 +129,53 @@ export function NotificationList({
       }
 
 
-      const response = await fetch(
-        `${apiUrl}/api/notifications?${queryParams.toString()}`,
-        {
-          headers,
-        }
-      );
+      const url = `/api/notifications?${queryParams.toString()}`;
+      console.log("Fetching notifications from URL:", url);
+      console.log("With headers:", headers);
+
+      const response = await fetch(url, { headers });
 
       if (response.ok) {
-        const data = await response.json();
+        try {
+          const data = await response.json();
+          console.log("Data received from notifications API:", data); // API'den gelen veriyi logla
 
-        if (newPage === 1) {
-          setNotifications(data.notifications || []);
-        } else {
-          setNotifications((prev) => [...prev, ...(data.notifications || [])]);
+          // API doğrudan notifications dizisi döndürüyor, data.notifications değil
+          if (Array.isArray(data)) {
+            if (newPage === 1) {
+              setNotifications(data);
+            } else {
+              setNotifications((prev) => [...prev, ...data]);
+            }
+            // Şimdilik pagination desteği yok, hasMore'u false yap
+            setHasMore(false);
+            setPage(1);
+          } else if (data.notifications) {
+            // Eğer API yapısı değişirse ve data.notifications dönerse
+            if (newPage === 1) {
+              setNotifications(data.notifications || []);
+            } else {
+              setNotifications((prev) => [...prev, ...(data.notifications || [])]);
+            }
+            setHasMore(data.pagination?.page < data.pagination?.totalPages);
+            setPage(data.pagination?.page || 1);
+          } else {
+            console.error("Unexpected API response format:", data);
+            setNotifications([]);
+            setHasMore(false);
+          }
+        } catch (jsonError) {
+          console.error("Error parsing notifications JSON:", jsonError); // JSON parse hatasını logla
+          setNotifications([]); // Hata durumunda listeyi temizle
+          setHasMore(false);
         }
-
-        setHasMore(data.pagination?.page < data.pagination?.totalPages);
-        setPage(data.pagination?.page || 1);
+      } else {
+         console.error("Error fetching notifications: Response not OK", response.status, response.statusText); // Response not OK durumunu logla
+         setNotifications([]); // Hata durumunda listeyi temizle
+         setHasMore(false);
       }
     } catch (error) {
-      console.error("Error fetching notifications:", error);
+      console.error("Error fetching notifications (network or other):", error); // Diğer hataları logla
       // Hata durumunda da yükleniyor durumunu kapat
       setNotifications([]); // Hata durumunda listeyi temizle
       setHasMore(false);
@@ -164,6 +191,12 @@ export function NotificationList({
     // Kullanılacak ID'yi belirle: Önce context, sonra prop
     const effectiveUserId = user?.id || propUserId;
 
+    console.log("NotificationList useEffect çalıştı");
+    console.log("Auth loading:", authLoading);
+    console.log("User from context:", user);
+    console.log("User ID from props:", propUserId);
+    console.log("Effective user ID:", effectiveUserId);
+
     // Auth yükleniyorsa veya geçerli bir ID yoksa bekle
     if (authLoading) {
       console.log("Auth is loading, waiting to fetch notifications...");
@@ -173,10 +206,12 @@ export function NotificationList({
 
     if (effectiveUserId) {
       console.log(`User ID available (${effectiveUserId}), triggering initial fetch.`);
+      console.log("User object from useAuth:", user); // user objesini logla
       fetchNotifications(1, effectiveUserId); // İlk sayfayı geçerli ID ile fetch et
     } else {
        // Auth yüklendi ama geçerli ID yok
        console.log("Auth loaded but no effective user ID, clearing notifications.");
+       console.log("User object from useAuth:", user); // user objesini logla
        setNotifications([]); // Bildirimleri temizle
        setLoading(false); // Yükleniyor durumunu kapat
        setHasMore(false);
@@ -249,13 +284,44 @@ export function NotificationList({
     }
   };
 
-  const handleNotificationClick = (notification: Notification) => {
+  const handleNotificationClick = async (notification: Notification) => {
     if (!notification.isRead) {
       markAsRead(notification.id);
     }
 
     if (notification.link) {
-      router.push(notification.link);
+      // Eğer link bir process sayfasına yönlendiriyorsa, önce process'in var olup olmadığını kontrol et
+      if (notification.link.includes('/processes/')) {
+        try {
+          // Process ID'yi linkten çıkar
+          const processId = notification.link.split('/processes/')[1];
+
+          // Process'in var olup olmadığını kontrol et
+          const response = await fetch(`/api/processes/${processId}`, {
+            headers: {
+              "x-user-id": user?.id || "",
+              "x-user-role": user?.role || "",
+            },
+          });
+
+          if (response.ok) {
+            // Process varsa, linke yönlendir
+            router.push(notification.link);
+          } else {
+            // Process yoksa, kullanıcıya bilgi ver
+            console.error(`Process with ID ${processId} not found`);
+            alert("Bu işlem artık mevcut değil. İşlem silinmiş olabilir.");
+            // Bildirimi sil veya arşivle
+            deleteNotification(notification.id);
+          }
+        } catch (error) {
+          console.error("Error checking process existence:", error);
+          router.push(notification.link);
+        }
+      } else {
+        // Diğer linkler için doğrudan yönlendir
+        router.push(notification.link);
+      }
     } else if (notification.relatedEntityId && notification.relatedEntityType) {
       // Eğer ilgili entity varsa, ona yönlendir
       const entityType = notification.relatedEntityType.toLowerCase();
@@ -364,103 +430,114 @@ export function NotificationList({
         </div>
       )}
 
-      {notifications.map((notification) => (
-        <Card
-          key={notification.id}
-          className={`mb-4 cursor-pointer transition-colors hover:bg-accent/50 ${
-            !notification.isRead && !showSent
-              ? "border-l-4 border-l-primary"
-              : ""
-          }`}
-          onClick={() => !showSent && handleNotificationClick(notification)}
-        >
-          <CardHeader className="pb-2 flex flex-row items-start justify-between">
-            <div className="flex items-start gap-2">
-              <div className="mt-1">
-                {showSent ? (
-                  <Send className="h-5 w-5 text-primary" />
-                ) : (
-                  getNotificationIcon(notification.type)
+      {notifications.map((notification) => {
+        console.log("Rendering notification:", notification.id, notification.title); // Log buraya taşındı
+        return ( // Return ifadesi eklendi
+          <Card
+            key={notification.id}
+            className={`mb-4 cursor-pointer transition-colors hover:bg-accent/50 ${
+              !notification.isRead && !showSent
+                ? "border-l-4 border-l-primary"
+                : ""
+            }`}
+            onClick={(e) => {
+              if (!showSent) {
+                // Eğer link bir process sayfasına yönlendiriyorsa, önce process'in var olup olmadığını kontrol et
+                if (notification.link && notification.link.includes('/processes/')) {
+                  e.preventDefault(); // Varsayılan davranışı engelle
+                }
+                handleNotificationClick(notification);
+              }
+            }}
+          >
+            <CardHeader className="pb-2 flex flex-row items-start justify-between">
+              <div className="flex items-start gap-2">
+                <div className="mt-1">
+                  {showSent ? (
+                    <Send className="h-5 w-5 text-primary" />
+                  ) : (
+                    getNotificationIcon(notification.type)
+                  )}
+                </div>
+                <div>
+                  <CardTitle className="text-base">
+                    {notification.title}
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    {formatDistanceToNow(new Date(notification.createdAt), {
+                      addSuffix: true,
+                      locale: tr,
+                    })}
+                  </CardDescription>
+                </div>
+              </div>
+              <div>{getNotificationBadge(notification.type)}</div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm">{notification.message}</p>
+
+              {showSent && notification.receiver && (
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Alıcı:</span>
+                  <div className="flex items-center gap-1">
+                    <Avatar className="h-5 w-5">
+                      <AvatarFallback>
+                        {notification.receiver.name.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-xs font-medium">
+                      {notification.receiver.name}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {!showSent && notification.sender && (
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Gönderen:</span>
+                  <div className="flex items-center gap-1">
+                    <Avatar className="h-5 w-5">
+                      <AvatarFallback>
+                        {notification.sender.name.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-xs font-medium">
+                      {notification.sender.name}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+            {showActions && !showSent && (
+              <CardFooter className="flex justify-end gap-2 pt-0">
+                {!notification.isRead && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      markAsRead(notification.id);
+                    }}
+                  >
+                    <Check className="h-4 w-4 mr-2" />
+                    Okundu
+                  </Button>
                 )}
-              </div>
-              <div>
-                <CardTitle className="text-base">
-                  {notification.title}
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  {formatDistanceToNow(new Date(notification.createdAt), {
-                    addSuffix: true,
-                    locale: tr,
-                  })}
-                </CardDescription>
-              </div>
-            </div>
-            <div>{getNotificationBadge(notification.type)}</div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm">{notification.message}</p>
-
-            {showSent && notification.receiver && (
-              <div className="mt-2 flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Alıcı:</span>
-                <div className="flex items-center gap-1">
-                  <Avatar className="h-5 w-5">
-                    <AvatarFallback>
-                      {notification.receiver.name.charAt(0)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="text-xs font-medium">
-                    {notification.receiver.name}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {!showSent && notification.sender && (
-              <div className="mt-2 flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Gönderen:</span>
-                <div className="flex items-center gap-1">
-                  <Avatar className="h-5 w-5">
-                    <AvatarFallback>
-                      {notification.sender.name.charAt(0)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="text-xs font-medium">
-                    {notification.sender.name}
-                  </span>
-                </div>
-              </div>
-            )}
-          </CardContent>
-          {showActions && !showSent && (
-            <CardFooter className="flex justify-end gap-2 pt-0">
-              {!notification.isRead && (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={(e) => {
                     e.stopPropagation();
-                    markAsRead(notification.id);
+                    deleteNotification(notification.id);
                   }}
                 >
-                  <Check className="h-4 w-4 mr-2" />
-                  Okundu
+                  Sil
                 </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteNotification(notification.id);
-                }}
-              >
-                Sil
-              </Button>
-            </CardFooter>
-          )}
-        </Card>
-      ))}
+              </CardFooter>
+            )}
+          </Card>
+        );
+      })} {/* Return ifadesi kaldırıldı */}
 
       {hasMore && (
         <div className="flex justify-center mt-4">

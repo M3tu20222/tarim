@@ -10,7 +10,12 @@ async function getIrrigationLog(id: string) {
       where: { id },
       include: {
         fieldUsages: true,
-        inventoryUsages: true,
+        inventoryUsages: {
+          include: {
+            inventory: true, // Envanter detaylarını almak için (opsiyonel, gerekirse)
+            ownerUsages: true, // Sahip kullanımlarını dahil et
+          },
+        },
       },
     });
 
@@ -33,11 +38,14 @@ async function getIrrigationLog(id: string) {
         fieldId: fu.fieldId,
         percentage: fu.percentage,
       })),
-      inventoryUsages: irrigationLog.inventoryUsages.map(iu => ({
-        inventoryId: iu.inventoryId,
-        quantity: iu.quantity,
-        // unitPrice burada eksik, formda gerekirse API'den çekilmeli veya farklı yönetilmeli
-      })),
+      inventoryUsages: irrigationLog.inventoryUsages.flatMap(iu =>
+        iu.ownerUsages.map(ownerUsage => ({
+          ownerId: ownerUsage.ownerId,
+          inventoryId: iu.inventoryId,
+          quantity: ownerUsage.quantity, // Sahip başına düşen miktar
+          // unitPrice: iu.unitPrice, // Eğer IrrigationInventoryUsage'da unitPrice varsa
+        }))
+      ),
     };
   } catch (error) {
     console.error("Error fetching irrigation log:", error);

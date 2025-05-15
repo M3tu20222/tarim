@@ -284,7 +284,7 @@ export async function DELETE(
   request: NextRequest, // request parametresi genellikle DELETE için kullanılmaz ama burada kalabilir.
   { params }: { params: { id: string } } // params'ı doğrudan destruct ediyoruz.
 ) {
-  const id = await params.id; // id'yi buradan alıyoruz.
+  const id = params.id; // id'yi buradan alıyoruz.
 
   try {
     const session = await getServerSideSession();

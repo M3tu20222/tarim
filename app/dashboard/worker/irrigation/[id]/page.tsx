@@ -119,12 +119,16 @@ export default async function WorkerIrrigationDetailPage({
 }: {
   params: { id: string };
 }) {
+  // Next.js 13+ için params nesnesini await etmemize gerek yok,
+  // ancak params.id'yi doğrudan kullanmak yerine bir değişkene atayalım
+  const id = params.id;
+
   // Eğer ID "new" ise, bu sayfa yeni kayıt oluşturmak için değil,
   // var olan bir kaydın detayını göstermek içindir.
   // Bu nedenle notFound() çağırarak 404 sayfasına yönlendiriyoruz.
   // Yeni kayıt oluşturma için ayrı bir sayfa (örn: /dashboard/worker/irrigation/new/page.tsx veya /create)
   // veya bu sayfada bir form gösterimi düşünülebilir. Şimdilik en basit çözüm notFound().
-  if (params.id === "new") {
+  if (id === "new") {
     notFound();
     return; // notFound() çağrıldıktan sonra fonksiyonun geri kalanının çalışmaması için return ekliyoruz.
   }
@@ -139,7 +143,7 @@ export default async function WorkerIrrigationDetailPage({
     redirect("/dashboard");
   }
 
-  const irrigation = await getIrrigationData(params.id, user.id);
+  const irrigation = await getIrrigationData(id, user.id);
 
   if (!irrigation) {
     notFound();
@@ -257,7 +261,7 @@ export default async function WorkerIrrigationDetailPage({
                 <h3 className="text-sm font-medium text-muted-foreground">
                   Durum
                 </h3>
-                <p className="mt-1">{getStatusBadge(irrigation.status)}</p>
+                <div className="mt-1">{getStatusBadge(irrigation.status)}</div>
               </div>
               <div>
                 <h3 className="text-sm font-medium text-muted-foreground">

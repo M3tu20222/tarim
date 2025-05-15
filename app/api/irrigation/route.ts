@@ -140,14 +140,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Formdan gelen verileri al (doğru isimlerle)
+    const requestData = await request.json();
+
     const {
       startDateTime,
       duration,
       notes,
-      fieldIrrigations, // 'fieldUsages' yerine 'fieldIrrigations'
-      ownerDurations,   // Eklendi
-      inventoryUsages,  // Yapısı formdan geldiği gibi
-    } = await request.json();
+      wellId: directWellId, // Form'dan doğrudan gelen wellId
+      fieldIrrigations,
+      ownerDurations,
+      inventoryDeductions, // inventoryUsages yerine
+      costAllocations,   // Yeni eklendi, şimdilik loglama/raporlama için
+    } = requestData;
 
     // Gerekli doğrulamalar
     if (
@@ -160,161 +164,146 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Eksik alanlar" }, { status: 400 });
     }
 
-    // Toplam sulanan alanı hesapla (Envanter yüzdesi için gerekli)
+    // Toplam sulanan alanı hesapla (Raporlama ve bazı dağıtımlar için gerekli olabilir)
     const totalIrrigatedAreaForLog = ownerDurations.reduce(
-      (sum: number, owner: any) => sum + owner.irrigatedArea,
+      (sum: number, owner: any) => sum + (owner.irrigatedArea || 0), // irrigatedArea null/undefined olabilir
       0
     );
-    if (totalIrrigatedAreaForLog <= 0) {
-       return NextResponse.json({ error: "Toplam sulanan alan sıfır veya negatif olamaz." }, { status: 400 });
-    }
+    // totalIrrigatedAreaForLog sıfır olabilir, bu bir hata değil, sadece envanter dağıtımı yapılmaz.
 
-
-    // wellId ve seasonId'yi ilk tarla kullanımından al (varsayım: hepsi aynı)
-    // Daha sağlam bir çözüm için tüm fieldIrrigations kontrol edilebilir.
+    // Kuyu ID'sini belirle - önce doğrudan gelen wellId'yi kontrol et, yoksa fieldIrrigations'dan al
     const primaryFieldUsage = fieldIrrigations[0];
-    const wellId = primaryFieldUsage.wellId;
-    const seasonId = primaryFieldUsage.seasonId;
+    const fieldWellId = primaryFieldUsage?.wellId; // Tarla üzerinden gelen kuyu ID'si
+    const seasonId = primaryFieldUsage?.seasonId; // Sezon ID'si
 
-    // API içindeki karmaşık hesaplamalar kaldırıldı, formdan gelen veriler kullanılacak.
+    // Öncelikle doğrudan gelen wellId'yi kullan, yoksa fieldIrrigations'dan gelen wellId'yi kullan
+    const wellId = directWellId || fieldWellId;
 
-    // Veritabanı işlemlerini transaction içinde yap
+    // wellId belirlendi
+
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Ana sulama kaydını oluştur
       const irrigationLog = await tx.irrigationLog.create({
         data: {
           startDateTime: new Date(startDateTime),
           duration,
           notes,
-          status: "COMPLETED", // Varsayılan status eklendi
-          wellId: wellId || null, // wellId varsa ekle, yoksa null
-          seasonId: seasonId || null, // seasonId varsa ekle, yoksa null
-          createdBy: session.id, // 'createdById' yerine 'createdBy' kullanıldı
+          status: "COMPLETED",
+          wellId: wellId || null,
+          seasonId: seasonId || null,
+          createdBy: session.id,
         },
       });
 
-      // 2. Tarla kullanımlarını kaydet (formdan gelen fieldIrrigations ile)
       for (const fieldUsage of fieldIrrigations) {
-        // IrrigationFieldUsage'da irrigatedArea alanı yok, kaldırıldı.
         await tx.irrigationFieldUsage.create({
           data: {
             irrigationLogId: irrigationLog.id,
             fieldId: fieldUsage.fieldId,
             percentage: fieldUsage.percentage,
-            // irrigatedArea alanı kaldırıldı
           },
         });
       }
 
-      // 3. Sahip özetlerini kaydet (formdan gelen ownerDurations ile)
       for (const ownerSummary of ownerDurations) {
         await tx.irrigationOwnerSummary.create({
           data: {
             irrigationLogId: irrigationLog.id,
             ownerId: ownerSummary.userId,
-            totalAllocatedDuration: round(ownerSummary.duration), // 'duration' yerine 'totalAllocatedDuration'
-            totalIrrigatedArea: round(ownerSummary.irrigatedArea), // Alan adı düzeltildi (schema'da totalIrrigatedArea)
+            totalAllocatedDuration: round(ownerSummary.duration),
+            totalIrrigatedArea: round(ownerSummary.irrigatedArea),
           },
         });
       }
 
-      // 4. Envanter kullanımlarını ve stok güncellemelerini işle
-      if (inventoryUsages && inventoryUsages.length > 0) {
-        for (const usage of inventoryUsages) {
-          // 4a. Ana envanter kullanım kaydını oluştur
-          const irrigationInventoryUsage = await tx.irrigationInventoryUsage.create({
+      // Envanter kullanımlarını işle (inventoryDeductions üzerinden)
+      if (inventoryDeductions && inventoryDeductions.length > 0) {
+        for (const deduction of inventoryDeductions) {
+          const { inventoryId, quantityUsed, unitPrice, ownerId: deductionOwnerId } = deduction;
+
+          // Stok kontrolleri
+          const inventoryItem = await tx.inventory.findUnique({
+            where: { id: inventoryId },
+            select: { name: true, unit: true, totalQuantity: true },
+          });
+          if (!inventoryItem || inventoryItem.totalQuantity < quantityUsed) {
+            throw new Error(
+              `Genel ${inventoryItem?.name || inventoryId} stoğu yetersiz. İhtiyaç: ${round(quantityUsed)} ${inventoryItem?.unit || ''}, Mevcut: ${round(inventoryItem?.totalQuantity ?? 0)} ${inventoryItem?.unit || ''}`
+            );
+          }
+
+          const ownerInventory = await tx.inventoryOwnership.findFirst({
+            where: { inventoryId: inventoryId, userId: deductionOwnerId },
+            select: { id: true, shareQuantity: true, user: { select: { name: true } } },
+          });
+          const ownerNameForError = ownerInventory?.user?.name || ownerDurations.find((o: any) => o.userId === deductionOwnerId)?.userName || `Sahip ID: ${deductionOwnerId}`;
+
+          if (!ownerInventory || ownerInventory.shareQuantity < quantityUsed) {
+            throw new Error(
+              `${ownerNameForError} adlı sahip için ${inventoryItem.name} stoğu yetersiz. İhtiyaç: ${round(quantityUsed)} ${inventoryItem.unit}, Mevcut: ${round(ownerInventory?.shareQuantity ?? 0)} ${inventoryItem.unit}`
+            );
+          }
+
+          // 1. IrrigationInventoryUsage (Her bir direkt stok düşümü için)
+          const createdIrrigationInventoryUsage = await tx.irrigationInventoryUsage.create({
             data: {
               irrigationLogId: irrigationLog.id,
-              inventoryId: usage.inventoryId,
-              quantity: round(usage.quantity),
-              unitPrice: round(usage.unitPrice), // Formdan gelen birim fiyat
-              totalCost: round(usage.quantity * usage.unitPrice), // Toplam maliyet
+              inventoryId: inventoryId,
+              quantity: round(quantityUsed),
+              unitPrice: round(unitPrice),
+              totalCost: round(quantityUsed * unitPrice),
             },
           });
 
-          // 4b. Sahip bazında envanter kullanımını kaydet (formdan gelen ownerUsages ile)
-          if (usage.ownerUsages && usage.ownerUsages.length > 0) {
-            for (const ownerUsage of usage.ownerUsages) {
-              // Sahip pay yüzdesini hesapla
-              const ownerSummaryData = ownerDurations.find((o: any) => o.userId === ownerUsage.userId);
-              const ownerPercentage = ownerSummaryData
-                ? round((ownerSummaryData.irrigatedArea / totalIrrigatedAreaForLog) * 100)
-                : 0; // Eğer sahip bulunamazsa 0 ata (hata durumu)
-
-               if (!ownerSummaryData) {
-                 console.warn(`Owner summary not found for userId: ${ownerUsage.userId} in inventory usage calculation.`);
-                 // İsteğe bağlı: Hata fırlatılabilir veya işleme devam edilebilir.
-               }
-
-
-              await tx.irrigationInventoryOwnerUsage.create({
-                data: {
-                  irrigationInventoryUsageId: irrigationInventoryUsage.id,
-                  ownerId: ownerUsage.userId,
-                  percentage: ownerPercentage, // Hesaplanan yüzde eklendi
-                  quantity: round(ownerUsage.quantity),
-                  cost: round(ownerUsage.cost),
-                },
-              });
-
-              // 4c. Sahip envanter stoğunu güncelle
-              const ownerInventory = await tx.inventoryOwnership.findFirst({
-                where: {
-                  inventoryId: usage.inventoryId,
-                  userId: ownerUsage.userId,
-                },
-              });
-
-              if (!ownerInventory || ownerInventory.shareQuantity < ownerUsage.quantity) {
-                throw new Error(
-                  `Sahip ${ownerUsage.userId} için envanter ${usage.inventoryId} stok yetersiz (${ownerInventory?.shareQuantity} < ${ownerUsage.quantity})`
-                );
-              }
-
-              await tx.inventoryOwnership.update({
-                where: { id: ownerInventory.id },
-                data: { shareQuantity: { decrement: round(ownerUsage.quantity) } },
-              });
-            }
-          }
-
-          // 4d. Toplam envanter stoğunu güncelle
-          await tx.inventory.update({
-            where: { id: usage.inventoryId },
-            data: { totalQuantity: { decrement: round(usage.quantity) } },
+          // 2. IrrigationInventoryOwnerUsage (Bu direkt düşümün sahibini belirtir)
+          await tx.irrigationInventoryOwnerUsage.create({
+            data: {
+              irrigationInventoryUsageId: createdIrrigationInventoryUsage.id,
+              ownerId: deductionOwnerId,
+              percentage: 100, // Bu spesifik kullanımın %100'ü bu sahibe ait
+              quantity: round(quantityUsed),
+              cost: round(quantityUsed * unitPrice),
+            },
           });
 
-          // 4e. Envanter işlemi (transaction) kaydı oluştur
+          // 3. Inventory (Toplam Stok Güncelleme)
+          await tx.inventory.update({
+            where: { id: inventoryId },
+            data: { totalQuantity: { decrement: round(quantityUsed) } },
+          });
+
+          // 4. InventoryOwnership (Sahip Stoğu Güncelleme)
+          await tx.inventoryOwnership.update({
+            where: { id: ownerInventory.id },
+            data: { shareQuantity: { decrement: round(quantityUsed) } },
+          });
+
+          // 5. InventoryTransaction
           await tx.inventoryTransaction.create({
             data: {
-              inventoryId: usage.inventoryId,
+              inventoryId: inventoryId,
               type: "USAGE",
-              quantity: -round(usage.quantity), // Kullanım olduğu için negatif
+              quantity: -round(quantityUsed),
               date: new Date(startDateTime),
-              notes: `Sulama kaydı #${irrigationLog.id} için kullanıldı.`,
-              userId: session.id, // İşlemi yapan kullanıcı
-              // relatedIrrigationLogId alanı kaldırıldı
+              notes: `Sulama kaydı #${irrigationLog.id} için ${ownerNameForError} stoğundan kullanıldı.`,
+              userId: session.id,
             },
           });
         }
       }
+      // costAllocations verisi, eğer saklanması gerekiyorsa, burada ayrı bir mantıkla işlenebilir.
+      // Şimdilik sadece stok düşümlerini işliyoruz.
 
       // Bildirimleri Oluştur
       const createdByUser = await tx.user.findUnique({ where: { id: session.id } });
-      const well = await tx.well.findUnique({ where: { id: irrigationLog.wellId! } }); // wellId null olabilir, kontrol et
+      const well = irrigationLog.wellId ? await tx.well.findUnique({ where: { id: irrigationLog.wellId } }) : null;
 
-      // 1. Tarla Sahiplerine Bildirim
-      // ownerSummaries üzerinden benzersiz sahip ID'lerini al
       const uniqueOwnerIds = [...new Set(ownerDurations.map((os: any) => os.userId))];
-
       for (const ownerId of uniqueOwnerIds) {
-        // Sahibe ait sulanan tarlaları bulmak için fieldIrrigations ve field.owners ilişkisi kullanılabilir.
-        // Şimdilik genel bir mesaj gönderelim.
-        if (ownerId !== session.id) { // Kaydı oluşturan sahipse tekrar bildirim gitmesin
+        if (ownerId !== session.id) {
           await tx.notification.create({
             data: {
               title: "Tarlanızda Sulama Yapıldı",
-              message: `${well?.name || 'Bilinmeyen Kuyu'}'dan tarlanız/tarlalarınız için ${irrigationLog.duration} dakika sulama yapıldı.`,
+              message: `${well?.name || (wellId ? `Kuyu (ID: ${wellId})` : 'Bilinmeyen Kuyu')}'dan tarlanız/tarlalarınız için ${irrigationLog.duration} dakika sulama yapıldı.`,
               type: "IRRIGATION_COMPLETED",
               receiverId: ownerId as string, // Type assertion eklendi
               senderId: session.id as string, // Type assertion eklendi
@@ -346,6 +335,9 @@ export async function POST(request: NextRequest) {
       }
 
       return irrigationLog; // Transaction'dan sonucu döndür
+    },
+    {
+      timeout: 15000, // İşlem zaman aşımı 15 saniyeye çıkarıldı (varsayılan 5sn)
     }); // Transaction sonu
 
     return NextResponse.json({ data: result }); // Başarılı yanıt
