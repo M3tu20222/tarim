@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const userId = request.headers.get("x-user-id");
@@ -16,9 +16,12 @@ export async function POST(
       );
     }
 
+    // Params nesnesini await ile çözümle
+    const { id } = await params;
+
     // Borcu getir
     const debt = await prisma.debt.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         paymentHistory: true,
       },
@@ -78,7 +81,7 @@ export async function POST(
         paymentMethod,
         notes,
         debt: {
-          connect: { id: params.id },
+          connect: { id },
         },
         payer: {
           connect: { id: debt.debtorId },
@@ -86,17 +89,7 @@ export async function POST(
         receiver: {
           connect: { id: debt.creditorId },
         },
-        // Contributor alanını ekleyelim - bu alan şemada zorunlu
-        contributor: {
-          // Burada bir PurchaseContributor bağlantısı gerekiyor
-          // Ancak borç ödemelerinde bu alan kullanılmıyor, bu yüzden
-          // şemayı değiştirmemiz gerekecek. Şimdilik geçici bir çözüm olarak:
-          connect: {
-            // Varsayılan bir contributor ID kullanabiliriz veya
-            // bu alanı opsiyonel hale getirmek için şemayı güncellemeliyiz
-            id: "default-contributor-id", // Bu ID'yi gerçek bir ID ile değiştirin
-          },
-        },
+        // contributorId alanı şemada isteğe bağlı olduğu için burada belirtmiyoruz
       },
     });
 
@@ -113,7 +106,7 @@ export async function POST(
     }
 
     await prisma.debt.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         status: newStatus,
         paymentDate: newStatus === "PAID" ? new Date() : null,

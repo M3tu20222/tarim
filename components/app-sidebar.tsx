@@ -75,7 +75,7 @@ export function AppSidebar() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const { setTheme, theme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   // Tema değişikliğini işlemek için useEffect
   useEffect(() => {
@@ -118,7 +118,15 @@ export function AppSidebar() {
                 "font-bold text-lg cursor-pointer transition-all duration-300",
                 open ? "ml-2" : "ml-0 scale-90"
               )}
-              onClick={() => router.push("/dashboard")}
+              onClick={() => {
+                // Redirect to role-specific dashboard
+                if (user?.role) {
+                  router.push(`/dashboard/${user.role.toLowerCase()}`);
+                } else {
+                  // Fallback to generic dashboard if role is not available
+                  router.push("/dashboard");
+                }
+              }}
             >
               <div className="flex items-center gap-2">
                 <span className="text-2xl">🚜</span>
@@ -145,8 +153,17 @@ export function AppSidebar() {
           <SidebarMenu> {/* Wrap in SidebarMenu */}
             <SidebarMenuItem> {/* Replace SidebarNavItem */}
               <SidebarMenuButton // Use SidebarMenuButton
-                onClick={() => router.push("/dashboard")} // Use onClick for navigation
-                isActive={isActive("/dashboard")}
+                onClick={() => {
+                  // Redirect to role-specific dashboard
+                  if (user?.role) {
+                    router.push(`/dashboard/${user.role.toLowerCase()}`);
+                  } else {
+                    // Fallback to generic dashboard if role is not available
+                    router.push("/dashboard");
+                  }
+                }}
+                isActive={isActive("/dashboard") ||
+                  (user?.role && isActive(`/dashboard/${user.role.toLowerCase()}`))}
                 tooltip="Ana Sayfa"
               >
                 <Home className="h-5 w-5" />
@@ -621,7 +638,7 @@ export function AppSidebar() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => router.push("/auth/logout")}
+                      onClick={logout}
                     >
                       <LogOut className="h-4 w-4" />
                       <span className="sr-only">Çıkış Yap</span>
@@ -653,7 +670,7 @@ export function AppSidebar() {
                     <Computer className="h-4 w-4 mr-2" /> Sistem
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => router.push("/auth/logout")}>
+                  <DropdownMenuItem onClick={logout}>
                     <LogOut className="h-4 w-4 mr-2" /> Çıkış Yap
                   </DropdownMenuItem>
                 </DropdownMenuContent>

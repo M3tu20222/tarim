@@ -9,13 +9,15 @@ export async function GET(
 ) {
   try {
     const userId = request.headers.get("x-user-id");
+    // Await params to get the id
+    const { id } = await params;
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const notification = await prisma.notification.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!notification) {
@@ -48,6 +50,8 @@ export async function PATCH(
   try {
     const userId = request.headers.get("x-user-id");
     const data: NotificationUpdateInput = await request.json();
+    // Await params to get the id
+    const { id } = await params;
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -55,7 +59,7 @@ export async function PATCH(
 
     // Önce bildirimi kontrol et
     const existingNotification = await prisma.notification.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!existingNotification) {
@@ -73,7 +77,7 @@ export async function PATCH(
     // Bildirimi güncelle
     // Bildirimi güncelle (okundu olarak işaretle)
     const notification = await prisma.notification.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         isRead: true, // status -> isRead, ve değeri true olarak ayarla
         // readAt alanı modelde yok, kaldırıldı
@@ -98,6 +102,8 @@ export async function DELETE(
   try {
     const userId = request.headers.get("x-user-id");
     const userRole = request.headers.get("x-user-role");
+    // Await params to get the id
+    const { id } = await params;
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -105,7 +111,7 @@ export async function DELETE(
 
     // Önce bildirimi kontrol et
     const existingNotification = await prisma.notification.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!existingNotification) {
@@ -122,7 +128,7 @@ export async function DELETE(
 
     // Bildirimi sil
     await prisma.notification.delete({
-      where: { id: params.id },
+      where: { id },
     });
 
     return NextResponse.json({ success: true });

@@ -585,7 +585,7 @@ export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProp
         toast({
           title: "Başarılı",
           description: `Sulama kaydı başarıyla ${isEditMode ? 'güncellendi' : 'oluşturuldu'}.`,
-          variant: "success"
+          variant: "default"
         });
 
         // Kullanıcıyı sulama listesine yönlendir
@@ -750,7 +750,7 @@ export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProp
   }, [currentValues.fieldIrrigations, currentValues.duration, currentValues.inventoryUsages, fields, inventories]); // involvedOwners bağımlılığı kaldırıldı, çünkü calculatedOwnerDurationsMap zaten bunu içeriyor.
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto cyberpunk-grid">
       {isEditMode && (
         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
           <p className="text-blue-700 flex items-center">
@@ -762,7 +762,7 @@ export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProp
         </div>
       )}
       <form onSubmit={form.handleSubmit(onSubmit)}>
-        <Card>
+        <Card className="card-cyberpunk">
           <CardHeader>
             <CardTitle>{isEditMode ? "Sulama Kaydını Düzenle" : "Sulama Kaydı Oluştur"}</CardTitle>
             <CardDescription>
@@ -795,19 +795,19 @@ export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProp
                 <Label htmlFor="startTime">Başlangıç Saati</Label>
                 <div className="relative">
                   <Clock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input id="startTime" type="time" className="pl-10" {...form.register("startTime")} />
+                  <Input id="startTime" type="time" className="pl-10 neon-border neon-glow" {...form.register("startTime")} />
                 </div>
                 {form.formState.errors.startTime && <p className="text-sm text-red-500">{form.formState.errors.startTime.message}</p>}
               </div>
               <div className="space-y-2 col-span-1">
                 <Label htmlFor="duration">Toplam Sulama Süresi (Dakika)</Label>
-                <Input id="duration" type="number" {...form.register("duration")} />
+                <Input id="duration" type="number" {...form.register("duration")} className="neon-border neon-glow" />
                 {form.formState.errors.duration && <p className="text-sm text-red-500">{form.formState.errors.duration.message}</p>}
               </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="notes">Notlar</Label>
-              <Textarea id="notes" {...form.register("notes")} placeholder="Sulama hakkında notlar..." />
+              <Textarea id="notes" {...form.register("notes")} placeholder="Sulama hakkında notlar..." className="neon-border neon-glow" />
             </div>
 
             <div className="space-y-4">
@@ -821,7 +821,7 @@ export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProp
                     </Tooltip>
                   </TooltipProvider>
                 </div>
-                <Button type="button" variant="outline" size="sm" onClick={handleAddField}><Plus className="h-4 w-4 mr-2" />Tarla Ekle</Button>
+                <Button type="button" variant="outline" size="sm" onClick={handleAddField} className="btn-cyberpunk"><Plus className="h-4 w-4 mr-2" />Tarla Ekle</Button>
               </div>
               {fieldIrrigations.map((field, index) => (
                 <div key={field.id} className="grid grid-cols-12 gap-4 items-end border p-4 rounded-md">
@@ -832,7 +832,7 @@ export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProp
                       defaultValue={form.watch(`fieldIrrigations.${index}.fieldId`)}
                       disabled={loadingFields}
                     >
-                      <SelectTrigger><SelectValue placeholder={loadingFields ? "Tarlalar yükleniyor..." : "Tarla Seçin"} /></SelectTrigger>
+                      <SelectTrigger className="neon-border neon-glow"><SelectValue placeholder={loadingFields ? "Tarlalar yükleniyor..." : "Tarla Seçin"} /></SelectTrigger>
                       <SelectContent>
                         {!loadingFields && fields.length === 0 && <p className="p-4 text-sm text-muted-foreground">Uygun tarla bulunamadı.</p>}
                         {fields.map((f) => (<SelectItem key={f.id} value={f.id}>{f.name} ({f.size} dekar)</SelectItem>))}
@@ -842,7 +842,7 @@ export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProp
                   </div>
                   <div className="col-span-4 space-y-2">
                     <Label htmlFor={`fieldIrrigations.${index}.percentage`}>Sulanan Alan (%)</Label>
-                    <Input id={`fieldIrrigations.${index}.percentage`} type="number" min="1" max="100" {...form.register(`fieldIrrigations.${index}.percentage` as const, { valueAsNumber: true })} />
+                    <Input id={`fieldIrrigations.${index}.percentage`} type="number" min="1" max="100" {...form.register(`fieldIrrigations.${index}.percentage` as const, { valueAsNumber: true })} className="neon-border neon-glow" />
                     {form.formState.errors.fieldIrrigations?.[index]?.percentage && <p className="text-sm text-red-500">{form.formState.errors.fieldIrrigations[index]?.percentage?.message}</p>}
                   </div>
                   <div className="col-span-1">{index > 0 && <Button type="button" variant="ghost" size="icon" onClick={() => removeField(index)} className="text-red-500"><Trash2 className="h-4 w-4" /></Button>}</div>
@@ -854,7 +854,7 @@ export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProp
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-medium">Kullanılan Envanterler</h3>
-                <Button type="button" variant="outline" size="sm" onClick={handleAddUsedInventory} disabled={involvedOwners.length === 0 || loadingInventories}>
+                <Button type="button" variant="outline" size="sm" onClick={handleAddUsedInventory} disabled={involvedOwners.length === 0 || loadingInventories} className="btn-cyberpunk">
                   <Plus className="h-4 w-4 mr-2" />Kullanılan Envanteri Ekle
                 </Button>
               </div>
@@ -884,10 +884,10 @@ export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProp
                         }}
                         defaultValue={form.watch(`inventoryUsages.${index}.ownerId`)}
                         disabled={involvedOwners.length === 0}
-                      >
-                        <SelectTrigger><SelectValue placeholder="Sahip Seçin" /></SelectTrigger>
-                        <SelectContent>
-                          {involvedOwners.map((owner) => (<SelectItem key={owner.id} value={owner.id}>{owner.name}</SelectItem>))}
+                    >
+                      <SelectTrigger className="neon-border neon-glow"><SelectValue placeholder="Sahip Seçin" /></SelectTrigger>
+                      <SelectContent>
+                        {involvedOwners.map((owner) => (<SelectItem key={owner.id} value={owner.id}>{owner.name}</SelectItem>))}
                         </SelectContent>
                       </Select>
                       {form.formState.errors.inventoryUsages?.[index]?.ownerId && <p className="text-sm text-red-500">{form.formState.errors.inventoryUsages[index]?.ownerId?.message}</p>}
@@ -899,7 +899,7 @@ export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProp
                         defaultValue={form.watch(`inventoryUsages.${index}.inventoryId`)}
                         disabled={!currentOwnerId || loadingInventories || availableInventoriesForOwner.length === 0}
                       >
-                        <SelectTrigger><SelectValue placeholder={!currentOwnerId ? "Önce Sahip Seçin" : (loadingInventories ? "Yükleniyor..." : (availableInventoriesForOwner.length === 0 ? "Uygun Envanter Yok" : "Envanter Seçin"))} /></SelectTrigger>
+                        <SelectTrigger className="neon-border neon-glow"><SelectValue placeholder={!currentOwnerId ? "Önce Sahip Seçin" : (loadingInventories ? "Yükleniyor..." : (availableInventoriesForOwner.length === 0 ? "Uygun Envanter Yok" : "Envanter Seçin"))} /></SelectTrigger>
                         <SelectContent>
                           {availableInventoriesForOwner.map((inv) => (
                             <SelectItem key={inv.id} value={inv.id}>
@@ -923,6 +923,7 @@ export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProp
                         type="number" step="0.01" min="0.01"
                         {...form.register(`inventoryUsages.${index}.quantity` as const, { valueAsNumber: true })}
                         disabled={!form.watch(`inventoryUsages.${index}.inventoryId`)}
+                        className="neon-border neon-glow"
                       />
                       {form.formState.errors.inventoryUsages?.[index]?.quantity && <p className="text-sm text-red-500">{form.formState.errors.inventoryUsages[index]?.quantity?.message}</p>}
                     </div>
@@ -999,9 +1000,10 @@ export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProp
             )}
           </CardContent>
           <CardFooter className="flex justify-end gap-4">
-            <Button type="button" variant="outline" onClick={() => router.push("/dashboard/owner/irrigation")} disabled={loadingSubmit}>İptal</Button>
+            <Button type="button" variant="outline" onClick={() => router.push("/dashboard/owner/irrigation")} disabled={loadingSubmit} className="btn-cyberpunk">İptal</Button>
             <Button
               type="submit"
+              className="btn-cyberpunk"
               disabled={loadingSubmit || loadingFields || loadingInventories || !form.formState.isValid}
             >
               {loadingSubmit
