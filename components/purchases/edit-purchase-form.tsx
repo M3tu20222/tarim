@@ -97,6 +97,8 @@ const formSchema = z.object({
 
 // Removed misplaced GET and PUT functions
 
+import { RelatedRecordsPanel } from "@/components/purchases/related-records-panel";
+
 export function EditPurchaseForm({ purchase }: { purchase: any }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -305,7 +307,10 @@ export function EditPurchaseForm({ purchase }: { purchase: any }) {
   }
 
   return (
-    <Form {...form}>
+    <>
+      <RelatedRecordsPanel purchaseId={purchase.id} />
+      <Form {...form}>
+
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <FormField
@@ -807,5 +812,6 @@ export function EditPurchaseForm({ purchase }: { purchase: any }) {
         </div>
       </form>
     </Form>
+    </>
   );
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { notificationService } from "@/lib/notification-service";
+import { NotificationService } from "@/lib/notification-service";
 
 // Webhook doğrulama için sır
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
@@ -57,11 +57,10 @@ async function handlePaymentDue(payload: any) {
     throw new Error("Geçersiz ödeme bildirimi yükü");
   }
 
-  await notificationService.sendPaymentDueNotification(
+  await NotificationService.sendPaymentReminderNotification(
     ownerId,
-    paymentType,
     amount,
-    new Date(dueDate),
+    dueDate,
     paymentId
   );
 }
@@ -74,11 +73,10 @@ async function handleIrrigationScheduled(payload: any) {
   }
 
   // Sahibine bildirim gönder
-  await notificationService.sendIrrigationScheduledNotification(
+  await NotificationService.sendIrrigationScheduledNotification(
     ownerId,
     fieldName,
     new Date(startDate),
-    new Date(endDate),
     irrigationId
   );
 
@@ -89,11 +87,10 @@ async function handleIrrigationScheduled(payload: any) {
   });
 
   for (const worker of fieldWorkers) {
-    await notificationService.sendIrrigationScheduledNotification(
+    await NotificationService.sendIrrigationScheduledNotification(
       worker.userId,
       fieldName,
       new Date(startDate),
-      new Date(endDate),
       irrigationId
     );
   }
@@ -113,11 +110,10 @@ async function handleInventoryLow(payload: any) {
     throw new Error("Geçersiz envanter bildirimi yükü");
   }
 
-  await notificationService.sendInventoryLowNotification(
+  await NotificationService.sendInventoryLowNotification(
     ownerId,
     itemName,
     currentQuantity,
-    minimumQuantity,
     inventoryId
   );
 }
@@ -129,11 +125,11 @@ async function handleEquipmentMaintenance(payload: any) {
     throw new Error("Geçersiz ekipman bakım bildirimi yükü");
   }
 
-  await notificationService.sendEquipmentMaintenanceNotification(
+  await NotificationService.sendSystemAlertNotification(
     ownerId,
-    equipmentName,
-    new Date(maintenanceDate),
-    equipmentId
+    `Ekipman Bakım Uyarısı: ${equipmentName}, Tarih: ${maintenanceDate}`,
+    equipmentId,
+    "EQUIPMENT"
   );
 }
 
@@ -144,10 +140,13 @@ async function handleTaskAssigned(payload: any) {
     throw new Error("Geçersiz görev bildirimi yükü");
   }
 
-  await notificationService.sendTaskAssignedNotification(
-    userId,
-    taskName,
-    taskId,
-    dueDate ? new Date(dueDate) : undefined
-  );
+  if (dueDate) {
+    await NotificationService.sendTaskAssignedNotification(
+      userId,
+      taskName,
+      new Date(dueDate),
+      taskId
+    );
+  }
+  // dueDate yoksa bildirim gönderilmez
 }

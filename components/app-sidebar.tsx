@@ -21,6 +21,7 @@ import {
   Moon,
   Computer,
   LogOut,
+  Wrench,
 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { cn } from "@/lib/utils";
@@ -89,7 +90,7 @@ export function AppSidebar() {
     }));
   };
 
-  const isActive = (path: string) => {
+  const isActive = (path: string): boolean => {
     return pathname === path;
   };
 
@@ -162,8 +163,8 @@ export function AppSidebar() {
                     router.push("/dashboard");
                   }
                 }}
-                isActive={isActive("/dashboard") ||
-                  (user?.role && isActive(`/dashboard/${user.role.toLowerCase()}`))}
+                isActive={Boolean(isActive("/dashboard") ||
+                  (user?.role && isActive(`/dashboard/${user.role.toLowerCase()}`)))}
                 tooltip="Ana Sayfa"
               >
                 <Home className="h-5 w-5" />
@@ -186,156 +187,160 @@ export function AppSidebar() {
             </SidebarMenuItem>
           </SidebarMenu> {/* Close SidebarMenu */}
 
-          {/* Envanter Grubu */}
-          <SidebarMenu> {/* Wrap in SidebarMenu */}
-            {open && (
-              <div className="text-xs font-semibold text-muted-foreground mb-2 px-3">
-                ENVANTER
-              </div>
-            )}
-
-            <SidebarMenuItem> {/* Replace SidebarNavItem */}
-              <SidebarMenuButton
-                onClick={() => toggleSubmenu(MENU_GROUPS.INVENTORY)}
-                isActive={isActiveGroup(["/dashboard/owner/inventory"])}
-                data-state={expanded[MENU_GROUPS.INVENTORY] ? "open" : "closed"} // Add data-state for styling
-                tooltip="Envanter"
-              >
-                <Package className="h-5 w-5" />
-                <span>Envanter</span>
-                <SidebarMenuAction // Add dropdown arrow
-                  asChild
-                  className="ml-auto"
-                  data-state={expanded[MENU_GROUPS.INVENTORY] ? "open" : "closed"}
-                >
-                  <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/menu-button:rotate-90" />
-                </SidebarMenuAction>
-              </SidebarMenuButton>
-              {expanded[MENU_GROUPS.INVENTORY] && (
-                <SidebarMenuSub> {/* Use SidebarMenuSub for nested items */}
-                  <SidebarMenuSubItem> {/* Use SidebarMenuSubItem */}
-                    <SidebarMenuSubButton // Use SidebarMenuSubButton
-                      onClick={() => router.push("/dashboard/owner/inventory")}
-                      isActive={isActive("/dashboard/owner/inventory")}
-                    >
-                      Envanter Listesi
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton
-                      onClick={() => router.push("/dashboard/owner/inventory/reports")}
-                      isActive={isActive("/dashboard/owner/inventory/reports")}
-                    >
-                      Raporlar
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton
-                      onClick={() => router.push("/dashboard/owner/inventory/new")}
-                      isActive={isActive("/dashboard/owner/inventory/new")}
-                    >
-                      Yeni Ekle
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                </SidebarMenuSub>
+          {/* Envanter Grubu - Worker için gösterme */}
+          {user?.role && user.role.toLowerCase() !== "worker" && (
+            <SidebarMenu> {/* Wrap in SidebarMenu */}
+              {open && (
+                <div className="text-xs font-semibold text-muted-foreground mb-2 px-3">
+                  ENVANTER
+                </div>
               )}
-            </SidebarMenuItem>
 
-            <SidebarMenuItem> {/* Replace SidebarNavItem */}
-              <SidebarMenuButton
-                onClick={() => toggleSubmenu("purchases")}
-                isActive={isActiveGroup(["/dashboard/owner/purchases"])}
-                data-state={expanded["purchases"] ? "open" : "closed"} // Add data-state
-                tooltip="Satın Alma"
-              >
-                <ShoppingCart className="h-5 w-5" />
-                <span>Satın Alma</span>
-                <SidebarMenuAction // Add dropdown arrow
-                  asChild
-                  className="ml-auto"
-                  data-state={expanded["purchases"] ? "open" : "closed"}
+              <SidebarMenuItem> {/* Replace SidebarNavItem */}
+                <SidebarMenuButton
+                  onClick={() => toggleSubmenu(MENU_GROUPS.INVENTORY)}
+                  isActive={isActiveGroup(["/dashboard/owner/inventory"])}
+                  data-state={expanded[MENU_GROUPS.INVENTORY] ? "open" : "closed"} // Add data-state for styling
+                  tooltip="Envanter"
                 >
-                  <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/menu-button:rotate-90" />
-                </SidebarMenuAction>
-              </SidebarMenuButton>
-              {expanded["purchases"] && (
-                <SidebarMenuSub> {/* Use SidebarMenuSub */}
-                  <SidebarMenuSubItem> {/* Use SidebarMenuSubItem */}
-                    <SidebarMenuSubButton // Use SidebarMenuSubButton
-                      onClick={() => router.push("/dashboard/owner/purchases")}
-                      isActive={isActive("/dashboard/owner/purchases")}
-                    >
-                      Satın Almalar
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton
-                      onClick={() => router.push("/dashboard/owner/purchases/new")}
-                      isActive={isActive("/dashboard/owner/purchases/new")}
-                    >
-                      Yeni Satın Alma
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                </SidebarMenuSub>
-              )}
-            </SidebarMenuItem>
-          </SidebarMenu> {/* Close SidebarMenu */}
+                  <Package className="h-5 w-5" />
+                  <span>Envanter</span>
+                  <SidebarMenuAction // Add dropdown arrow
+                    asChild
+                    className="ml-auto"
+                    data-state={expanded[MENU_GROUPS.INVENTORY] ? "open" : "closed"}
+                  >
+                    <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/menu-button:rotate-90" />
+                  </SidebarMenuAction>
+                </SidebarMenuButton>
+                {expanded[MENU_GROUPS.INVENTORY] && (
+                  <SidebarMenuSub> {/* Use SidebarMenuSub for nested items */}
+                    <SidebarMenuSubItem> {/* Use SidebarMenuSubItem */}
+                      <SidebarMenuSubButton // Use SidebarMenuSubButton
+                        onClick={() => router.push("/dashboard/owner/inventory")}
+                        isActive={isActive("/dashboard/owner/inventory")}
+                      >
+                        Envanter Listesi
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        onClick={() => router.push("/dashboard/owner/inventory/reports")}
+                        isActive={isActive("/dashboard/owner/inventory/reports")}
+                      >
+                        Raporlar
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        onClick={() => router.push("/dashboard/owner/inventory/new")}
+                        isActive={isActive("/dashboard/owner/inventory/new")}
+                      >
+                        Yeni Ekle
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  </SidebarMenuSub>
+                )}
+              </SidebarMenuItem>
 
-          {/* Finansal Grup */}
-          <SidebarMenu> {/* Wrap in SidebarMenu */}
-            {open && (
-              <div className="text-xs font-semibold text-muted-foreground mb-2 px-3">
-                FİNANSAL
-              </div>
-            )}
-
-            <SidebarMenuItem> {/* Replace SidebarNavItem */}
-              <SidebarMenuButton
-                onClick={() => toggleSubmenu(MENU_GROUPS.FINANCIAL)}
-                isActive={isActiveGroup(["/dashboard/owner/debts"])}
-                data-state={expanded[MENU_GROUPS.FINANCIAL] ? "open" : "closed"} // Add data-state
-                tooltip="Borçlar"
-              >
-                <DollarSign className="h-5 w-5" />
-                <span>Borçlar</span>
-                <SidebarMenuAction // Add dropdown arrow
-                  asChild
-                  className="ml-auto"
-                  data-state={expanded[MENU_GROUPS.FINANCIAL] ? "open" : "closed"}
+              <SidebarMenuItem> {/* Replace SidebarNavItem */}
+                <SidebarMenuButton
+                  onClick={() => toggleSubmenu("purchases")}
+                  isActive={isActiveGroup(["/dashboard/owner/purchases"])}
+                  data-state={expanded["purchases"] ? "open" : "closed"} // Add data-state
+                  tooltip="Satın Alma"
                 >
-                  <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/menu-button:rotate-90" />
-                </SidebarMenuAction>
-              </SidebarMenuButton>
-              {expanded[MENU_GROUPS.FINANCIAL] && (
-                <SidebarMenuSub> {/* Use SidebarMenuSub */}
-                  <SidebarMenuSubItem> {/* Use SidebarMenuSubItem */}
-                    <SidebarMenuSubButton // Use SidebarMenuSubButton
-                      onClick={() => router.push("/dashboard/owner/debts")}
-                      isActive={isActive("/dashboard/owner/debts")}
-                    >
-                      Borç Listesi
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton
-                      onClick={() => router.push("/dashboard/owner/debts/new")}
-                      isActive={isActive("/dashboard/owner/debts/new")}
-                    >
-                      Yeni Borç
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton
-                      onClick={() => router.push("/dashboard/owner/debts/reminders")}
-                      isActive={isActive("/dashboard/owner/debts/reminders")}
-                    >
-                      Hatırlatmalar
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                </SidebarMenuSub>
+                  <ShoppingCart className="h-5 w-5" />
+                  <span>Satın Alma</span>
+                  <SidebarMenuAction // Add dropdown arrow
+                    asChild
+                    className="ml-auto"
+                    data-state={expanded["purchases"] ? "open" : "closed"}
+                  >
+                    <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/menu-button:rotate-90" />
+                  </SidebarMenuAction>
+                </SidebarMenuButton>
+                {expanded["purchases"] && (
+                  <SidebarMenuSub> {/* Use SidebarMenuSub */}
+                    <SidebarMenuSubItem> {/* Use SidebarMenuSubItem */}
+                      <SidebarMenuSubButton // Use SidebarMenuSubButton
+                        onClick={() => router.push("/dashboard/owner/purchases")}
+                        isActive={isActive("/dashboard/owner/purchases")}
+                      >
+                        Satın Almalar
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        onClick={() => router.push("/dashboard/owner/purchases/new")}
+                        isActive={isActive("/dashboard/owner/purchases/new")}
+                      >
+                        Yeni Satın Alma
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  </SidebarMenuSub>
+                )}
+              </SidebarMenuItem>
+            </SidebarMenu>
+          )} {/* Close SidebarMenu */}
+
+          {/* Finansal Grup - Worker için gösterme */}
+          {user?.role && user.role.toLowerCase() !== "worker" && (
+            <SidebarMenu> {/* Wrap in SidebarMenu */}
+              {open && (
+                <div className="text-xs font-semibold text-muted-foreground mb-2 px-3">
+                  FİNANSAL
+                </div>
               )}
-            </SidebarMenuItem>
-          </SidebarMenu> {/* Close SidebarMenu */}
+
+              <SidebarMenuItem> {/* Replace SidebarNavItem */}
+                <SidebarMenuButton
+                  onClick={() => toggleSubmenu(MENU_GROUPS.FINANCIAL)}
+                  isActive={isActiveGroup(["/dashboard/owner/debts"])}
+                  data-state={expanded[MENU_GROUPS.FINANCIAL] ? "open" : "closed"} // Add data-state
+                  tooltip="Borçlar"
+                >
+                  <DollarSign className="h-5 w-5" />
+                  <span>Borçlar</span>
+                  <SidebarMenuAction // Add dropdown arrow
+                    asChild
+                    className="ml-auto"
+                    data-state={expanded[MENU_GROUPS.FINANCIAL] ? "open" : "closed"}
+                  >
+                    <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/menu-button:rotate-90" />
+                  </SidebarMenuAction>
+                </SidebarMenuButton>
+                {expanded[MENU_GROUPS.FINANCIAL] && (
+                  <SidebarMenuSub> {/* Use SidebarMenuSub */}
+                    <SidebarMenuSubItem> {/* Use SidebarMenuSubItem */}
+                      <SidebarMenuSubButton // Use SidebarMenuSubButton
+                        onClick={() => router.push("/dashboard/owner/debts")}
+                        isActive={isActive("/dashboard/owner/debts")}
+                      >
+                        Borç Listesi
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        onClick={() => router.push("/dashboard/owner/debts/new")}
+                        isActive={isActive("/dashboard/owner/debts/new")}
+                      >
+                        Yeni Borç
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        onClick={() => router.push("/dashboard/owner/debts/reminders")}
+                        isActive={isActive("/dashboard/owner/debts/reminders")}
+                      >
+                        Hatırlatmalar
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  </SidebarMenuSub>
+                )}
+              </SidebarMenuItem>
+            </SidebarMenu>
+          )} {/* Close SidebarMenu */}
 
           {/* Çiftlik Grubu */}
           <SidebarMenu> {/* Wrap in SidebarMenu */}
@@ -345,45 +350,53 @@ export function AppSidebar() {
               </div>
             )}
 
-            <SidebarMenuItem> {/* Replace SidebarNavItem */}
-              <SidebarMenuButton
-                onClick={() => toggleSubmenu(MENU_GROUPS.FARM)}
-                isActive={isActiveGroup(["/dashboard/owner/fields"])}
-                data-state={expanded[MENU_GROUPS.FARM] ? "open" : "closed"}
-                tooltip="Tarlalar"
-              >
-                <Landmark className="h-5 w-5" />
-                <span>Tarlalar</span>
-                <SidebarMenuAction asChild className="ml-auto" data-state={expanded[MENU_GROUPS.FARM] ? "open" : "closed"}>
-                  <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/menu-button:rotate-90" />
-                </SidebarMenuAction>
-              </SidebarMenuButton>
-              {expanded[MENU_GROUPS.FARM] && (
-                <SidebarMenuSub>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton
-                      onClick={() => router.push("/dashboard/owner/fields")}
-                      isActive={isActive("/dashboard/owner/fields")}
-                    >
-                      Tarla Listesi
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton
-                      onClick={() => router.push("/dashboard/owner/fields/new")}
-                      isActive={isActive("/dashboard/owner/fields/new")}
-                    >
-                      Yeni Tarla
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                </SidebarMenuSub>
-              )}
-            </SidebarMenuItem>
+            {/* Tarlalar - Worker için gösterme */}
+            {user?.role && user.role.toLowerCase() !== "worker" && (
+              <SidebarMenuItem> {/* Replace SidebarNavItem */}
+                <SidebarMenuButton
+                  onClick={() => toggleSubmenu(MENU_GROUPS.FARM)}
+                  isActive={isActiveGroup(["/dashboard/owner/fields"])}
+                  data-state={expanded[MENU_GROUPS.FARM] ? "open" : "closed"}
+                  tooltip="Tarlalar"
+                >
+                  <Landmark className="h-5 w-5" />
+                  <span>Tarlalar</span>
+                  <SidebarMenuAction asChild className="ml-auto" data-state={expanded[MENU_GROUPS.FARM] ? "open" : "closed"}>
+                    <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/menu-button:rotate-90" />
+                  </SidebarMenuAction>
+                </SidebarMenuButton>
+                {expanded[MENU_GROUPS.FARM] && (
+                  <SidebarMenuSub>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        onClick={() => router.push("/dashboard/owner/fields")}
+                        isActive={isActive("/dashboard/owner/fields")}
+                      >
+                        Tarla Listesi
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        onClick={() => router.push("/dashboard/owner/fields/new")}
+                        isActive={isActive("/dashboard/owner/fields/new")}
+                      >
+                        Yeni Tarla
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  </SidebarMenuSub>
+                )}
+              </SidebarMenuItem>
+            )}
 
+            {/* Sulama - Tüm roller görebilir */}
             <SidebarMenuItem> {/* Replace SidebarNavItem */}
               <SidebarMenuButton
                 onClick={() => toggleSubmenu("irrigation")}
-                isActive={isActiveGroup(["/dashboard/owner/wells", "/dashboard/owner/irrigation"])}
+                isActive={isActiveGroup([
+                  "/dashboard/owner/wells",
+                  "/dashboard/owner/irrigation",
+                  "/dashboard/worker/irrigation"
+                ])}
                 data-state={expanded["irrigation"] ? "open" : "closed"}
                 tooltip="Sulama"
               >
@@ -395,48 +408,66 @@ export function AppSidebar() {
               </SidebarMenuButton>
               {expanded["irrigation"] && (
                 <SidebarMenuSub>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton
-                      onClick={() => router.push("/dashboard/owner/wells")}
-                      isActive={isActive("/dashboard/owner/wells")}
-                    >
-                      Kuyular
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton
-                      onClick={() => router.push("/dashboard/owner/irrigation")}
-                      isActive={isActive("/dashboard/owner/irrigation")}
-                    >
-                      Sulama Planları
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton
-                      onClick={() => router.push("/dashboard/owner/irrigation/new")}
-                      isActive={isActive("/dashboard/owner/irrigation/new")}
-                    >
-                      Yeni Sulama Planı
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  {user?.role === "WORKER" && (
-                    <SidebarMenuSubItem>
-                      <SidebarMenuSubButton
-                        onClick={() => router.push("/dashboard/worker/irrigation/new")}
-                        isActive={isActive("/dashboard/worker/irrigation/new")}
-                      >
-                        Yeni Sulama Kaydı (İşçi)
-                      </SidebarMenuSubButton>
-                    </SidebarMenuSubItem>
+                  {user?.role && user.role.toLowerCase() !== "worker" && (
+                    <>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton
+                          onClick={() => router.push("/dashboard/owner/wells")}
+                          isActive={isActive("/dashboard/owner/wells")}
+                        >
+                          Kuyular
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton
+                          onClick={() => router.push("/dashboard/owner/irrigation")}
+                          isActive={isActive("/dashboard/owner/irrigation")}
+                        >
+                          Sulama Planları
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton
+                          onClick={() => router.push("/dashboard/owner/irrigation/new")}
+                          isActive={isActive("/dashboard/owner/irrigation/new")}
+                        >
+                          Yeni Sulama Planı
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    </>
+                  )}
+                  {user?.role && user.role.toLowerCase() === "worker" && (
+                    <>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton
+                          onClick={() => router.push("/dashboard/worker/irrigation")}
+                          isActive={isActive("/dashboard/worker/irrigation")}
+                        >
+                          Sulama Görevlerim
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton
+                          onClick={() => router.push("/dashboard/worker/irrigation/new")}
+                          isActive={isActive("/dashboard/worker/irrigation/new")}
+                        >
+                          Yeni Sulama Kaydı
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    </>
                   )}
                 </SidebarMenuSub>
               )}
             </SidebarMenuItem>
 
+            {/* Süreçler - Tüm roller görebilir */}
             <SidebarMenuItem> {/* Replace SidebarNavItem */}
               <SidebarMenuButton
                 onClick={() => toggleSubmenu("processes")}
-                isActive={isActiveGroup(["/dashboard/owner/processes"])}
+                isActive={isActiveGroup([
+                  "/dashboard/owner/processes",
+                  "/dashboard/worker/processes"
+                ])}
                 data-state={expanded["processes"] ? "open" : "closed"}
                 tooltip="Süreçler"
               >
@@ -448,22 +479,46 @@ export function AppSidebar() {
               </SidebarMenuButton>
               {expanded["processes"] && (
                 <SidebarMenuSub>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton
-                      onClick={() => router.push("/dashboard/owner/processes")}
-                      isActive={isActive("/dashboard/owner/processes")}
-                    >
-                      Süreç Listesi
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton
-                      onClick={() => router.push("/dashboard/owner/processes/new")}
-                      isActive={isActive("/dashboard/owner/processes/new")}
-                    >
-                      Yeni Süreç
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
+                  {user?.role && user.role.toLowerCase() !== "worker" && (
+                    <>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton
+                          onClick={() => router.push("/dashboard/owner/processes")}
+                          isActive={isActive("/dashboard/owner/processes")}
+                        >
+                          Süreç Listesi
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton
+                          onClick={() => router.push("/dashboard/owner/processes/new")}
+                          isActive={isActive("/dashboard/owner/processes/new")}
+                        >
+                          Yeni Süreç
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    </>
+                  )}
+                  {user?.role && user.role.toLowerCase() === "worker" && (
+                    <>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton
+                          onClick={() => router.push("/dashboard/worker/processes")}
+                          isActive={isActive("/dashboard/worker/processes")}
+                        >
+                          Görevlerim
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton
+                          onClick={() => router.push("/dashboard/worker/processes/completed")}
+                          isActive={isActive("/dashboard/worker/processes/completed")}
+                        >
+                          Tamamlanan Görevler
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    </>
+                  )}
                 </SidebarMenuSub>
               )}
             </SidebarMenuItem>
@@ -502,51 +557,91 @@ export function AppSidebar() {
                 </SidebarMenuSub>
               )}
             </SidebarMenuItem>
-          </SidebarMenu> {/* Close SidebarMenu */}
 
-          {/* Raporlar Grubu */}
-          <SidebarMenu> {/* Wrap in SidebarMenu */}
-            {open && (
-              <div className="text-xs font-semibold text-muted-foreground mb-2 px-3">
-                RAPORLAR
-              </div>
+            {/* Ekipman menüsü - Sadece admin ve owner için göster */}
+            {user?.role && (user.role.toLowerCase() === "admin" || user.role.toLowerCase() === "owner") && (
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => toggleSubmenu("equipment")}
+                  isActive={isActiveGroup(["/dashboard/owner/equipment", "/dashboard/admin/equipment"])}
+                  data-state={expanded["equipment"] ? "open" : "closed"}
+                  tooltip="Ekipman"
+                >
+                  <Wrench className="h-5 w-5" />
+                  <span>Ekipman</span>
+                  <SidebarMenuAction asChild className="ml-auto" data-state={expanded["equipment"] ? "open" : "closed"}>
+                    <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/menu-button:rotate-90" />
+                  </SidebarMenuAction>
+                </SidebarMenuButton>
+                {expanded["equipment"] && (
+                  <SidebarMenuSub>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        onClick={() => router.push(`/dashboard/${user.role.toLowerCase()}/equipment`)}
+                        isActive={isActive(`/dashboard/${user.role.toLowerCase()}/equipment`)}
+                      >
+                        Ekipman Listesi
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        onClick={() => router.push(`/dashboard/${user.role.toLowerCase()}/equipment/new`)}
+                        isActive={isActive(`/dashboard/${user.role.toLowerCase()}/equipment/new`)}
+                      >
+                        Yeni Ekipman
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  </SidebarMenuSub>
+                )}
+              </SidebarMenuItem>
             )}
-
-            <SidebarMenuItem> {/* Replace SidebarNavItem */}
-              <SidebarMenuButton
-                onClick={() => toggleSubmenu(MENU_GROUPS.REPORTS)}
-                isActive={isActiveGroup(["/dashboard/owner/reports"])}
-                data-state={expanded[MENU_GROUPS.REPORTS] ? "open" : "closed"}
-                tooltip="Raporlar"
-              >
-                <BarChart3 className="h-5 w-5" />
-                <span>Raporlar</span>
-                <SidebarMenuAction asChild className="ml-auto" data-state={expanded[MENU_GROUPS.REPORTS] ? "open" : "closed"}>
-                  <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/menu-button:rotate-90" />
-                </SidebarMenuAction>
-              </SidebarMenuButton>
-              {expanded[MENU_GROUPS.REPORTS] && (
-                <SidebarMenuSub>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton
-                      onClick={() => router.push("/dashboard/owner/reports/financial")}
-                      isActive={isActive("/dashboard/owner/reports/financial")}
-                    >
-                      Finansal Raporlar
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton
-                      onClick={() => router.push("/dashboard/owner/reports/activity")}
-                      isActive={isActive("/dashboard/owner/reports/activity")}
-                    >
-                      Aktivite Raporları
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                </SidebarMenuSub>
-              )}
-            </SidebarMenuItem>
           </SidebarMenu> {/* Close SidebarMenu */}
+
+          {/* Raporlar Grubu - Worker için gösterme */}
+          {user?.role && user.role.toLowerCase() !== "worker" && (
+            <SidebarMenu> {/* Wrap in SidebarMenu */}
+              {open && (
+                <div className="text-xs font-semibold text-muted-foreground mb-2 px-3">
+                  RAPORLAR
+                </div>
+              )}
+
+              <SidebarMenuItem> {/* Replace SidebarNavItem */}
+                <SidebarMenuButton
+                  onClick={() => toggleSubmenu(MENU_GROUPS.REPORTS)}
+                  isActive={isActiveGroup(["/dashboard/owner/reports"])}
+                  data-state={expanded[MENU_GROUPS.REPORTS] ? "open" : "closed"}
+                  tooltip="Raporlar"
+                >
+                  <BarChart3 className="h-5 w-5" />
+                  <span>Raporlar</span>
+                  <SidebarMenuAction asChild className="ml-auto" data-state={expanded[MENU_GROUPS.REPORTS] ? "open" : "closed"}>
+                    <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/menu-button:rotate-90" />
+                  </SidebarMenuAction>
+                </SidebarMenuButton>
+                {expanded[MENU_GROUPS.REPORTS] && (
+                  <SidebarMenuSub>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        onClick={() => router.push("/dashboard/owner/reports/financial")}
+                        isActive={isActive("/dashboard/owner/reports/financial")}
+                      >
+                        Finansal Raporlar
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        onClick={() => router.push("/dashboard/owner/reports/activity")}
+                        isActive={isActive("/dashboard/owner/reports/activity")}
+                      >
+                        Aktivite Raporları
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  </SidebarMenuSub>
+                )}
+              </SidebarMenuItem>
+            </SidebarMenu>
+          )} {/* Close SidebarMenu */}
 
           {/* Yönetim Grubu */}
           <SidebarMenu> {/* Wrap in SidebarMenu */}
@@ -556,33 +651,37 @@ export function AppSidebar() {
               </div>
             )}
 
-            <SidebarMenuItem> {/* Replace SidebarNavItem */}
-              <SidebarMenuButton
-                onClick={() => toggleSubmenu(MENU_GROUPS.ADMIN)}
-                isActive={isActiveGroup(["/dashboard/admin/users"])}
-                data-state={expanded[MENU_GROUPS.ADMIN] ? "open" : "closed"}
-                tooltip="Kullanıcılar"
-              >
-                <Users className="h-5 w-5" />
-                <span>Kullanıcılar</span>
-                <SidebarMenuAction asChild className="ml-auto" data-state={expanded[MENU_GROUPS.ADMIN] ? "open" : "closed"}>
-                  <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/menu-button:rotate-90" />
-                </SidebarMenuAction>
-              </SidebarMenuButton>
-              {expanded[MENU_GROUPS.ADMIN] && (
-                <SidebarMenuSub>
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton
-                      onClick={() => router.push("/dashboard/admin/users")}
-                      isActive={isActive("/dashboard/admin/users")}
-                    >
-                      Kullanıcı Yönetimi
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                </SidebarMenuSub>
-              )}
-            </SidebarMenuItem>
+            {/* Kullanıcılar - Sadece admin görebilir */}
+            {user?.role && user.role.toLowerCase() === "admin" && (
+              <SidebarMenuItem> {/* Replace SidebarNavItem */}
+                <SidebarMenuButton
+                  onClick={() => toggleSubmenu(MENU_GROUPS.ADMIN)}
+                  isActive={isActiveGroup(["/dashboard/admin/users"])}
+                  data-state={expanded[MENU_GROUPS.ADMIN] ? "open" : "closed"}
+                  tooltip="Kullanıcılar"
+                >
+                  <Users className="h-5 w-5" />
+                  <span>Kullanıcılar</span>
+                  <SidebarMenuAction asChild className="ml-auto" data-state={expanded[MENU_GROUPS.ADMIN] ? "open" : "closed"}>
+                    <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/menu-button:rotate-90" />
+                  </SidebarMenuAction>
+                </SidebarMenuButton>
+                {expanded[MENU_GROUPS.ADMIN] && (
+                  <SidebarMenuSub>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        onClick={() => router.push("/dashboard/admin/users")}
+                        isActive={isActive("/dashboard/admin/users")}
+                      >
+                        Kullanıcı Yönetimi
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  </SidebarMenuSub>
+                )}
+              </SidebarMenuItem>
+            )}
 
+            {/* Ayarlar - Tüm roller görebilir */}
             <SidebarMenuItem> {/* Replace SidebarNavItem */}
               <SidebarMenuButton
                 onClick={() => router.push("/dashboard/settings")}
