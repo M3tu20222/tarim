@@ -194,15 +194,7 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      for (const fieldUsage of fieldIrrigations) {
-        await tx.irrigationFieldUsage.create({
-          data: {
-            irrigationLogId: irrigationLog.id,
-            fieldId: fieldUsage.fieldId,
-            percentage: fieldUsage.percentage,
-          },
-        });
-      }
+      // Field usages are now created in the field names collection part below
 
       for (const ownerSummary of ownerDurations) {
         await tx.irrigationOwnerSummary.create({
@@ -297,17 +289,75 @@ export async function POST(request: NextRequest) {
       const createdByUser = await tx.user.findUnique({ where: { id: session.id } });
       const well = irrigationLog.wellId ? await tx.well.findUnique({ where: { id: irrigationLog.wellId } }) : null;
 
+      // Tarla isimlerini topla
+      const ownerFieldNames: Record<string, string[]> = {};
+
+      // Önce tüm tarla kullanımlarını oluştur ve kaydet
+      const fieldUsageRecords = await Promise.all(fieldIrrigations.map(async (fieldUsage) => {
+        const usage = await tx.irrigationFieldUsage.create({
+          data: {
+            irrigationLogId: irrigationLog.id,
+            fieldId: fieldUsage.fieldId,
+            percentage: fieldUsage.percentage,
+          },
+          include: {
+            field: {
+              select: {
+                id: true,
+                name: true,
+                owners: {
+                  select: {
+                    userId: true
+                  }
+                }
+              }
+            }
+          }
+        });
+        return usage;
+      }));
+
+      // Şimdi tarla kullanımlarından tarla isimlerini topla
+      for (const usage of fieldUsageRecords) {
+        if (usage.field && usage.field.owners) {
+          for (const owner of usage.field.owners) {
+            if (!ownerFieldNames[owner.userId]) {
+              ownerFieldNames[owner.userId] = [];
+            }
+            if (!ownerFieldNames[owner.userId].includes(usage.field.name)) {
+              ownerFieldNames[owner.userId].push(usage.field.name);
+            }
+          }
+        }
+      }
+
       const uniqueOwnerIds = [...new Set(ownerDurations.map((os: any) => os.userId))];
       for (const ownerId of uniqueOwnerIds) {
         if (ownerId !== session.id) {
+          // Tarla isimlerini al veya varsayılan mesaj kullan
+          const fieldNames = ownerFieldNames[ownerId] || [];
+          const fieldNamesText = fieldNames.length > 0
+            ? fieldNames.map(name => `<span class="neon-text-green">${name}</span>`).join(', ')
+            : "tarlanız/tarlalarınız";
+
+          // Get the field IDs for this owner
+          const ownerFieldIds = fieldUsageRecords
+            .filter(usage => usage.field?.owners?.some(owner => owner.userId === ownerId))
+            .map(usage => usage.field?.id)
+            .filter(Boolean);
+
+          // Use the first field ID for the notification (if available)
+          const primaryFieldId = ownerFieldIds.length > 0 ? ownerFieldIds[0] : null;
+
           await tx.notification.create({
             data: {
               title: "Tarlanızda Sulama Yapıldı",
-              message: `${well?.name || (wellId ? `Kuyu (ID: ${wellId})` : 'Bilinmeyen Kuyu')}'dan tarlanız/tarlalarınız için ${irrigationLog.duration} dakika sulama yapıldı.`,
+              message: `${well?.name || (wellId ? `Kuyu (ID: ${wellId})` : 'Bilinmeyen Kuyu')}'dan ${fieldNamesText} için ${irrigationLog.duration} dakika sulama yapıldı.`,
               type: "IRRIGATION_COMPLETED",
               receiverId: ownerId as string, // Type assertion eklendi
               senderId: session.id as string, // Type assertion eklendi
               irrigationId: irrigationLog.id,
+              fieldId: primaryFieldId, // Add the field ID to the notification
               link: `/dashboard/owner/irrigation/${irrigationLog.id}`, // Veya ilgili tarla/kuyu linki
               priority: "NORMAL",
             },
@@ -317,16 +367,32 @@ export async function POST(request: NextRequest) {
 
       // 2. Yöneticilere (ADMIN) Bildirim
       const admins = await tx.user.findMany({ where: { role: "ADMIN" } });
+
+      // Tüm tarla isimlerini topla
+      const allFieldNames = fieldUsageRecords
+        .map(usage => usage.field?.name)
+        .filter(Boolean) as string[];
+
+      // Tarla isimlerini neon yeşil yap
+      const allFieldNamesText = allFieldNames.length > 0
+        ? allFieldNames.map(name => `<span class="neon-text-green">${name}</span>`).join(', ')
+        : "bilinmeyen tarlalar";
+
       for (const admin of admins) {
         if (admin.id !== session.id) { // Kaydı oluşturan admin ise tekrar bildirim gitmesin
+          // Use the first field ID for the admin notification (if available)
+          const primaryFieldId = fieldUsageRecords.length > 0 && fieldUsageRecords[0].field ?
+            fieldUsageRecords[0].field.id : null;
+
           await tx.notification.create({
             data: {
               title: "Yeni Sulama Kaydı Oluşturuldu",
-              message: `${well?.name || 'Bilinmeyen Kuyu'}'dan ${irrigationLog.duration} dakika süren yeni bir sulama kaydı (${createdByUser?.name || 'bir kullanıcı'} tarafından) oluşturuldu.`,
+              message: `${well?.name || 'Bilinmeyen Kuyu'}'dan ${allFieldNamesText} için ${irrigationLog.duration} dakika süren yeni bir sulama kaydı (${createdByUser?.name || 'bir kullanıcı'} tarafından) oluşturuldu.`,
               type: "IRRIGATION_COMPLETED",
               receiverId: admin.id as string, // Type assertion eklendi
               senderId: session.id as string, // Type assertion eklendi
               irrigationId: irrigationLog.id,
+              fieldId: primaryFieldId, // Add the field ID to the notification
               link: `/dashboard/admin/irrigation/${irrigationLog.id}`, // Admin için farklı bir link olabilir
               priority: "NORMAL",
             },

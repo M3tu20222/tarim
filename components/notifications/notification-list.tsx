@@ -88,13 +88,11 @@ export function NotificationList({
   const fetchNotifications = useCallback(async (newPage = 1, currentUserId?: string) => {
     // Eğer geçerli bir kullanıcı ID'si yoksa veya auth hala yükleniyorsa fetch etme
     if (!currentUserId) {
-       console.log("Fetch notifications skipped: No user ID provided.");
        setLoading(false); // Yükleniyor durumunu kapat
        setNotifications([]); // Listeyi temizle
        setHasMore(false);
        return;
     }
-     console.log(`Fetching notifications for user: ${currentUserId}, page: ${newPage}`);
 
     try {
       setLoading(true);
@@ -122,23 +120,18 @@ export function NotificationList({
       if (currentUserId) {
         headers["x-user-id"] = currentUserId;
       } else {
-         // Bu durum yukarıdaki kontrolle engellendi, ancak yine de log bırakalım
-         console.warn("User ID became unavailable unexpectedly before fetch header.");
+         // User ID became unavailable unexpectedly
          setLoading(false);
          return;
       }
 
 
       const url = `/api/notifications?${queryParams.toString()}`;
-      console.log("Fetching notifications from URL:", url);
-      console.log("With headers:", headers);
-
       const response = await fetch(url, { headers });
 
       if (response.ok) {
         try {
           const data = await response.json();
-          console.log("Data received from notifications API:", data); // API'den gelen veriyi logla
 
           // API doğrudan notifications dizisi döndürüyor, data.notifications değil
           if (Array.isArray(data)) {
@@ -160,23 +153,22 @@ export function NotificationList({
             setHasMore(data.pagination?.page < data.pagination?.totalPages);
             setPage(data.pagination?.page || 1);
           } else {
-            console.error("Unexpected API response format:", data);
+            // Unexpected API response format
             setNotifications([]);
             setHasMore(false);
           }
         } catch (jsonError) {
-          console.error("Error parsing notifications JSON:", jsonError); // JSON parse hatasını logla
+          // Error parsing JSON
           setNotifications([]); // Hata durumunda listeyi temizle
           setHasMore(false);
         }
       } else {
-         console.error("Error fetching notifications: Response not OK", response.status, response.statusText); // Response not OK durumunu logla
+         // Response not OK
          setNotifications([]); // Hata durumunda listeyi temizle
          setHasMore(false);
       }
     } catch (error) {
-      console.error("Error fetching notifications (network or other):", error); // Diğer hataları logla
-      // Hata durumunda da yükleniyor durumunu kapat
+      // Network or other error
       setNotifications([]); // Hata durumunda listeyi temizle
       setHasMore(false);
     } finally {
@@ -191,27 +183,20 @@ export function NotificationList({
     // Kullanılacak ID'yi belirle: Önce context, sonra prop
     const effectiveUserId = user?.id || propUserId;
 
-    console.log("NotificationList useEffect çalıştı");
-    console.log("Auth loading:", authLoading);
-    console.log("User from context:", user);
-    console.log("User ID from props:", propUserId);
-    console.log("Effective user ID:", effectiveUserId);
+    // Removed console.log statements for cleaner production code
 
     // Auth yükleniyorsa veya geçerli bir ID yoksa bekle
     if (authLoading) {
-      console.log("Auth is loading, waiting to fetch notifications...");
+      // Auth is loading, wait
       setLoading(true); // Yükleniyor durumunu göster
       return;
     }
 
     if (effectiveUserId) {
-      console.log(`User ID available (${effectiveUserId}), triggering initial fetch.`);
-      console.log("User object from useAuth:", user); // user objesini logla
+      // User ID is available, fetch notifications
       fetchNotifications(1, effectiveUserId); // İlk sayfayı geçerli ID ile fetch et
     } else {
-       // Auth yüklendi ama geçerli ID yok
-       console.log("Auth loaded but no effective user ID, clearing notifications.");
-       console.log("User object from useAuth:", user); // user objesini logla
+       // Auth loaded but no valid user ID
        setNotifications([]); // Bildirimleri temizle
        setLoading(false); // Yükleniyor durumunu kapat
        setHasMore(false);
@@ -431,7 +416,7 @@ export function NotificationList({
       )}
 
       {notifications.map((notification) => {
-        console.log("Rendering notification:", notification.id, notification.title); // Log buraya taşındı
+        // Removed console.log for cleaner production code
         return ( // Return ifadesi eklendi
           <Card
             key={notification.id}
@@ -474,7 +459,10 @@ export function NotificationList({
               <div>{getNotificationBadge(notification.type)}</div>
             </CardHeader>
             <CardContent>
-              <p className="text-sm">{notification.message}</p>
+              <p
+                className="text-sm"
+                dangerouslySetInnerHTML={{ __html: notification.message }}
+              ></p>
 
               {showSent && notification.receiver && (
                 <div className="mt-2 flex items-center gap-2">

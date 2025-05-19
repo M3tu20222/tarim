@@ -151,6 +151,11 @@ body {
   text-shadow: 0 0 5px theme("colors.pink.500"), 0 0 10px theme("colors.pink.500");
 }
 
+.neon-text-green {
+  color: theme("colors.green.400");
+  text-shadow: 0 0 5px theme("colors.green.500"), 0 0 10px theme("colors.green.500");
+}
+
 .neon-glow {
   box-shadow: 0 0 5px theme("colors.purple.500"), 0 0 10px theme("colors.purple.500");
 }
@@ -242,8 +247,8 @@ body {
 .bg-sidebar {
   background-color: hsla(var(--sidebar-background), 0.85);
   /* 85% opaklık */
-  backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
   /* Safari için eklendi */
   /* Hafif bulanıklık ekler */
 }
@@ -253,8 +258,8 @@ body {
 .bg-background {
   background-color: hsla(var(--card), 0.7);
   /* 70% opaklık */
-  backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
   /* Safari için eklendi */
 }
 
