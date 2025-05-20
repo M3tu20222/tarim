@@ -134,7 +134,7 @@ const SidebarProvider = React.forwardRef<
       <SidebarContext.Provider value={contextValue}>
         <TooltipProvider delayDuration={0}>
           <div
-           
+
             className={cn(
               "group/sidebar-wrapper flex min-h-svh w-full has-[[data-variant=inset]]:bg-sidebar",
               className
@@ -193,7 +193,7 @@ const Sidebar = React.forwardRef<
         <Dialog open={openMobile} onOpenChange={setOpenMobile}>
           <DialogTrigger asChild>
             {/*  Boş bir trigger ekleyin, cunku zaten SheetTrigger kullanıyorsunuz */}
-            <></>
+            <span></span>
           </DialogTrigger>
           <DialogContent>
             <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>

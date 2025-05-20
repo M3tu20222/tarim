@@ -137,7 +137,7 @@ export function LoginForm() {
   };
 
   // Demo kullanıcı bilgilerini doldur
-  const fillDemoUser = (role: string) => {
+ /* const fillDemoUser = (role: string) => {
     if (role === "admin") {
       setUsername("admin@example.com");
       setPassword("admin123");
@@ -148,7 +148,7 @@ export function LoginForm() {
       setUsername("worker@example.com");
       setPassword("worker123");
     }
-  };
+  };*/
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -212,35 +212,7 @@ export function LoginForm() {
         </Button>
       </div>
 
-      <div className="text-xs text-muted-foreground mt-4">
-        <p className="text-center">Demo Kullanıcılar:</p>
-        <div className="grid grid-cols-3 gap-2 mt-2">
-          <div
-            className="text-center p-1 rounded bg-purple-500/10 cursor-pointer hover:bg-purple-500/20 transition-colors"
-            onClick={() => fillDemoUser("admin")}
-          >
-            <p className="font-medium">Admin</p>
-            <p>admin@example.com</p>
-          </div>
-          <div
-            className="text-center p-1 rounded bg-cyan-500/10 cursor-pointer hover:bg-cyan-500/20 transition-colors"
-            onClick={() => fillDemoUser("owner")}
-          >
-            <p className="font-medium">Sahip</p>
-            <p>owner@example.com</p>
-          </div>
-          <div
-            className="text-center p-1 rounded bg-pink-500/10 cursor-pointer hover:bg-pink-500/20 transition-colors"
-            onClick={() => fillDemoUser("worker")}
-          >
-            <p className="font-medium">İşçi</p>
-            <p>worker@example.com</p>
-          </div>
-        </div>
-        <p className="text-center mt-2">
-          Tüm şifreler: admin123, owner123, worker123
-        </p>
-      </div>
+     
     </form>
   );
 }

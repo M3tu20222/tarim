@@ -120,18 +120,31 @@ export function FieldOwnershipForm({
   };
 
   // Yüzde değiştir
-  const handlePercentageChange = (index: number, percentage: number) => {
+  const handlePercentageChange = (index: number, value: string | number) => {
+    // Eğer string ise ve virgül içeriyorsa, virgülü noktaya çevir
+    let percentageValue: number;
+
+    if (typeof value === 'string') {
+      // Virgülü noktaya çevir
+      const normalizedValue = value.replace(',', '.');
+      percentageValue = parseFloat(normalizedValue) || 0;
+    } else {
+      percentageValue = value;
+    }
+
     const updatedOwnerships = [...localOwnerships];
-    updatedOwnerships[index].percentage = percentage;
+    updatedOwnerships[index].percentage = percentageValue;
     setLocalOwnerships(updatedOwnerships);
     onChange(updatedOwnerships);
   };
 
-  // Toplam yüzde hesapla
-  const totalPercentage = localOwnerships.reduce(
-    (sum, o) => sum + o.percentage,
-    0
-  );
+  // Toplam yüzde hesapla (sadece yüzdesi 0'dan büyük olanlar için)
+  const totalPercentage = localOwnerships
+    .filter(o => o.percentage > 0) // Sadece 0'dan büyük olanları hesaba kat
+    .reduce((sum, o) => sum + o.percentage, 0);
+
+  // Yuvarlama hatalarını önlemek için toplam yüzdeyi 1 ondalık basamağa yuvarla
+  const roundedTotalPercentage = Math.round(totalPercentage * 10) / 10;
 
   // Kayan nokta hatalarını tolere etmek için küçük bir epsilon değeri
   const epsilon = 0.01;
@@ -188,7 +201,8 @@ export function FieldOwnershipForm({
                 <div className="w-24">
                   <div className="flex items-center">
                     <Input
-                      type="number"
+                      type="text" // number yerine text kullanarak virgül girişine izin ver
+                      inputMode="decimal" // Mobil cihazlarda sayısal klavye göster
                       min="0"
                       max="100"
                       step="0.1"
@@ -196,13 +210,19 @@ export function FieldOwnershipForm({
                       onChange={(e) =>
                         handlePercentageChange(
                           index,
-                          Number.parseFloat(e.target.value) || 0
+                          e.target.value // Doğrudan değeri gönder, handlePercentageChange içinde işlenecek
                         )
                       }
-                      className="text-right"
+                      className={`text-right ${ownership.percentage === 0 ? "border-orange-500" : ""}`}
+                      title={ownership.percentage === 0 ? "Yüzde 0 olan sahipler kaydedilmeyecektir" : ""}
                     />
                     <span className="ml-2">%</span>
                   </div>
+                  {ownership.percentage === 0 && (
+                    <div className="text-xs text-orange-500 mt-1">
+                      %0 olan sahipler kaydedilmez
+                    </div>
+                  )}
                 </div>
                 <Button
                   variant="ghost"
@@ -218,12 +238,12 @@ export function FieldOwnershipForm({
             <div className="flex justify-between items-center pt-2 border-t">
               <span className="font-medium">Toplam:</span>
               <span
-                className={`font-bold ${Math.abs(totalPercentage - 100) > epsilon ? "text-destructive" : ""}`}
+                className={`font-bold ${Math.abs(roundedTotalPercentage - 100) > 0.1 ? "text-destructive" : ""}`}
               >
-                {totalPercentage.toFixed(1)}%
-                {Math.abs(totalPercentage - 100) > epsilon && (
+                {roundedTotalPercentage.toFixed(1)}%
+                {Math.abs(roundedTotalPercentage - 100) > 0.1 && (
                   <span className="ml-2 text-xs">
-                    {totalPercentage < 100 ? "(Eksik)" : "(Fazla)"}
+                    {roundedTotalPercentage < 100 ? "(Eksik)" : "(Fazla)"}
                   </span>
                 )}
               </span>

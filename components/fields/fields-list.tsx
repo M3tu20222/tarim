@@ -223,8 +223,10 @@ export default function FieldsList() {
       if (!response.ok) {
         throw new Error("Kuyular yüklenirken bir hata oluştu");
       }
-      const data = await response.json();
-      setWells(data);
+      const responseData = await response.json();
+      // API'den gelen yanıtın 'data' özelliğini kullan
+      const wellsData = responseData.data || []; // Eğer data yoksa boş dizi ata
+      setWells(wellsData);
     } catch (error) {
       console.error("Error fetching wells:", error);
     }

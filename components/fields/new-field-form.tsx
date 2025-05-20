@@ -160,8 +160,10 @@ export function NewFieldForm({ initialData }: NewFieldFormProps = {}) {
       try {
         const response = await fetch("/api/wells");
         if (response.ok) {
-          const data = await response.json();
-          setWells(data);
+          const responseData = await response.json();
+          // API'den gelen yanıtın 'data' özelliğini kullan
+          const wellsData = responseData.data || []; // Eğer data yoksa boş dizi ata
+          setWells(wellsData);
         }
       } catch (error) {
         console.error("Error fetching wells:", error);
@@ -199,13 +201,24 @@ export function NewFieldForm({ initialData }: NewFieldFormProps = {}) {
       const url = initialData ? `/api/fields/${initialData.id}` : "/api/fields";
       const method = initialData ? "PUT" : "POST";
 
+      // Sahiplik yüzdesi 0 olan sahipleri filtrele
+      const filteredOwnerships = ownerships.filter(ownership => ownership.percentage > 0);
+
+      // Toplam yüzde kontrolü - yuvarlama hatalarını önlemek için epsilon değerini artır
+      const totalPercentage = filteredOwnerships.reduce((sum, o) => sum + o.percentage, 0);
+      const epsilon = 0.1; // Yuvarlama hatası toleransı
+
+      if (Math.abs(totalPercentage - 100) > epsilon) {
+        throw new Error(`Sahiplik yüzdeleri toplamı %100 olmalıdır (Şu anki toplam: %${totalPercentage.toFixed(1)})`);
+      }
+
       // "no-season" değerini null olarak işle
       const formData = {
         ...values,
         seasonId: values.seasonId === "no-season" ? null : values.seasonId,
         // wellId: values.wellId === "no-well" ? null : values.wellId, // Kaldırıldı
         wellIds: values.wellIds, // Dizi olarak gönder
-        ownerships: ownerships,
+        ownerships: filteredOwnerships, // Filtrelenmiş sahiplikleri gönder
       };
 
       const response = await fetch(url, {
@@ -494,7 +507,7 @@ export function NewFieldForm({ initialData }: NewFieldFormProps = {}) {
                 <FormLabel>Bağlı Kuyular</FormLabel>
                 <FormControl>
                    <MultiSelect
-                      options={wells.map((well) => ({ // Seçenekler map'lendi
+                      options={(Array.isArray(wells) ? wells : []).map((well) => ({ // Dizi kontrolü eklendi
                         value: well.id,
                         label: `${well.name} (${well.depth}m, ${well.capacity} lt/sa)`,
                       }))}
