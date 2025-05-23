@@ -25,6 +25,45 @@ function getErrorMessage(error: unknown): string {
   return "Sulama kaydı oluşturulurken bilinmeyen bir hata oluştu.";
 }
 
+// Define interfaces for request data and nested types
+interface FieldIrrigationInput {
+  fieldId: string;
+  percentage: number;
+  wellId?: string;
+  seasonId?: string;
+}
+
+interface OwnerDurationInput {
+  userId: string;
+  duration: number;
+  irrigatedArea?: number;
+  userName?: string;
+}
+
+interface InventoryDeductionInput {
+  inventoryId: string;
+  quantityUsed: number;
+  unitPrice: number;
+  ownerId: string;
+}
+
+// For the fieldUsageRecords map function, reflecting the actual return type from Prisma.create with specific includes
+type IrrigationFieldUsageWithFieldAndOwners = Prisma.IrrigationFieldUsageGetPayload<{
+  include: {
+    field: {
+      select: {
+        id: true;
+        name: true;
+        owners: {
+          select: {
+            userId: true;
+          };
+        };
+      };
+    };
+  };
+}>;
+
 // Tüm sulama kayıtlarını getir (ownerSummaries eklendi)
 export async function GET(request: NextRequest) {
   try {
@@ -48,6 +87,7 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
     const ownerId = searchParams.get("ownerId"); // Yeni filtre: Sahip ID'si
+    const createdBy = searchParams.get("createdBy"); // Yeni filtre: Oluşturan kullanıcı ID'si
 
     const where: Prisma.IrrigationLogWhereInput = {};
 
@@ -66,6 +106,10 @@ export async function GET(request: NextRequest) {
     // Sahibe göre filtreleme (ownerSummaries üzerinden)
     if (ownerId) {
       where.ownerSummaries = { some: { ownerId: ownerId } };
+    }
+    // Oluşturan kullanıcıya göre filtreleme
+    if (createdBy) {
+      where.createdBy = createdBy;
     }
 
     const totalCount = await prisma.irrigationLog.count({ where });
@@ -131,7 +175,6 @@ export async function GET(request: NextRequest) {
 // Yeni sulama kaydı oluştur (Yeni hesaplama mantığı ile)
 
 
-
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSideSession();
@@ -151,6 +194,15 @@ export async function POST(request: NextRequest) {
       ownerDurations,
       inventoryDeductions, // inventoryUsages yerine
       costAllocations,   // Yeni eklendi, şimdilik loglama/raporlama için
+    }: {
+      startDateTime: string;
+      duration: number;
+      notes?: string;
+      wellId?: string;
+      fieldIrrigations: FieldIrrigationInput[];
+      ownerDurations: OwnerDurationInput[];
+      inventoryDeductions?: InventoryDeductionInput[];
+      costAllocations?: any[];
     } = requestData;
 
     // Gerekli doğrulamalar
@@ -166,7 +218,7 @@ export async function POST(request: NextRequest) {
 
     // Toplam sulanan alanı hesapla (Raporlama ve bazı dağıtımlar için gerekli olabilir)
     const totalIrrigatedAreaForLog = ownerDurations.reduce(
-      (sum: number, owner: any) => sum + (owner.irrigatedArea || 0), // irrigatedArea null/undefined olabilir
+      (sum: number, owner: OwnerDurationInput) => sum + (owner.irrigatedArea ?? 0), // Use nullish coalescing
       0
     );
     // totalIrrigatedAreaForLog sıfır olabilir, bu bir hata değil, sadece envanter dağıtımı yapılmaz.
@@ -179,7 +231,10 @@ export async function POST(request: NextRequest) {
     // Öncelikle doğrudan gelen wellId'yi kullan, yoksa fieldIrrigations'dan gelen wellId'yi kullan
     const wellId = directWellId || fieldWellId;
 
-    // wellId belirlendi
+    // wellId belirlendi. Schema'da wellId zorunlu olduğu için kontrol ekle
+    if (!wellId) {
+      return NextResponse.json({ error: "Kuyu bilgisi eksik." }, { status: 400 });
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       const irrigationLog = await tx.irrigationLog.create({
@@ -188,7 +243,7 @@ export async function POST(request: NextRequest) {
           duration,
           notes,
           status: "COMPLETED",
-          wellId: wellId || null,
+          wellId: wellId, // wellId artık null olamaz
           seasonId: seasonId || null,
           createdBy: session.id,
         },
@@ -202,7 +257,7 @@ export async function POST(request: NextRequest) {
             irrigationLogId: irrigationLog.id,
             ownerId: ownerSummary.userId,
             totalAllocatedDuration: round(ownerSummary.duration),
-            totalIrrigatedArea: round(ownerSummary.irrigatedArea),
+            totalIrrigatedArea: round(ownerSummary.irrigatedArea ?? 0), // Use nullish coalescing
           },
         });
       }
@@ -227,7 +282,7 @@ export async function POST(request: NextRequest) {
             where: { inventoryId: inventoryId, userId: deductionOwnerId },
             select: { id: true, shareQuantity: true, user: { select: { name: true } } },
           });
-          const ownerNameForError = ownerInventory?.user?.name || ownerDurations.find((o: any) => o.userId === deductionOwnerId)?.userName || `Sahip ID: ${deductionOwnerId}`;
+          const ownerNameForError = ownerInventory?.user?.name || ownerDurations.find((o: OwnerDurationInput) => o.userId === deductionOwnerId)?.userName || `Sahip ID: ${deductionOwnerId}`;
 
           if (!ownerInventory || ownerInventory.shareQuantity < quantityUsed) {
             throw new Error(
@@ -293,7 +348,7 @@ export async function POST(request: NextRequest) {
       const ownerFieldNames: Record<string, string[]> = {};
 
       // Önce tüm tarla kullanımlarını oluştur ve kaydet
-      const fieldUsageRecords = await Promise.all(fieldIrrigations.map(async (fieldUsage) => {
+      const fieldUsageRecords: IrrigationFieldUsageWithFieldAndOwners[] = await Promise.all(fieldIrrigations.map(async (fieldUsage: FieldIrrigationInput) => {
         const usage = await tx.irrigationFieldUsage.create({
           data: {
             irrigationLogId: irrigationLog.id,
@@ -314,7 +369,7 @@ export async function POST(request: NextRequest) {
             }
           }
         });
-        return usage;
+        return usage; // No need for 'as' cast here, type is inferred correctly
       }));
 
       // Şimdi tarla kullanımlarından tarla isimlerini topla
@@ -331,7 +386,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const uniqueOwnerIds = [...new Set(ownerDurations.map((os: any) => os.userId))];
+      const uniqueOwnerIds = [...new Set(ownerDurations.map((os: OwnerDurationInput) => os.userId))];
       for (const ownerId of uniqueOwnerIds) {
         if (ownerId !== session.id) {
           // Tarla isimlerini al veya varsayılan mesaj kullan

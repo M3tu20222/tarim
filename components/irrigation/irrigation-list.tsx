@@ -69,7 +69,9 @@ export function IrrigationList({ initialData }: IrrigationListProps) {
     status: "",
     startDate: null as Date | null,
     endDate: null as Date | null,
+    createdBy: "", // Yeni filtre: Oluşturan kullanıcı ID'si
   });
+  const [workers, setWorkers] = useState<any[]>([]); // İşçi listesi
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
   const [page, setPage] = useState(1);
@@ -94,6 +96,11 @@ export function IrrigationList({ initialData }: IrrigationListProps) {
         const seasonsResponse = await fetch("/api/seasons");
         const seasonsData = await seasonsResponse.json();
         setSeasons(seasonsData.data || []);
+
+        // İşçileri getir
+        const usersResponse = await fetch("/api/users?role=WORKER");
+        const usersData = await usersResponse.json();
+        setWorkers(usersData.data || []);
 
         // Sulama kayıtlarını getir
         await fetchIrrigationLogs();
@@ -133,6 +140,8 @@ export function IrrigationList({ initialData }: IrrigationListProps) {
         params.append("startDate", filters.startDate.toISOString());
       if (filters.endDate)
         params.append("endDate", filters.endDate.toISOString());
+      if (filters.createdBy)
+        params.append("createdBy", filters.createdBy);
 
       // API isteği
       const response = await fetch(`/api/irrigation?${params.toString()}`);
@@ -166,6 +175,7 @@ export function IrrigationList({ initialData }: IrrigationListProps) {
       status: "",
       startDate: null,
       endDate: null,
+      createdBy: "",
     });
     setPage(1);
   };
@@ -231,7 +241,7 @@ export function IrrigationList({ initialData }: IrrigationListProps) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label htmlFor="wellId">Kuyu</Label>
               <Select
@@ -383,6 +393,28 @@ export function IrrigationList({ initialData }: IrrigationListProps) {
                 </PopoverContent>
               </Popover>
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="createdBy">İşçi</Label>
+              <Select
+                value={filters.createdBy}
+                onValueChange={(value) =>
+                  setFilters({ ...filters, createdBy: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Tüm İşçiler" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tüm İşçiler</SelectItem>
+                  {workers.map((worker) => (
+                    <SelectItem key={worker.id} value={worker.id}>
+                      {worker.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
         <CardFooter className="flex justify-between">
@@ -433,6 +465,7 @@ export function IrrigationList({ initialData }: IrrigationListProps) {
                     <TableHead>Kuyu</TableHead>
                     <TableHead>Süre</TableHead>
                     <TableHead>Tarlalar</TableHead>
+                    <TableHead>İşçi</TableHead>
                     <TableHead>Durum</TableHead>
                     <TableHead className="text-right">İşlemler</TableHead>
                   </TableRow>
@@ -443,16 +476,14 @@ export function IrrigationList({ initialData }: IrrigationListProps) {
                       <TableCell>
                         <div className="flex items-center">
                           <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
-                          {format(new Date(log.startDateTime), "dd MMM yyyy", {
-                            locale: tr,
-                          })}
+                          {format(new Date(log.startDateTime), "dd MMM yyyy", { locale: tr })}
                           <Clock className="ml-4 mr-2 h-4 w-4 text-muted-foreground" />
-                          {format(new Date(log.startDateTime), "HH:mm", {
-                            locale: tr,
-                          })}
+                          {format(new Date(log.startDateTime), "HH:mm", { locale: tr })}
                         </div>
                       </TableCell>
-                      <TableCell>{log.well?.name || "-"}</TableCell>
+                      <TableCell>
+                        {log.well?.name || "-"}
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center">
                           <Clock className="mr-2 h-4 w-4 text-muted-foreground" />
@@ -472,28 +503,25 @@ export function IrrigationList({ initialData }: IrrigationListProps) {
                           ))}
                         </div>
                       </TableCell>
-                      <TableCell>{getStatusBadge(log.status)}</TableCell>
+                      <TableCell>
+                        {log.user?.name || "-"}
+                      </TableCell>
+                      <TableCell>
+                        {getStatusBadge(log.status)}
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end space-x-2">
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() =>
-                              router.push(
-                                `/dashboard/owner/irrigation/${log.id}`
-                              )
-                            }
+                            onClick={() => router.push(`/dashboard/owner/irrigation/${log.id}`)}
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() =>
-                              router.push(
-                                `/dashboard/owner/irrigation/${log.id}/edit`
-                              )
-                            }
+                            onClick={() => router.push(`/dashboard/owner/irrigation/${log.id}/edit`)}
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
