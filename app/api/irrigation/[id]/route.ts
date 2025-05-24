@@ -104,7 +104,7 @@ export async function PUT(
       notes,
       fieldIrrigations, // Array of { fieldId, percentage, irrigatedArea, wellId, seasonId }
       ownerDurations,   // Array of { userId, duration, irrigatedArea }
-      inventoryUsages,  // Array of { inventoryId, quantity, unitPrice, ownerUsages: [{ userId, quantity, cost }] }
+      inventoryDeductions,  // Array of { inventoryId, quantity, unitPrice, ownerUsages: [{ userId, quantity, cost }] }
       status,           // Optional status
     } = data;
 
@@ -228,42 +228,109 @@ export async function PUT(
       }
 
       // 3b. Envanter kullanımlarını ve sahip maliyetlerini oluştur
-      if (inventoryUsages && inventoryUsages.length > 0) {
-        for (const invUsageData of inventoryUsages) {
-          // Toplam maliyeti hesapla
-          const totalCost = invUsageData.ownerUsages.reduce((sum: number, usage: any) => sum + (usage.cost || 0), 0);
+      if (inventoryDeductions && inventoryDeductions.length > 0) {
+        // Önce envanter türlerine göre grupla (aynı envanter türünden birden fazla stok kullanılabilir)
+        const inventoryTypeGroups = new Map<string, {
+          inventoryName: string;
+          unit: string;
+          totalQuantity: number;
+          totalCost: number;
+          deductions: typeof inventoryDeductions;
+        }>();
 
-          const createdInvUsage = await tx.irrigationInventoryUsage.create({
-            data: {
-              irrigationLogId: updatedLog.id,
-              inventoryId: invUsageData.inventoryId,
-              quantity: invUsageData.quantity,
-              unitPrice: invUsageData.unitPrice, // Formdan gelen birim fiyatı kullan
-              totalCost: totalCost, // Hesaplanan toplam maliyeti ekle
-              // invUsageData.ownerUsages'dan ilgili sahip maliyetlerini ekle
-              ownerUsages: {
-                create: invUsageData.ownerUsages.map((ou: any) => ({
-                  ownerId: ou.userId,
-                  quantity: ou.quantity,
-                  cost: ou.cost,
-                })),
-              },
-            },
+        // Envanter bilgilerini al ve grupla
+        for (const deduction of inventoryDeductions) {
+          const inventory = await tx.inventory.findUnique({
+            where: { id: deduction.inventoryId },
+            select: { name: true, unit: true }
           });
 
-          // Envanter stoğunu güncelle (POST'taki gibi)
-          await tx.inventory.update({
-            where: { id: invUsageData.inventoryId },
-            data: {
-              totalQuantity: {
-                decrement: invUsageData.quantity,
+          if (!inventory) continue;
+
+          const typeKey = inventory.name; // Envanter adını anahtar olarak kullan
+
+          if (!inventoryTypeGroups.has(typeKey)) {
+            inventoryTypeGroups.set(typeKey, {
+              inventoryName: inventory.name,
+              unit: inventory.unit,
+              totalQuantity: 0,
+              totalCost: 0,
+              deductions: []
+            });
+          }
+
+          const group = inventoryTypeGroups.get(typeKey)!;
+          group.totalQuantity += deduction.quantityUsed;
+          group.totalCost += deduction.quantityUsed * deduction.unitPrice;
+          group.deductions.push(deduction);
+        }
+
+        // Her envanter türü için toplam miktarı sahiplere dekar oranına göre dağıt
+        for (const [, group] of inventoryTypeGroups) {
+          // Toplam sulanan alanı hesapla
+          const totalIrrigatedArea = ownerDurations.reduce((sum, owner) => sum + (owner.irrigatedArea || 0), 0);
+
+          if (totalIrrigatedArea <= 0) continue;
+
+          // Her deduction için IrrigationInventoryUsage oluştur
+          for (const deduction of group.deductions) {
+            const totalCost = deduction.quantityUsed * deduction.unitPrice;
+
+            const createdInvUsage = await tx.irrigationInventoryUsage.create({
+              data: {
+                irrigationLogId: updatedLog.id,
+                inventoryId: deduction.inventoryId,
+                quantity: deduction.quantityUsed,
+                unitPrice: deduction.unitPrice,
+                totalCost: totalCost,
+                ownerUsages: {
+                  create: ownerDurations.map((owner, index) => {
+                    const ownerPercentage = (owner.irrigatedArea || 0) / totalIrrigatedArea;
+                    const ownerQuantityShare = group.totalQuantity * ownerPercentage;
+                    const ownerCostShare = group.totalCost * ownerPercentage;
+
+                    // Son sahip için kalan miktarı ver (yuvarlama hatalarını önlemek için)
+                    const isLastOwner = index === ownerDurations.length - 1;
+                    const finalQuantity = isLastOwner ?
+                      group.totalQuantity - ownerDurations.slice(0, -1).reduce((sum, o, i) => {
+                        const pct = (o.irrigatedArea || 0) / totalIrrigatedArea;
+                        return sum + (group.totalQuantity * pct);
+                      }, 0) : ownerQuantityShare;
+
+                    const finalCost = isLastOwner ?
+                      group.totalCost - ownerDurations.slice(0, -1).reduce((sum, o, i) => {
+                        const pct = (o.irrigatedArea || 0) / totalIrrigatedArea;
+                        return sum + (group.totalCost * pct);
+                      }, 0) : ownerCostShare;
+
+                    return {
+                      ownerId: owner.userId,
+                      percentage: ownerPercentage * 100, // Yüzde olarak
+                      quantity: Math.round(finalQuantity * 100) / 100, // 2 ondalık basamak
+                      cost: Math.round(finalCost * 100) / 100, // 2 ondalık basamak
+                    };
+                  }),
+                },
               },
-            },
-          });
+            });
+
+            // Envanter stoğunu güncelle
+            await tx.inventory.update({
+              where: { id: deduction.inventoryId },
+              data: {
+                totalQuantity: {
+                  decrement: deduction.quantityUsed,
+                },
+              },
+            });
+          }
         }
       }
 
       return updatedLog; // Transaction sonucunu döndür
+    }, {
+      maxWait: 15000, // ms cinsinden maksimum bekleme süresi (varsayılan 2000)
+      timeout: 45000, // ms cinsinden maksimum işlem süresi (varsayılan 5000)
     });
 
     // Güncellenmiş kaydı (veya en azından ID'sini) döndür
