@@ -284,9 +284,35 @@ export async function POST(request: NextRequest) {
           });
           const ownerNameForError = ownerInventory?.user?.name || ownerDurations.find((o: OwnerDurationInput) => o.userId === deductionOwnerId)?.userName || `Sahip ID: ${deductionOwnerId}`;
 
-          if (!ownerInventory || ownerInventory.shareQuantity < quantityUsed) {
+          if (!ownerInventory) {
+            // Bu sahip bu envantere sahip değil, diğer sahipleri kontrol et
+            const allOwnerships = await tx.inventoryOwnership.findMany({
+              where: { inventoryId: inventoryId },
+              select: {
+                id: true,
+                shareQuantity: true,
+                userId: true,
+                user: { select: { name: true } }
+              },
+            });
+
+            const availableOwners = allOwnerships
+              .filter(ownership => ownership.shareQuantity >= quantityUsed)
+              .map(ownership => `${ownership.user?.name || ownership.userId} (${round(ownership.shareQuantity)} ${inventoryItem.unit})`)
+              .join(', ');
+
+            const totalStock = allOwnerships.reduce((sum, ownership) => sum + ownership.shareQuantity, 0);
+
             throw new Error(
-              `${ownerNameForError} adlı sahip için ${inventoryItem.name} stoğu yetersiz. İhtiyaç: ${round(quantityUsed)} ${inventoryItem.unit}, Mevcut: ${round(ownerInventory?.shareQuantity ?? 0)} ${inventoryItem.unit}`
+              `${ownerNameForError} adlı sahip ${inventoryItem.name} envanterine sahip değil. ` +
+              `Toplam stok: ${round(totalStock)} ${inventoryItem.unit}. ` +
+              `${availableOwners ? `Yeterli stoğa sahip sahipler: ${availableOwners}` : 'Hiçbir sahip yeterli stoğa sahip değil.'}`
+            );
+          }
+
+          if (ownerInventory.shareQuantity < quantityUsed) {
+            throw new Error(
+              `${ownerNameForError} adlı sahip için ${inventoryItem.name} stoğu yetersiz. İhtiyaç: ${round(quantityUsed)} ${inventoryItem.unit}, Mevcut: ${round(ownerInventory.shareQuantity)} ${inventoryItem.unit}`
             );
           }
 

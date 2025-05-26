@@ -122,9 +122,9 @@ export default async function WorkerIrrigationDetailPage({
 }: {
   params: { id: string };
 }) {
-  // Next.js 13+ için params nesnesini await etmemize gerek yok,
-  // ancak params.id'yi doğrudan kullanmak yerine bir değişkene atayalım
-  const id = params.id;
+  // Next.js 15+ için params nesnesini await etmemiz gerekiyor
+  const awaitedParams = await params;
+  const id = awaitedParams.id;
 
   // Eğer ID "new" ise, bu sayfa yeni kayıt oluşturmak için değil,
   // var olan bir kaydın detayını göstermek içindir.

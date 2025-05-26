@@ -221,6 +221,16 @@ export function WorkerIrrigationForm({
           fieldsList = [];
         }
 
+        console.log("Processed fields list:", fieldsList);
+        // Her tarla için sahiplik bilgilerini kontrol et
+        fieldsList.forEach((field, index) => {
+          console.log(`Tarla ${index + 1} (${field.name}):`, {
+            id: field.id,
+            ownerships: field.ownerships,
+            owners: field.owners
+          });
+        });
+
         setFields(fieldsList);
 
         // URL'den gelen fieldId parametresi varsa, otomatik olarak o tarlayı ekle
@@ -281,8 +291,10 @@ export function WorkerIrrigationForm({
         console.log("Inventories API response:", inventoriesData); // Debug için log ekleyelim
 
         if (Array.isArray(inventoriesData)) {
+          console.log("Envanter verileri (array format):", inventoriesData);
           setInventories(inventoriesData);
         } else if (inventoriesData.data && Array.isArray(inventoriesData.data)) {
+          console.log("Envanter verileri (data property):", inventoriesData.data);
           setInventories(inventoriesData.data);
         } else {
           console.error("Unexpected inventories data format:", inventoriesData);
@@ -326,14 +338,33 @@ export function WorkerIrrigationForm({
         const irrigatedArea = (field.size * irrigation.percentage) / 100;
         totalIrrigatedArea += irrigatedArea;
 
-        // Eğer field.ownerships yoksa, varsayılan bir sahiplik oluştur
-        const ownerships = field.ownerships && Array.isArray(field.ownerships)
-          ? field.ownerships
-          : [{
-              userId: userId, // İşçinin kendisini sahip olarak ekle
-              userName: "İşçi",
-              percentage: 100
-            }];
+        // Tarla sahipliği bilgilerini kontrol et
+        let ownerships = [];
+
+        // Önce field.ownerships'i kontrol et (FieldOwnership modeli)
+        if (field.ownerships && Array.isArray(field.ownerships) && field.ownerships.length > 0) {
+          ownerships = field.ownerships.map((ownership: any) => ({
+            userId: ownership.userId || ownership.user?.id,
+            userName: ownership.user?.name || ownership.userName || "Bilinmeyen Kullanıcı",
+            percentage: ownership.percentage || 100
+          }));
+          console.log(`Tarla ${field.name} - ownerships kullanıldı:`, ownerships);
+        }
+        // Sonra field.owners'i kontrol et (alternatif yapı)
+        else if (field.owners && Array.isArray(field.owners) && field.owners.length > 0) {
+          ownerships = field.owners.map((owner: any) => ({
+            userId: owner.userId || owner.user?.id,
+            userName: owner.user?.name || owner.userName || "Bilinmeyen Kullanıcı",
+            percentage: owner.percentage || 100
+          }));
+          console.log(`Tarla ${field.name} - owners kullanıldı:`, ownerships);
+        }
+        // Eğer hiç sahiplik bilgisi yoksa, hata ver
+        else {
+          console.error(`Tarla ${field.name} için sahiplik bilgisi bulunamadı!`, field);
+          // Bu durumda bu tarlayı atla
+          return null;
+        }
 
         return {
           fieldId: field.id,
@@ -466,6 +497,60 @@ export function WorkerIrrigationForm({
     try {
       setLoading(true);
 
+      // Envanter stok kontrolü yap
+      if (data.inventoryUsages && data.inventoryUsages.length > 0) {
+        const fieldOwners = Object.keys(calculatedData.ownerDurations);
+
+        for (const usage of data.inventoryUsages) {
+          const inventory = inventories.find((i) => i.id === usage.inventoryId);
+          if (!inventory) continue;
+
+          let hasValidOwner = false;
+          let errorMessage = "";
+
+          if (inventory.ownerships && Array.isArray(inventory.ownerships)) {
+            // Tarla sahipleri arasından bu envantere sahip olanları kontrol et
+            for (const fieldOwnerId of fieldOwners) {
+              const ownerInventory = inventory.ownerships.find(
+                (ownership) => ownership.userId === fieldOwnerId
+              );
+
+              if (ownerInventory && ownerInventory.shareQuantity && ownerInventory.shareQuantity >= usage.quantity) {
+                hasValidOwner = true;
+                break;
+              }
+            }
+
+            if (!hasValidOwner) {
+              const availableOwners = inventory.ownerships
+                .filter(ownership => ownership.shareQuantity && ownership.shareQuantity >= usage.quantity)
+                .map(ownership => `${ownership.user?.name || ownership.userId} (${ownership.shareQuantity?.toFixed(2)} ${inventory.unit})`)
+                .join(', ');
+
+              const totalStock = inventory.ownerships.reduce((sum, ownership) => sum + (ownership.shareQuantity || 0), 0);
+
+              errorMessage = `${inventory.name} için yeterli stoğa sahip tarla sahibi bulunamadı. ` +
+                `İhtiyaç: ${usage.quantity} ${inventory.unit}. ` +
+                `Toplam stok: ${totalStock.toFixed(2)} ${inventory.unit}. ` +
+                `${availableOwners ? `Yeterli stoğa sahip sahipler: ${availableOwners}` : 'Hiçbir sahip yeterli stoğa sahip değil.'}`;
+            }
+          } else {
+            errorMessage = `${inventory.name} için sahiplik bilgisi bulunamadı.`;
+          }
+
+          if (!hasValidOwner) {
+            toast({
+              title: "Yetersiz Stok",
+              description: errorMessage,
+              variant: "destructive",
+              duration: 10000,
+            });
+            setLoading(false);
+            return;
+          }
+        }
+      }
+
       // API'ye gönderilecek veriyi hazırla
       // Tarih ve saati birleştirerek startDateTime oluştur
       const dateObj = new Date(data.date);
@@ -509,18 +594,36 @@ export function WorkerIrrigationForm({
             };
           }
 
-          // Tarla sahibini kullan - ilk tarla sahibini al
-          // Birden fazla tarla sahibi varsa, en büyük paya sahip olanı seçebiliriz
-          // Şimdilik basitlik için ilk tarla sahibini kullanıyoruz
-          const fieldOwnerId = fieldOwners[0];
+          // Bu envantere sahip olan tarla sahiplerini bul
+          let selectedOwnerId = null;
 
-          console.log(`Envanter: ${inventory?.name}, Tarla sahibi kullanılıyor: ${fieldOwnerId}`);
+          if (inventory?.ownerships && Array.isArray(inventory.ownerships)) {
+            // Tarla sahipleri arasından bu envantere sahip olanları bul
+            for (const fieldOwnerId of fieldOwners) {
+              const ownerInventory = inventory.ownerships.find(
+                (ownership) => ownership.userId === fieldOwnerId
+              );
+
+              // Bu sahip bu envantere sahipse ve yeterli stoğu varsa
+              if (ownerInventory && ownerInventory.shareQuantity && ownerInventory.shareQuantity >= usage.quantity) {
+                selectedOwnerId = fieldOwnerId;
+                console.log(`Envanter: ${inventory?.name}, Yeterli stoğa sahip tarla sahibi bulundu: ${fieldOwnerId}, Stok: ${ownerInventory.shareQuantity}`);
+                break;
+              }
+            }
+          }
+
+          // Eğer hiçbir tarla sahibinin yeterli stoğu yoksa, ilk tarla sahibini kullan (hata API'de yakalanacak)
+          if (!selectedOwnerId) {
+            selectedOwnerId = fieldOwners[0];
+            console.log(`Envanter: ${inventory?.name}, Yeterli stoğa sahip tarla sahibi bulunamadı, ilk tarla sahibi kullanılıyor: ${selectedOwnerId}`);
+          }
 
           return {
             inventoryId: usage.inventoryId,
             quantityUsed: usage.quantity,
             unitPrice: inventory?.unitPrice || 0,
-            ownerId: fieldOwnerId,
+            ownerId: selectedOwnerId,
           };
         }),
       };
@@ -864,12 +967,30 @@ export function WorkerIrrigationForm({
                         <SelectValue placeholder="Envanter Seçin" />
                       </SelectTrigger>
                       <SelectContent>
-                        {inventories.map((inventory) => (
-                          <SelectItem key={inventory.id} value={inventory.id}>
-                            {inventory.name} ({inventory.totalQuantity}{" "}
-                            {inventory.unit})
-                          </SelectItem>
-                        ))}
+                        {inventories.map((inventory) => {
+                          // Bu envantere sahip olan tarla sahiplerini kontrol et
+                          const fieldOwners = Object.keys(calculatedData?.ownerDurations || {});
+                          let ownerInfo = "";
+
+                          if (inventory.ownerships && Array.isArray(inventory.ownerships) && fieldOwners.length > 0) {
+                            const validOwners = inventory.ownerships
+                              .filter(ownership => fieldOwners.includes(ownership.userId) && ownership.shareQuantity && ownership.shareQuantity > 0)
+                              .map(ownership => `${ownership.user?.name || ownership.userId}: ${ownership.shareQuantity?.toFixed(1)} ${inventory.unit}`)
+                              .join(', ');
+
+                            if (validOwners) {
+                              ownerInfo = ` - Sahipler: ${validOwners}`;
+                            } else {
+                              ownerInfo = " - ⚠️ Tarla sahiplerinin stoğu yok";
+                            }
+                          }
+
+                          return (
+                            <SelectItem key={inventory.id} value={inventory.id}>
+                              {inventory.name} (Toplam: {inventory.totalQuantity} {inventory.unit}){ownerInfo}
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                     {form.formState.errors.inventoryUsages?.[index]
@@ -924,26 +1045,26 @@ export function WorkerIrrigationForm({
 
             {calculatedData && (
               <div className="space-y-4 border p-4 rounded-md bg-gray-50">
-                <h3 className="text-lg font-medium">Hesaplanan Değerler</h3>
+                <h3 className="text-lg font-medium text-gray-900">Hesaplanan Değerler</h3>
 
                 <div className="space-y-2">
-                  <h4 className="font-medium">Toplam Sulanan Alan</h4>
-                  <p>{calculatedData.totalIrrigatedArea.toFixed(2)} dekar</p>
+                  <h4 className="font-medium text-gray-900">Toplam Sulanan Alan</h4>
+                  <p className="text-gray-900">{calculatedData.totalIrrigatedArea.toFixed(2)} dekar</p>
                 </div>
 
                 <div className="space-y-2">
-                  <h4 className="font-medium">Sahip Bazında Sulama Süreleri</h4>
+                  <h4 className="font-medium text-gray-900">Sahip Bazında Sulama Süreleri</h4>
                   <div className="border rounded-md overflow-hidden">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-100">
                         <tr>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                             Sahip
                           </th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                             Sulanan Alan (dekar)
                           </th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                             Süre (dakika)
                           </th>
                         </tr>
@@ -972,18 +1093,18 @@ export function WorkerIrrigationForm({
                 {Object.keys(calculatedData.inventoryDistribution).length >
                   0 && (
                   <div className="space-y-2">
-                    <h4 className="font-medium">Envanter Dağılımı</h4>
+                    <h4 className="font-medium text-gray-900">Envanter Dağılımı</h4>
                     <div className="border rounded-md overflow-hidden">
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-100">
                           <tr>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                               Envanter
                             </th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                               Sahip
                             </th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                               Miktar
                             </th>
                           </tr>
