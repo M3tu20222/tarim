@@ -65,7 +65,7 @@ export function WellList() {
         const response = await fetch("/api/wells");
         if (response.ok) {
           const data = await response.json();
-          setWells(data);
+          setWells(data.data || []);
         } else {
           toast({
             title: "Hata",
@@ -184,9 +184,9 @@ export function WellList() {
                   <TableCell>{well.capacity}</TableCell>
                   <TableCell>{formatStatus(well.status)}</TableCell>
                   <TableCell>
-                    {well.fields?.map((field) => (
-                      <div key={field.id} className="text-xs">
-                        {field.name}
+                    {well.fieldWells?.map((fieldWell) => (
+                      <div key={fieldWell.field.id} className="text-xs">
+                        {fieldWell.field.name}
                       </div>
                     )) || "-"}
                   </TableCell>

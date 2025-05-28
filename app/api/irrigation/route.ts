@@ -233,7 +233,7 @@ export async function POST(request: NextRequest) {
 
     // wellId belirlendi. Schema'da wellId zorunlu olduğu için kontrol ekle
     if (!wellId) {
-      return NextResponse.json({ error: "Kuyu bilgisi eksik." }, { status: 400 });
+      return NextResponse.json({ error: "Kuyu bilgisi eksik. Lütfen sulama yapılacak tarlaların en az birinin bir kuyuya bağlı olması gerekir." }, { status: 400 });
     }
 
     const result = await prisma.$transaction(async (tx) => {

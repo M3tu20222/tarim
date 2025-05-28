@@ -283,12 +283,19 @@ export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProp
 
     try {
       let totalIrrigatedArea = 0;
+      let foundWellId: string | null = null;
       const fieldDataForApi = data.fieldIrrigations
         .map((irrigation): FieldDetailForApi | null => {
           const field = fields.find((f) => f.id === irrigation.fieldId);
           if (!field) return null;
           const irrigatedArea = (field.size * irrigation.percentage) / 100;
           totalIrrigatedArea += irrigatedArea;
+
+          // Check if this field has a well associated with it
+          if (!foundWellId && field.fieldWells?.[0]?.well?.id) {
+            foundWellId = field.fieldWells[0].well.id;
+          }
+
           return {
             fieldId: field.id,
             percentage: irrigation.percentage,
@@ -299,6 +306,25 @@ export function IrrigationForm({ initialData, irrigationId }: IrrigationFormProp
           };
         })
         .filter((item): item is FieldDetailForApi => item !== null);
+
+      // If no well was found, show an error
+      if (!foundWellId) {
+        const fieldNames = data.fieldIrrigations
+          .map(irrigation => {
+            const field = fields.find(f => f.id === irrigation.fieldId);
+            return field ? field.name : 'Bilinmeyen tarla';
+          })
+          .join(', ');
+
+        toast({
+          title: "Kuyu Bağlantısı Eksik",
+          description: `Seçilen tarlalar (${fieldNames}) hiçbiri bir kuyuya bağlı değil. Lütfen önce tarlaları düzenleyerek kuyulara bağlayın veya kuyuya bağlı tarlalar seçin.`,
+          variant: "destructive",
+          duration: 8000
+        });
+        setLoadingSubmit(false);
+        return;
+      }
 
       if (totalIrrigatedArea <= 0 && data.fieldIrrigations.length > 0) {
         toast({ title: "Hata", description: "Toplam sulanan alan sıfırdan büyük olmalıdır.", variant: "destructive" });
