@@ -304,9 +304,9 @@ export function ProcessDetails({ process }: ProcessDetailsProps) {
                     <span className="font-bold">
                       {(() => {
                           // Tarla giderleri toplamı - Bu, toplam maliyeti temsil eder
-                          const fieldExpensesTotal = process.processCosts.reduce((total, cost) => {
+                          const fieldExpensesTotal = process.processCosts.reduce((total: number, cost: any) => {
                             const costTotal = cost.fieldExpenses?.reduce(
-                              (sum, exp) => sum + (exp.totalCost ?? 0),
+                              (sum: number, exp: any) => sum + (exp.totalCost ?? 0),
                               0
                             ) || 0;
                             return total + costTotal;
