@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react"; // useMemo import edildi
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -40,7 +40,6 @@ import { Slider } from "@/components/ui/slider";
 import { InventorySelector } from "@/components/inventory/inventory-selector";
 import { useAuth } from "@/components/auth-provider";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { InventoryGroup } from "@/components/processes/inventory-group"; // Yeni bileşen
 
 // Sezon tipi tanımı
 interface Season {
@@ -52,36 +51,17 @@ interface Season {
 // Envanter Kategorisi Tipleri (Prisma Enum ile eşleşmeli)
 type InventoryCategory = "SEED" | "FERTILIZER" | "PESTICIDE" | "FUEL" | "OTHER";
 
-// Envanter birim tipleri
-type Unit = "KG" | "TON" | "LITRE" | "ADET" | "CUVAL" | "BIDON" | "PAKET" | "METRE" | "METREKARE" | "DECARE" | "DONUM" | "HECTARE" | "DIGER";
-
 // Kategori adlarını Türkçeye çevirmek için bir yardımcı obje
 const categoryTranslations: Record<InventoryCategory, string> = {
   SEED: "Tohum",
   FERTILIZER: "Gübre",
   PESTICIDE: "İlaç",
-  FUEL: "Yakıt",
+  FUEL: "Yakıt", // Bu manuel eklenmeyecek ama çevirisi bulunsun
   OTHER: "Diğer"
 };
 
-// Birim adlarını Türkçeye çevirmek için bir yardımcı obje
-export const unitTranslations: Record<Unit, string> = { // Exported for InventoryGroup
-  KG: "kg",
-  TON: "ton",
-  LITRE: "litre",
-  ADET: "adet",
-  CUVAL: "çuval",
-  BIDON: "bidon",
-  PAKET: "paket",
-  METRE: "metre",
-  METREKARE: "m²",
-  DECARE: "dekar",
-  DONUM: "dönüm",
-  HECTARE: "hektar",
-  DIGER: "diğer"
-};
 
-// Form schema for validation
+// Partner schema for validation
 const formSchema = z.object({
   seasonId: z.string({
     required_error: "Sezon seçilmelidir.",
@@ -107,8 +87,18 @@ const formSchema = z.object({
       message: "İşlenen alan yüzdesi en fazla %100 olabilir.",
     }),
   description: z.string().optional(),
+  // equipmentId boş olabilir, bu yüzden optional ve string olmalı
   equipmentId: z.string().optional().nullable(),
-  // inventoryItems artık doğrudan form schema'sında değil, ayrı yönetilecek
+  inventoryItems: z
+    .array(
+      z.object({
+        inventoryId: z.string().min(1, "Envanter seçilmelidir."), // inventoryId boş olamaz
+        quantity: z.number().positive({
+          message: "Miktar pozitif bir sayı olmalıdır.",
+        }),
+      })
+    )
+    .optional(),
 });
 
 // İşlem tipleri
@@ -122,7 +112,7 @@ const processTypes = [
 ];
 
 interface ProcessFormProps {
-  initialData?: any;
+  initialData?: any; // Daha spesifik bir tip kullanmak daha iyi olabilir
 }
 
 // Helper function to get inventory category based on process type
@@ -134,10 +124,14 @@ const getCategoryForProcess = (processType: string): InventoryCategory | undefin
       return "FERTILIZER";
     case "SEEDING":
       return "SEED";
+    // Yakıt direkt olarak işlemle değil, ekipmanla ilişkili
+    // case "FUEL": // Eğer yakıtı da işlemle ilişkilendirmek isterseniz
+    //   return "FUEL";
     default:
-      return undefined;
+      return undefined; // Diğer işlem tipleri için belirli bir envanter kategorisi yok
   }
 };
+
 
 export function ProcessForm({ initialData }: ProcessFormProps = {}) {
   const router = useRouter();
@@ -152,70 +146,37 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
   const [selectedField, setSelectedField] = useState<any>(null);
   const [selectedEquipment, setSelectedEquipment] = useState<any>(null);
   const [activeEquipmentCategories, setActiveEquipmentCategories] = useState<InventoryCategory[]>([]);
-  
-  // Yeni envanter grup state'i
-  const [inventoryGroups, setInventoryGroups] = useState<Array<{
-    id: string; // Unique ID for the group in frontend
-    inventoryTypeId: string; // Bu, grubun genel envanter tipi seçimi olabilir (şimdilik kullanılmıyor ama tip uyumluluğu için tutuluyor)
-    totalQuantity: number;
-    unit: Unit;
-    category: InventoryCategory;
-    allocations: Array<{ // Her bir sahip için dağıtım ve seçilen envanter tipi
-      ownerId: string;
-      name: string;
-      percentage: number;
-      allocatedQuantity: number;
-      inventoryTypeId?: string; // Sahip için seçilen envanter tipi
-    }>;
-  }>>([]);
-
-  const [fieldOwnerships, setFieldOwnerships] = useState<Array<{ 
-    id: string; // Added id property
-    userId: string; 
-    name: string; 
-    percentage: number 
-  }>>([]);
-  const [inventoryTypes, setInventoryTypes] = useState<Array<{ 
-    id: string; 
-    name: string; 
-    category: InventoryCategory; 
-    unit: Unit;
-    ownerships: Array<{
-      id: string;
-      userId: string;
-      inventoryId: string; // Added missing property
-      shareQuantity: number;
-      user: {
-        id: string;
-        name: string;
-        email: string;
-      };
-    }>;
-  }>>([]);
-  
+  const [inventoryUsages, setInventoryUsages] = useState<Record<string, Array<{ inventoryId: string; quantity: string }>>>({});
   const [fuelAvailabilityError, setFuelAvailabilityError] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null); // Genel form hataları için
 
+  // Form oluştur
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
+    // defaultValues initialData'dan türetilmeli, useEffect içinde reset ile yönetilecek
   });
 
-  // Tarlaları, çalışanları, sahipleri, ekipmanları, sezonları ve envanter tiplerini getir
+  // İşlem tipini izle (belki ileride farklı mantıklar için gerekebilir)
+  const currentProcessType = form.watch("type");
+  // const inventoryCategory = getCategoryForProcess(currentProcessType); // Bu artık UI'da doğrudan kart oluşturmayacak
+
+  // Tarlaları, çalışanları, sahipleri, ekipmanları ve sezonları getir
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [fieldsRes, workersRes, ownersRes, equipmentRes, seasonsRes, inventoryTypesRes] = await Promise.all([
+        const [fieldsRes, workersRes, ownersRes, equipmentRes, seasonsRes] = await Promise.all([
+          // bilgi: fieldOwnerShip - Tüm tarlaları getirmek için fetchAll=true eklendi.
+          // Tarla verisini çekerken sahip bilgilerini de iste (InventorySelector için gerekli)
           fetch("/api/fields?includeOwnerships=true&fetchAll=true"),
           fetch("/api/users?role=WORKER"),
           fetch("/api/users/owners"),
           fetch("/api/equipment?status=ACTIVE"),
-          fetch("/api/seasons?active=true"),
-          fetch("/api/inventory?fetchAll=true") // Tüm envanter öğelerini getir
+          fetch("/api/seasons?active=true")
         ]);
 
         if (fieldsRes.ok) {
             const responseData = await fieldsRes.json();
-            setFields(responseData.data || []);
+            setFields(responseData.data || []); // Extract the 'data' array
         }
         if (workersRes.ok) setWorkers(await workersRes.json());
         if (ownersRes.ok) setOwners(await ownersRes.json());
@@ -223,13 +184,10 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
         if (seasonsRes.ok) {
             const seasonsData = await seasonsRes.json();
             setSeasons(seasonsData);
+             // Yeni formda ve tek aktif sezon varsa varsayılan yap
             if (seasonsData.length === 1 && !initialData) {
                 form.setValue("seasonId", seasonsData[0].id, { shouldValidate: true });
             }
-        }
-        if (inventoryTypesRes.ok) {
-            const inventoryTypesData = await inventoryTypesRes.json();
-            setInventoryTypes(inventoryTypesData.data || []); // .data özelliğini kullan
         }
 
       } catch (err) {
@@ -243,7 +201,7 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
     };
 
     fetchData();
-  }, [toast, initialData, form]);
+  }, [toast, initialData, form]); // form'u dependency ekle
 
   // Formu initialData ile doldur (Edit modu) veya varsayılan değerleri ayarla (New modu)
   useEffect(() => {
@@ -251,39 +209,18 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
       form.reset({
         ...initialData,
         date: initialData.date ? new Date(initialData.date) : new Date(),
+        // equipmentId null ise 'none' veya boş string olarak ayarla
         equipmentId: initialData.equipmentId || null,
+        // inventoryItems form state'ine doğrudan eklenmiyor, ayrı yönetiliyor.
       });
-      
-      // Envanter gruplarını yükle (eğer varsa)
-      if (initialData.inventoryDistribution) {
-        try {
-          const distribution = JSON.parse(initialData.inventoryDistribution);
-          const loadedGroups = Object.keys(distribution).map(invTypeId => {
-            const inventoryType = inventoryTypes.find(it => it.id === invTypeId);
-            const category = inventoryType ? inventoryType.category : "OTHER";
-            const allocations = distribution[invTypeId].distributions.map((dist: any) => ({
-              ownerId: dist.ownerId,
-              name: owners.find(o => o.id === dist.ownerId)?.name || "Bilinmeyen Sahip", // Sahip adını bul
-              percentage: owners.find(o => o.id === dist.ownerId)?.percentage || 0, // Sahip yüzdesini bul
-              allocatedQuantity: dist.quantity,
-              inventoryTypeId: dist.inventoryTypeId || "" // Yüklenen veriden inventoryTypeId'yi al
-            }));
-            
-            return {
-              id: invTypeId,
-              inventoryTypeId: invTypeId, // Bu, grubun genel envanter tipi seçimi olabilir
-              totalQuantity: distribution[invTypeId].total,
-              unit: distribution[invTypeId].unit,
-              category,
-              allocations // Yüklenen dağıtımları ekle
-            };
-          });
-          setInventoryGroups(loadedGroups);
-        } catch (e) {
-          console.error("Envanter dağıtım verisi okunamadı", e);
-        }
-      }
+      // inventoryItems state'ini initialData.inventoryUsages ile güncelle
+      // console.log("[ProcessForm] Initial Inventory Usages:", initialData?.inventoryUsages); // Log kaldırıldı
+
+      // initialData ve selectedEquipment yüklendiğinde inventoryUsages'ı ayarla
+      // Bu useEffect, selectedEquipment değiştiğinde de çalışacak (aşağıda ayrı bir tane var)
+      // Şimdilik bu kısmı selectedEquipment useEffect'ine taşıyalım.
     } else {
+      // Yeni form için varsayılan değerler
       form.reset({
         seasonId: seasons.length === 1 ? seasons[0].id : "",
         fieldId: "",
@@ -293,31 +230,21 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
         processedPercentage: 100,
         description: "",
         equipmentId: null,
+        inventoryItems: [], // Bu schema'da kalabilir ama UI'da kullanılmayacak
       });
-      setInventoryGroups([]); // Yeni formda grupları temizle
+      setInventoryUsages({});
+      setActiveEquipmentCategories([]);
     }
   }, [initialData, form, user?.id, seasons]);
 
-  // Seçilen tarla değiştiğinde state'i ve sahiplik bilgilerini güncelle
+  // Seçilen tarla değiştiğinde state'i güncelle
   useEffect(() => {
     const fieldId = form.watch("fieldId");
     const field = fields.find((f) => f.id === fieldId);
     setSelectedField(field || null);
-
-    if (field && field.owners) {
-      const ownerships = field.owners.map((owner: any) => ({
-        id: owner.userId, // Map userId to id
-        userId: owner.userId,
-        name: owner.user.name,
-        percentage: owner.percentage
-      }));
-      setFieldOwnerships(ownerships);
-    } else {
-      setFieldOwnerships([]);
-    }
   }, [form.watch("fieldId"), fields]);
 
-  // Seçilen ekipman değiştiğinde aktif envanter kategorilerini güncelle
+  // Seçilen ekipman değiştiğinde state'i ve envanter kullanımlarını güncelle
   useEffect(() => {
     const equipmentId = form.watch("equipmentId");
     const currentSelectedEquipment = equipment.find((e) => e.id === equipmentId);
@@ -328,40 +255,79 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
         .map((cap: any) => cap.inventoryCategory)
         .filter((category: InventoryCategory) => category !== "FUEL"); // Yakıtı hariç tut
       setActiveEquipmentCategories(capabilities);
+
+      // InitialData'dan gelen veya mevcut envanter kullanımlarını ayarla/filtrele
+      const newUsages: Record<string, Array<{ inventoryId: string; quantity: string }>> = {};
+      if (initialData?.inventoryUsages) {
+        initialData.inventoryUsages.forEach((usage: any) => {
+          const category = usage.inventory?.category;
+          // Sadece aktif ve yakıt olmayan kategoriler için
+          if (category && capabilities.includes(category)) {
+            if (!newUsages[category]) {
+              newUsages[category] = [];
+            }
+            newUsages[category].push({
+              inventoryId: usage.inventoryId || usage.inventory?.id,
+              quantity: String(usage.usedQuantity || usage.quantity || 0),
+            });
+          }
+        });
+      }
+      // Eğer initialData yoksa veya equipment değişmişse,
+      // sadece yeni aktif kategoriler için boş diziler oluştur
+      capabilities.forEach(cat => {
+        if (!newUsages[cat]) {
+          newUsages[cat] = [];
+        }
+      });
+      setInventoryUsages(newUsages);
+
     } else {
       setActiveEquipmentCategories([]);
+      setInventoryUsages({}); // Ekipman yoksa veya yeteneği yoksa envanterleri temizle
     }
-  }, [form.watch("equipmentId"), equipment]);
+  }, [form.watch("equipmentId"), equipment, initialData]);
 
-  // Envanter grubu ekle
-  const addInventoryGroup = () => {
-    const processType = form.watch("type");
-    const category = getCategoryForProcess(processType) || "OTHER";
-    
-    const newGroup = {
-      id: Date.now().toString(), // Geçici benzersiz ID
-      inventoryTypeId: "", // Başlangıçta boş
-      totalQuantity: 0,
-      unit: "KG" as Unit, // Varsayılan birim
-      category,
-      allocations: [] // Yeni grup için boş dağıtım dizisi
-    };
-    setInventoryGroups([...inventoryGroups, newGroup]);
-  };
+  // InventorySelector'a gönderilecek ownerIds dizisini memoize et
+  const selectedFieldOwnerIds = useMemo(() => {
+    // selectedField null veya undefined ise veya owners yoksa boş dizi döndür
+    if (!selectedField || !selectedField.owners) {
+      return [];
+    }
+    return selectedField.owners.map((o: any) => o.userId);
+  }, [selectedField]); // Sadece selectedField değiştiğinde yeniden hesapla
 
-  // Envanter grubunu kaldır
-  const removeInventoryGroup = (groupId: string) => {
-    setInventoryGroups(inventoryGroups.filter(group => group.id !== groupId));
-  };
 
-  // Envanter grubunu güncelle (totalQuantity, unit, veya allocations)
-  const updateInventoryGroup = (groupId: string, updatedFields: Partial<typeof inventoryGroups[0]>) => {
-    setInventoryGroups(inventoryGroups.map(group => {
-      if (group.id === groupId) {
-        return { ...group, ...updatedFields };
-      }
-      return group;
+  // Dinamik envanter kullanımı için fonksiyonlar
+  const addUsageItem = (category: InventoryCategory) => {
+    setInventoryUsages((prevUsages) => ({
+      ...prevUsages,
+      [category]: [...(prevUsages[category] || []), { inventoryId: "", quantity: "" }],
     }));
+  };
+
+  const removeUsageItem = (category: InventoryCategory, index: number) => {
+    setInventoryUsages((prevUsages) => ({
+      ...prevUsages,
+      [category]: (prevUsages[category] || []).filter((_, i) => i !== index),
+    }));
+  };
+
+  const updateUsageItem = (
+    category: InventoryCategory,
+    index: number,
+    field: "inventoryId" | "quantity",
+    value: string
+  ) => {
+    setInventoryUsages((prevUsages) => {
+      const newItems = [...(prevUsages[category] || [])];
+      newItems[index] = { ...newItems[index], [field]: value };
+      return { ...prevUsages, [category]: newItems };
+    });
+
+    // Form state'ini de güncellemek validasyon için önemli olabilir
+    // Özellikle quantity'yi number'a çevirip form state'ine öyle yazmak gerekebilir
+    // form.setValue(`inventoryItems.${index}.${field}`, field === 'quantity' ? Number(value) || 0 : value, { shouldValidate: true });
   };
 
   // Form gönderimi
@@ -370,56 +336,22 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
     setError(null);
     setFuelAvailabilityError(null);
 
-    // 1. Envanter dağıtım verisini hazırla (JSON olarak saklanacak)
-    const inventoryDistributionData: Record<string, {
-      total: number;
-      unit: Unit;
-      distributions: Array<{
-        ownerId: string;
-        quantity: number;
-      }>;
-    }> = {};
-
-  const finalInventoryItemsForBackend: { 
-    inventoryId: string; 
-    quantity: number; 
-    ownerId: string;
-    inventoryTypeId: string; // Added to track specific inventory type
-  }[] = [];
-
-    for (const group of inventoryGroups) {
-      if (group.totalQuantity > 0 && group.allocations.length > 0) { // inventoryTypeId kontrolü kaldırıldı
-        const distributionsForGroup = group.allocations.map(allocation => ({
-          ownerId: allocation.ownerId,
-          quantity: allocation.allocatedQuantity,
-          inventoryTypeId: allocation.inventoryTypeId || "" // Sahip için seçilen envanter tipi
-        }));
-
-        // inventoryDistributionData'yı her bir envanter tipi için değil, her bir grup için oluştur
-        // Bu kısım, backend'in beklediği formata göre ayarlanmalı.
-        // Eğer backend her bir envanter tipi için toplam bekliyorsa, bu kısım yeniden düşünülmeli.
-        // Şimdilik, her bir grubun toplamını ve dağıtımlarını JSON olarak saklayalım.
-        // Backend'in bu JSON'ı ayrıştırması gerekecek.
-        inventoryDistributionData[group.id] = { // Grubun benzersiz ID'sini kullan
-          total: group.totalQuantity,
-          unit: group.unit,
-          distributions: distributionsForGroup
-        };
-
-        // Backend'e gönderilecek InventoryUsage formatı için
-        // Her bir sahip için ayrı bir kullanım kaydı oluşturulacak
-        group.allocations.forEach(allocation => {
-          if (allocation.inventoryTypeId) { // Sadece envanter tipi seçilmişse ekle
-            finalInventoryItemsForBackend.push({
-              inventoryId: allocation.inventoryTypeId, // Doğru: Sahibin seçtiği envanter tipinin ID'si
-              quantity: allocation.allocatedQuantity,
-              ownerId: allocation.ownerId,
-              inventoryTypeId: allocation.inventoryTypeId // Redundant ama tutarlılık için
+    // 1. Kullanılacak Envanterleri Hazırla
+    const finalInventoryItems: { inventoryId: string; quantity: number }[] = [];
+    activeEquipmentCategories.forEach((category) => {
+      if (inventoryUsages[category]) {
+        inventoryUsages[category].forEach((item) => {
+          if (item.inventoryId && Number(item.quantity) > 0) {
+            finalInventoryItems.push({
+              inventoryId: item.inventoryId,
+              quantity: Number(item.quantity),
+              // API'niz her bir usage için kategori bilgisi bekliyorsa:
+              // category: category,
             });
           }
         });
       }
-    }
+    });
 
     // 2. Yakıt Kontrolü (Ekipman seçiliyse ve yakıt tüketimi varsa)
     if (selectedEquipment && selectedField && selectedEquipment.fuelConsumptionPerDecare > 0) {
@@ -429,18 +361,19 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
           values.processedPercentage) /
         100;
       const fuelCategory = "FUEL";
-      const fieldOwners = selectedField.owners; // selectedField.owners zaten mevcut
+      const fieldOwners = selectedField.owners;
 
       let totalAvailableFuel = 0;
       try {
+        // Tüm sahiplerin yakıtını tek seferde kontrol et (API destekliyorsa daha iyi olur)
         for (const owner of fieldOwners) {
           const ownerInventoryResponse = await fetch(
             `/api/inventory?category=${fuelCategory}&userId=${owner.userId}`,
             { headers: { "x-user-id": user?.id || "", "x-user-role": user?.role || "" } }
           );
           if (ownerInventoryResponse.ok) {
-            const ownerInventoryData = await ownerInventoryResponse.json();
-            totalAvailableFuel += (ownerInventoryData.data || []).reduce(
+            const ownerInventory = await ownerInventoryResponse.json();
+            totalAvailableFuel += ownerInventory.reduce(
               (sum: number, item: any) => sum + item.totalQuantity, 0
             );
           } else {
@@ -466,9 +399,9 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
     // 3. API İsteği için Veriyi Hazırla
     const formData = {
       ...values,
+      // equipmentId 'none' veya null ise API'ye null gönder
       equipmentId: values.equipmentId === 'none' ? null : values.equipmentId,
-      inventoryItems: finalInventoryItemsForBackend, // Backend'e gönderilecek envanter listesi
-      inventoryDistribution: JSON.stringify(inventoryDistributionData), // JSON olarak saklanacak dağıtım verisi
+      inventoryItems: finalInventoryItems, // Hazırlanan envanter listesi
     };
 
     // 4. API İsteği
@@ -492,7 +425,7 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
           description: `İşlem başarıyla ${initialData ? 'güncellendi' : 'eklendi'}.`,
         });
         router.push("/dashboard/owner/processes");
-        router.refresh();
+        router.refresh(); // Sayfayı yenilemek yerine datayı yeniden fetch etmek daha iyi olabilir
       } else {
         const errorData = await response.json();
         console.error("API Error:", errorData);
@@ -515,6 +448,7 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
       setIsSubmitting(false);
     }
   }
+
 
   return (
     <Form {...form}>
@@ -544,7 +478,7 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
                 <FormLabel>Sezon</FormLabel>
                 <Select
                   onValueChange={field.onChange}
-                  value={field.value || ""}
+                  value={field.value || ""} // Kontrollü bileşen
                   disabled={seasons.length === 0}
                 >
                   <FormControl>
@@ -658,7 +592,7 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
                   </FormControl>
                   <SelectContent>
                     {[...owners, ...workers]
-                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .sort((a, b) => a.name.localeCompare(b.name)) // İsim sırasına göre sırala
                       .map((person) => (
                        <SelectItem key={person.id} value={person.id}>
                          {person.name} {owners.some(o => o.id === person.id) ? '(Sahip)' : '(Çalışan)'}
@@ -681,8 +615,8 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
                 <FormControl>
                   <Slider
                     min={1} max={100} step={1}
-                    value={[Number(field.value || 0)]}
-                    onValueChange={(values) => field.onChange(values[0])}
+                    value={[Number(field.value || 0)]} // Slider'a number[] tipinde değer ver
+                    onValueChange={(values) => field.onChange(values[0])} // Gelen değeri number olarak al
                   />
                 </FormControl>
                 <FormDescription>
@@ -740,44 +674,78 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
           )}
         />
 
-        {/* Kullanılan Envanterler - Yeni Grup Yapısı */}
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>Kullanılan Envanterler</span>
-              <Button type="button" variant="outline" size="sm" onClick={addInventoryGroup} disabled={!selectedField}>
-                <Plus className="mr-2 h-4 w-4" /> Yeni Envanter Grubu Ekle
-              </Button>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {inventoryGroups.length === 0 ? (
-              <div className="flex h-24 items-center justify-center rounded-md border border-dashed">
-                <p className="text-sm text-muted-foreground">
-                  Henüz envanter grubu eklenmemiş.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {inventoryGroups.map(group => {
-                  return (
-                    <InventoryGroup
-                      key={group.id}
-                      group={group}
-                      inventoryTypes={inventoryTypes}
-                      selectedEquipment={selectedEquipment}
-                      activeEquipmentCategories={activeEquipmentCategories}
-                      owners={fieldOwnerships}
-                      // selectedInventoryOwnerships prop'u artık InventoryGroup içinde kullanılmayacak
-                      onChange={updateInventoryGroup}
-                      onRemove={removeInventoryGroup}
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {/* Dinamik Envanter Kullanım Kartları */}
+        {selectedEquipment && activeEquipmentCategories.length > 0 && (
+          activeEquipmentCategories.map((category) => (
+            <Card key={category} className="mt-6">
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>Kullanılan {categoryTranslations[category] || category}</span>
+                  <Button type="button" variant="outline" size="sm" onClick={() => addUsageItem(category)}>
+                    <Plus className="mr-2 h-4 w-4" /> {categoryTranslations[category] || category} Ekle
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {(inventoryUsages[category]?.length || 0) === 0 ? (
+                    <div className="flex h-24 items-center justify-center rounded-md border border-dashed">
+                      <p className="text-sm text-muted-foreground">
+                        Henüz {categoryTranslations[category]?.toLowerCase() || category.toLowerCase()} eklenmemiş.
+                      </p>
+                    </div>
+                  ) : (
+                    inventoryUsages[category]?.map((item, index) => (
+                      <div key={`${category}-${index}`} className="grid grid-cols-1 gap-4 md:grid-cols-3 border p-4 rounded-md items-end">
+                        <div className="md:col-span-2">
+                          <FormLabel>{categoryTranslations[category] || category} Envanteri</FormLabel>
+                          <InventorySelector
+                            onSelect={(id) => updateUsageItem(category, index, "inventoryId", id)}
+                            selectedId={item.inventoryId}
+                            category={category} // Dinamik kategori
+                            ownerIds={selectedFieldOwnerIds}
+                            required={true}
+                          />
+                        </div>
+                        <div className="flex items-end gap-2">
+                          <div className="flex-1">
+                            <FormLabel>Miktar</FormLabel>
+                            <Input
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              value={item.quantity}
+                              onChange={(e) => updateUsageItem(category, index, "quantity", e.target.value)}
+                              placeholder="0.00"
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="icon"
+                            onClick={() => removeUsageItem(category, index)}
+                          >
+                            <Trash className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+        {selectedEquipment && activeEquipmentCategories.length === 0 && (
+            <Alert variant="default" className="mt-6">
+                <AlertTitle>Bilgi</AlertTitle>
+                <AlertDescription>
+                    Seçilen ekipmanın yakıt dışında manuel olarak eklenebilecek bir envanter yeteneği bulunmamaktadır.
+                    Yakıt tüketimi otomatik olarak hesaplanacaktır.
+                </AlertDescription>
+            </Alert>
+        )}
+
 
         {/* Butonlar */}
         <div className="flex justify-end gap-4">

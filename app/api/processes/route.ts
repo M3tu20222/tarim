@@ -146,10 +146,11 @@ export async function POST(request: Request) {
       date,
       description,
       processedPercentage,
-      equipmentId, // Ekipman ID'si
-      inventoryItems,
+      equipmentId,
+      inventoryItems, // { inventoryId, quantity, ownerId }[]
+      inventoryDistribution, // JSON string
       seasonId,
-      workerId: selectedWorkerId, // Formdan gelen workerId'yi al (opsiyonel)
+      workerId: selectedWorkerId,
     } = await request.json();
 
     // Veri doğrulama
@@ -309,42 +310,82 @@ export async function POST(request: Request) {
           equipmentUsageRecords.push(equipmentUsage);
         }
 
-        // 3. Envanter kullanımlarını kaydet (ve yakıt kullanımlarını da burada topla)
-        const inventoryUsageRecords: any[] = []; // Tip any olarak değiştirildi veya uygun bir tip tanımlanmalı
+        // 3. Envanter kullanımlarını kaydet (sahip bazlı düşüm ile)
+        const inventoryUsageRecords: any[] = [];
         if (inventoryItems && inventoryItems.length > 0) {
           for (const usage of inventoryItems) {
-            // Envanter bilgilerini al
+            const { inventoryId, quantity, ownerId } = usage;
+
+            // 1. Envanterin genel bilgilerini al
             const inventory = await tx.inventory.findUnique({
-              where: { id: usage.inventoryId },
+              where: { id: inventoryId },
+              select: { id: true, name: true, totalQuantity: true, unit: true },
             });
 
             if (!inventory) {
-              throw new Error(`Envanter bulunamadı: ${usage.inventoryId}`);
+              throw new Error(`Envanter bulunamadı: ${inventoryId}`);
             }
 
-            // Envanter kullanımını kaydet
-            const inventoryUsage = await tx.inventoryUsage.create({
+            // 2. Sahibin bu envanterdeki payını bul
+            const ownerInventoryShare = await tx.inventoryOwnership.findFirst({
+              where: {
+                inventoryId: inventoryId,
+                userId: ownerId,
+              },
+              select: { id: true, shareQuantity: true, user: { select: { name: true } } },
+            });
+
+            if (!ownerInventoryShare) {
+              throw new Error(`Sahip (${ownerId}) için ${inventory.name} envanteri bulunamadı.`);
+            }
+
+            // 3. Sahibin payında yeterli miktar var mı kontrol et
+            if (ownerInventoryShare.shareQuantity < quantity) {
+              throw new Error(
+                `Sahip ${ownerInventoryShare.user.name}'in ${inventory.name} envanterinde yeterli miktar bulunmuyor. ` +
+                `Gereken: ${quantity} ${inventory.unit}, Mevcut: ${ownerInventoryShare.shareQuantity} ${inventory.unit}.`
+              );
+            }
+
+            // 4. Genel envanterde yeterli miktar var mı kontrol et (redundant ama güvenlik için)
+            if (inventory.totalQuantity < quantity) {
+              throw new Error(
+                `Genel ${inventory.name} stoğu yetersiz. Gereken: ${quantity} ${inventory.unit}, Mevcut: ${inventory.totalQuantity} ${inventory.unit}.`
+              );
+            }
+
+            // 5. Envanter kullanımını kaydet (kullanan kişi envanterin sahibi)
+            const newInventoryUsage = await tx.inventoryUsage.create({
               data: {
                 processId: process.id,
-                inventoryId: usage.inventoryId,
-                usedQuantity: usage.quantity,
+                inventoryId: inventoryId,
+                usedQuantity: quantity,
                 usageType: "PROCESSING",
-                usedById: userId,
+                usedById: ownerId, // Envanteri kullanan kişi (sahibi)
                 fieldId,
               },
             });
+            inventoryUsageRecords.push(newInventoryUsage);
 
-            // Envanter miktarını güncelle
-            await tx.inventory.update({
-              where: { id: usage.inventoryId },
+            // 6. Sahibin envanter payını güncelle
+            await tx.inventoryOwnership.update({
+              where: { id: ownerInventoryShare.id },
               data: {
-                totalQuantity: {
-                  decrement: usage.quantity,
+                shareQuantity: {
+                  decrement: quantity,
                 },
               },
             });
 
-            inventoryUsageRecords.push(inventoryUsage);
+            // 7. Genel envanter miktarını güncelle
+            await tx.inventory.update({
+              where: { id: inventoryId },
+              data: {
+                totalQuantity: {
+                  decrement: quantity,
+                },
+              },
+            });
           }
         }
 
@@ -445,7 +486,17 @@ export async function POST(request: Request) {
       }
     }
 
-        // 4. Maliyet hesapla
+        // 4. Proses kaydına inventoryDistribution JSON'ını ekle
+        if (inventoryDistribution) {
+          await tx.process.update({
+            where: { id: process.id },
+            data: {
+              inventoryDistribution: inventoryDistribution, // JSON string olarak sakla
+            },
+          });
+        }
+
+        // 5. Maliyet hesapla
         // İşçilik maliyeti (örnek olarak sabit bir değer - Geliştirilmeli)
         const laborCost = 100; // TODO: Gerçek işçilik maliyeti hesaplaması eklenmeli
 
@@ -462,10 +513,9 @@ export async function POST(request: Request) {
           ...new Set(
             inventoryUsageRecords
               .map((usage) => usage.inventoryId)
-              .filter((id): id is string => !!id) // null/undefined filtrele ve tip güvenliği sağla
+              .filter((id): id is string => !!id)
           ),
         ];
-        console.log("Unique Inventory IDs:", uniqueInventoryIds); // Log
 
         // 2. İlgili Envanter kayıtlarını (costPrice ile) ve Alış İşlemlerini (purchaseId için) getir
         let inventoryMap = new Map<string, { costPrice: number | null }>(); // inventoryId -> { costPrice }

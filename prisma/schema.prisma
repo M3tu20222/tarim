@@ -284,6 +284,7 @@ model Inventory {
   category      InventoryCategory
   totalQuantity Float
   unit          Unit              @default(KG) // String yerine Unit enum kullanacağız
+  totalStock    Float?            @default(0)  // Yeni eklenen toplam stok alanı
   purchaseDate  DateTime?
   expiryDate    DateTime?
   status        InventoryStatus   @default(AVAILABLE)
@@ -533,10 +534,11 @@ model Process {
   seasonId String? @db.ObjectId
 
   // İlişkiler
-  inventoryUsages InventoryUsage[]
-  equipmentUsages EquipmentUsage[] // YENİ: Ekipman kullanımları
-  processCosts    ProcessCost[] // YENİ: İşlem maliyetleri
-  notifications   Notification[] // YENİ: Bildirimler
+  inventoryUsages       InventoryUsage[]
+  equipmentUsages       EquipmentUsage[] // YENİ: Ekipman kullanımları
+  processCosts          ProcessCost[] // YENİ: İşlem maliyetleri
+  notifications         Notification[] // YENİ: Bildirimler
+  inventoryDistribution Json? // YENİ: Envanter dağıtım verisi (JSON olarak)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
