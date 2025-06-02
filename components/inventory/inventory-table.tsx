@@ -63,8 +63,8 @@ export function InventoryTable() {
       if (!response.ok) {
         throw new Error("Envanter verileri alınamadı");
       }
-      const data = await response.json();
-      setInventory(data);
+      const result = await response.json();
+      setInventory(result.data);
     } catch (error) {
       console.error("Error fetching inventory:", error);
       toast({

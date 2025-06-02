@@ -732,8 +732,8 @@ export async function POST(request: Request) {
     console.error("Error creating process:", error);
     return NextResponse.json(
       {
-        error:
-          "İşlem oluşturulurken bir hata oluştu: " + (error as Error).message,
+        error: "İşlem oluşturulurken bir hata oluştu. Lütfen tekrar deneyin.",
+        details: (error as Error).message, // Detayları ayrı bir alanda gönder
       },
       { status: 500 }
     );
