@@ -373,25 +373,25 @@ export async function POST(request: Request) {
                 });
                 inventoryUsageRecords.push(newInventoryUsage);
 
-                // 6. Sahibin envanter payını güncelle
-                await tx.inventoryOwnership.update({
-                  where: { id: ownerInventoryShare.id },
-                  data: {
-                    shareQuantity: {
-                      decrement: quantity,
-                    },
+            // 6. Sahibin envanter payını ve genel envanter miktarını güncelle
+            await Promise.all([
+              tx.inventoryOwnership.update({
+                where: { id: ownerInventoryShare.id },
+                data: {
+                  shareQuantity: {
+                    decrement: quantity,
                   },
-                });
-
-                // 7. Genel envanter miktarını güncelle
-                await tx.inventory.update({
-                  where: { id: inventoryId },
-                  data: {
-                    totalQuantity: {
-                      decrement: quantity,
-                    },
+                },
+              }),
+              tx.inventory.update({
+                where: { id: inventoryId },
+                data: {
+                  totalQuantity: {
+                    decrement: quantity,
                   },
-                });
+                },
+              }),
+            ]);
               }
             }
 
@@ -459,38 +459,35 @@ export async function POST(request: Request) {
                     remainingOwnerShareToDeduct
                   );
 
-                  // Envanter kullanımını kaydet
-                  const fuelUsageRecord = await tx.inventoryUsage.create({ // Değişken tanımlandı
-                    data: {
-                      processId: process.id,
-                      inventoryId: inventory.id,
-                      usedQuantity: deductionAmount,
-                      usageType: "PROCESSING", // Yakıt kullanımı da bir işlem parçası
-                      usedById: ownerInfo.userId, // Yakıtın sahibi
-                  fieldId, // İşlemin yapıldığı tarla
-                },
-              });
-
-              // Envanter miktarını güncelle
-              const updatedInventory = await tx.inventory.update({
-                where: { id: inventory.id },
-                    data: {
-                      totalQuantity: {
-                        decrement: deductionAmount,
+                  // Envanter kullanımını kaydet ve envanter miktarını güncelle
+                  const [fuelUsageRecord, updatedInventory] = await Promise.all([
+                    tx.inventoryUsage.create({
+                      data: {
+                        processId: process.id,
+                        inventoryId: inventory.id,
+                        usedQuantity: deductionAmount,
+                        usageType: "PROCESSING", // Yakıt kullanımı da bir işlem parçası
+                        usedById: ownerInfo.userId, // Yakıtın sahibi
+                        fieldId, // İşlemin yapıldığı tarla
                       },
-                },
-              });
+                    }),
+                    tx.inventory.update({
+                      where: { id: inventory.id },
+                      data: {
+                        totalQuantity: {
+                          decrement: deductionAmount,
+                        },
+                      },
+                    }),
+                  ]);
 
-              // Envanter miktarını güncelle (Bu zaten yukarıda yapılıyor, tekrar gerek yok)
-              // const updatedInventory = await tx.inventory.update({ ... });
+                  // Yakıt kullanım kaydını maliyet hesaplaması için listeye ekle
+                  inventoryUsageRecords.push(fuelUsageRecord);
 
-              // Yakıt kullanım kaydını maliyet hesaplaması için listeye ekle
-              inventoryUsageRecords.push(fuelUsageRecord); // Tanımlanan değişken kullanıldı
-
-              remainingOwnerShareToDeduct -= deductionAmount;
+                  remainingOwnerShareToDeduct -= deductionAmount;
+                }
+              }
             }
-          }
-        }
 
             // 4. Proses kaydına inventoryDistribution JSON'ını ekle
             if (inventoryDistribution) {
