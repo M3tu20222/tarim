@@ -515,12 +515,13 @@ model InventoryUsage {
 
 // İşlemler (Tarla, Sulama, vb.) - Güncellendi
 model Process {
-  id          String      @id @default(auto()) @map("_id") @db.ObjectId
+  id          String        @id @default(auto()) @map("_id") @db.ObjectId
   type        ProcessType
-  field       Field?      @relation(fields: [fieldId], references: [id], onDelete: Cascade) // İlişki isteğe bağlı yapıldı (?) ve onDelete: Cascade eklendi
-  fieldId     String?     @db.ObjectId // Alan isteğe bağlı yapıldı (?)
-  worker      User        @relation(fields: [workerId], references: [id])
-  workerId    String      @db.ObjectId
+  status      ProcessStatus @default(DRAFT) // YENİ: İşlem durumu
+  field       Field?        @relation(fields: [fieldId], references: [id], onDelete: Cascade) // İlişki isteğe bağlı yapıldı (?) ve onDelete: Cascade eklendi
+  fieldId     String?       @db.ObjectId // Alan isteğe bağlı yapıldı (?)
+  worker      User          @relation(fields: [workerId], references: [id])
+  workerId    String        @db.ObjectId
   date        DateTime
   description String?
 
@@ -984,6 +985,14 @@ enum ProcessType {
   PESTICIDE
   HARVESTING
   OTHER
+}
+
+// YENİ: İşlem Durumu Enum
+enum ProcessStatus {
+  DRAFT
+  PENDING_INVENTORY_EQUIPMENT
+  FINALIZED
+  CANCELLED
 }
 
 // YENİ: Bildirim Türleri Genişletildi

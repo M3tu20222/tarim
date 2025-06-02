@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import type { ProcessType, Unit } from "@prisma/client";
+import type { ProcessType, Unit, ProcessStatus } from "@prisma/client"; // ProcessStatus eklendi
 
-// Tüm işlemleri getir
+// Tüm işlemleri getir (GET metodu aynı kalacak)
 export async function GET(request: Request) {
   try {
     const userId = request.headers.get("x-user-id");
@@ -22,6 +22,7 @@ export async function GET(request: Request) {
     const seasonIdParam = searchParams.get("seasonId");
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
+    const status = searchParams.get("status"); // Yeni: Status filtresi
 
     // Filtre oluştur
     const filter: any = {};
@@ -39,6 +40,9 @@ export async function GET(request: Request) {
         gte: new Date(startDate),
         lte: new Date(endDate),
       };
+    }
+    if (status) { // Yeni: Status filtresi eklendi
+      filter.status = status;
     }
 
     // Kullanıcı rolüne göre filtreleme
@@ -127,7 +131,7 @@ export async function GET(request: Request) {
   }
 }
 
-// Yeni işlem oluştur (POST metodu aynı kalıyor)
+// Yeni işlem başlat (POST /api/processes/initiate)
 export async function POST(request: Request) {
   try {
     const userId = request.headers.get("x-user-id");
@@ -146,9 +150,6 @@ export async function POST(request: Request) {
       date,
       description,
       processedPercentage,
-      equipmentId,
-      inventoryItems, // { inventoryId, quantity, ownerId }[]
-      inventoryDistribution, // JSON string
       seasonId,
       workerId: selectedWorkerId,
     } = await request.json();
@@ -161,27 +162,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Tarla bilgilerini al (Ortaklık yüzdesi ile birlikte)
+    // Tarla bilgilerini al
     const field = await prisma.field.findUnique({
       where: { id: fieldId },
-      include: {
-        owners: {
-          // FieldOwnership[]
-          select: {
-            // Sadece gerekli alanları seçelim
-            userId: true,
-            percentage: true, // Ortaklık yüzdesini ekle
-            user: {
-              // Kullanıcı bilgilerini de dahil et
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-          },
-        },
-      },
+      select: { id: true, size: true }, // Sadece gerekli alanları al
     });
 
     if (!field) {
@@ -207,7 +191,126 @@ export async function POST(request: Request) {
       }
     }
 
-    // 1. Ekipman bilgisini al
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY_MS = 100;
+    let retries = 0;
+    let process;
+
+    while (retries < MAX_RETRIES) {
+      try {
+        process = await prisma.$transaction(async (tx) => {
+          // İşlem kaydı oluştur (DRAFT durumunda)
+          return await tx.process.create({
+            data: {
+              fieldId,
+              workerId: selectedWorkerId || userId,
+              seasonId: seasonId || activeSeason!.id,
+              type: type as ProcessType,
+              date: new Date(date),
+              description,
+              totalArea,
+              processedArea,
+              processedPercentage,
+              status: "DRAFT" as ProcessStatus, // Başlangıç durumu DRAFT
+            },
+          });
+        }, { timeout: 10000 }); // Daha kısa timeout
+        break;
+      } catch (error: any) {
+        console.error(`Initiate process transaction attempt ${retries + 1} failed:`, error);
+        if (
+          error.code === 'P2034' ||
+          (error instanceof Error && (error.message.includes('write conflict') || error.message.includes('deadlock')))
+        ) {
+          retries++;
+          if (retries < MAX_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+            continue;
+          }
+        }
+        throw error;
+      }
+    }
+
+    if (!process) {
+      throw new Error("İşlem başlatma birden fazla denemeye rağmen tamamlanamadı.");
+    }
+
+    return NextResponse.json({ processId: process.id, message: "İşlem taslağı başarıyla oluşturuldu." });
+
+  } catch (error: any) {
+    console.error("Error initiating process:", error);
+    return NextResponse.json(
+      {
+        error: "İşlem başlatılırken bir hata oluştu. Lütfen tekrar deneyin.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// Envanter ve Ekipman Kullanımını Güncelle (PUT /api/processes/:processId/inventory-equipment)
+export async function PUT(request: Request) {
+  try {
+    const userId = request.headers.get("x-user-id");
+    const userRole = request.headers.get("x-user-role");
+
+    if (!userId || !userRole) {
+      return NextResponse.json(
+        { error: "Kullanıcı ID'si veya rolü eksik" },
+        { status: 401 }
+      );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const processId = searchParams.get("processId");
+
+    if (!processId) {
+      return NextResponse.json({ error: "İşlem ID'si eksik" }, { status: 400 });
+    }
+
+    const {
+      equipmentId,
+      inventoryItems, // { inventoryId, quantity, ownerId }[]
+      inventoryDistribution, // JSON string
+    } = await request.json();
+
+    const process = await prisma.process.findUnique({
+      where: { id: processId },
+      include: {
+        field: {
+          include: {
+            owners: {
+              select: {
+                userId: true,
+                percentage: true,
+                user: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!process) {
+      return NextResponse.json({ error: "İşlem bulunamadı" }, { status: 404 });
+    }
+
+    if (process.status !== "DRAFT") {
+      return NextResponse.json(
+        { error: "İşlem taslak durumunda değil, güncellenemez." },
+        { status: 400 }
+      );
+    }
+
+    const processedArea = process.processedArea;
+    const field = process.field;
+
+    if (!field) {
+      return NextResponse.json({ error: "İşlemle ilişkili tarla bulunamadı." }, { status: 400 });
+    }
+
+    // 1. Ekipman bilgisini al (yakıt kontrolü için)
     let equipment: { id: string; fuelConsumptionPerDecare: number } | null =
       null;
     if (equipmentId) {
@@ -223,10 +326,10 @@ export async function POST(request: Request) {
       }
     }
 
-    // 2. Yakıt kontrolü
+    // 2. Yakıt kontrolü (sadece kontrol, düşüm transaction içinde)
     if (equipment && equipment.fuelConsumptionPerDecare) {
       const fuelNeeded = equipment.fuelConsumptionPerDecare * processedArea;
-      const fuelCategory = "FUEL"; // Yakıt kategorisini belirle
+      const fuelCategory = "FUEL";
       const fieldOwners = field.owners;
 
       let hasEnoughFuel = false;
@@ -251,7 +354,7 @@ export async function POST(request: Request) {
 
         if (totalFuel >= fuelNeeded) {
           hasEnoughFuel = true;
-          break; // Yeterli yakıt varsa döngüden çık
+          break;
         } else {
           fuelAvailabilityMessage = `Sahip ${owner.user.name}'in envanterinde yeterli yakıt bulunmuyor.`;
         }
@@ -270,41 +373,24 @@ export async function POST(request: Request) {
     }
 
     const MAX_RETRIES = 3;
-    const RETRY_DELAY_MS = 100; // 100ms gecikme
+    const RETRY_DELAY_MS = 100;
     let retries = 0;
-    let result;
+    let transactionResult;
 
     while (retries < MAX_RETRIES) {
       try {
-        result = await prisma.$transaction(
+        transactionResult = await prisma.$transaction(
           async (tx) => {
-            // 1. İşlem kaydı oluştur
-            const process = await tx.process.create({
-              data: {
-                fieldId,
-                // Eğer formdan workerId gelmişse onu kullan, yoksa isteği yapanı ata
-                workerId: selectedWorkerId || userId,
-                seasonId: seasonId || activeSeason!.id,
-                type: type as ProcessType,
-                date: new Date(date),
-                description,
-                totalArea,
-                processedArea,
-                processedPercentage,
-              },
-            });
-
-            // 2. Ekipman kullanımlarını kaydet
+            // 1. Ekipman kullanımlarını kaydet
             const equipmentUsageRecords = [];
             if (equipmentId) {
-              // Ekipman kullanımını kaydet
               const equipmentUsage = await tx.equipmentUsage.create({
                 data: {
                   processId: process.id,
                   equipmentId: equipmentId,
-                  userId: userId, // Kullanıcı ID'si eklendi
+                  userId: userId,
                   areaProcessed: processedArea,
-                  processedPercentage,
+                  processedPercentage: process.processedPercentage,
                   fuelConsumed:
                     equipment && equipment.fuelConsumptionPerDecare
                       ? processedArea * equipment.fuelConsumptionPerDecare
@@ -312,17 +398,15 @@ export async function POST(request: Request) {
                   unit: "DECARE" as Unit,
                 },
               });
-
               equipmentUsageRecords.push(equipmentUsage);
             }
 
-            // 3. Envanter kullanımlarını kaydet (sahip bazlı düşüm ile)
+            // 2. Envanter kullanımlarını kaydet (sahip bazlı düşüm ile)
             const inventoryUsageRecords: any[] = [];
             if (inventoryItems && inventoryItems.length > 0) {
               for (const usage of inventoryItems) {
                 const { inventoryId, quantity, ownerId } = usage;
 
-                // 1. Envanterin genel bilgilerini al
                 const inventory = await tx.inventory.findUnique({
                   where: { id: inventoryId },
                   select: { id: true, name: true, totalQuantity: true, unit: true },
@@ -332,7 +416,6 @@ export async function POST(request: Request) {
                   throw new Error(`Envanter bulunamadı: ${inventoryId}`);
                 }
 
-                // 2. Sahibin bu envanterdeki payını bul
                 const ownerInventoryShare = await tx.inventoryOwnership.findFirst({
                   where: {
                     inventoryId: inventoryId,
@@ -345,7 +428,6 @@ export async function POST(request: Request) {
                   throw new Error(`Sahip (${ownerId}) için ${inventory.name} envanteri bulunamadı.`);
                 }
 
-                // 3. Sahibin payında yeterli miktar var mı kontrol et
                 if (ownerInventoryShare.shareQuantity < quantity) {
                   throw new Error(
                     `Sahip ${ownerInventoryShare.user.name}'in ${inventory.name} envanterinde yeterli miktar bulunmuyor. ` +
@@ -353,45 +435,42 @@ export async function POST(request: Request) {
                   );
                 }
 
-                // 4. Genel envanterde yeterli miktar var mı kontrol et (redundant ama güvenlik için)
                 if (inventory.totalQuantity < quantity) {
                   throw new Error(
                     `Genel ${inventory.name} stoğu yetersiz. Gereken: ${quantity} ${inventory.unit}, Mevcut: ${inventory.totalQuantity} ${inventory.unit}.`
                   );
                 }
 
-                // 5. Envanter kullanımını kaydet (kullanan kişi envanterin sahibi)
                 const newInventoryUsage = await tx.inventoryUsage.create({
                   data: {
                     processId: process.id,
                     inventoryId: inventoryId,
                     usedQuantity: quantity,
                     usageType: "PROCESSING",
-                    usedById: ownerId, // Envanteri kullanan kişi (sahibi)
-                    fieldId,
+                    usedById: ownerId,
+                    fieldId: field.id,
                   },
                 });
                 inventoryUsageRecords.push(newInventoryUsage);
 
-            // 6. Sahibin envanter payını ve genel envanter miktarını güncelle
-            await Promise.all([
-              tx.inventoryOwnership.update({
-                where: { id: ownerInventoryShare.id },
-                data: {
-                  shareQuantity: {
-                    decrement: quantity,
-                  },
-                },
-              }),
-              tx.inventory.update({
-                where: { id: inventoryId },
-                data: {
-                  totalQuantity: {
-                    decrement: quantity,
-                  },
-                },
-              }),
-            ]);
+                await Promise.all([
+                  tx.inventoryOwnership.update({
+                    where: { id: ownerInventoryShare.id },
+                    data: {
+                      shareQuantity: {
+                        decrement: quantity,
+                      },
+                    },
+                  }),
+                  tx.inventory.update({
+                    where: { id: inventoryId },
+                    data: {
+                      totalQuantity: {
+                        decrement: quantity,
+                      },
+                    },
+                  }),
+                ]);
               }
             }
 
@@ -404,8 +483,7 @@ export async function POST(request: Request) {
               const totalFuelNeeded =
                 equipment.fuelConsumptionPerDecare * processedArea;
 
-              // Tarla sahiplerini ve yüzdelerini al (field nesnesinden)
-              const fieldOwnersWithPercentage = field.owners; // Bu artık { userId, percentage, user: { ... } } içeriyor
+              const fieldOwnersWithPercentage = field.owners;
 
               if (
                 !fieldOwnersWithPercentage ||
@@ -414,14 +492,12 @@ export async function POST(request: Request) {
                 throw new Error("Tarla sahibi bilgisi bulunamadı.");
               }
 
-              // Her tarla sahibinin payına düşen yakıtı hesapla ve düş
               for (const ownerInfo of fieldOwnersWithPercentage) {
                 const ownerFuelShare =
                   totalFuelNeeded * (ownerInfo.percentage / 100);
 
-                if (ownerFuelShare <= 0) continue; // Bu sahip için yakıt gerekmiyorsa atla
+                if (ownerFuelShare <= 0) continue;
 
-                // Sahibin yakıt envanterlerini bul
                 const ownerFuelInventories = await tx.inventory.findMany({
                   where: {
                     category: "FUEL",
@@ -430,9 +506,9 @@ export async function POST(request: Request) {
                         userId: ownerInfo.userId,
                       },
                     },
-                    totalQuantity: { gt: 0 }, // Sadece miktarı 0'dan büyük olanları al
+                    totalQuantity: { gt: 0 },
                   },
-                  orderBy: { createdAt: "asc" }, // Önce eski envanterleri kullan
+                  orderBy: { createdAt: "asc" },
                 });
 
                 let remainingOwnerShareToDeduct = ownerFuelShare;
@@ -441,16 +517,13 @@ export async function POST(request: Request) {
                   0
                 );
 
-                // Sahibin yeterli yakıtı var mı kontrol et
                 if (ownerTotalFuel < ownerFuelShare) {
-                  // Sahip adını almak için ownerInfo.user.name kullanılabilir
                   const ownerName = ownerInfo.user?.name || ownerInfo.userId;
                   throw new Error(
                     `Sahip ${ownerName}'in envanterinde payına düşen (${ownerFuelShare.toFixed(2)} L) kadar yakıt bulunmuyor (Mevcut: ${ownerTotalFuel.toFixed(2)} L).`
                   );
                 }
 
-                // Bulunan yakıt envanterlerinden düşüm yap (sahibin payı kadar)
                 for (const inventory of ownerFuelInventories) {
                   if (remainingOwnerShareToDeduct <= 0) break;
 
@@ -459,16 +532,15 @@ export async function POST(request: Request) {
                     remainingOwnerShareToDeduct
                   );
 
-                  // Envanter kullanımını kaydet ve envanter miktarını güncelle
                   const [fuelUsageRecord, updatedInventory] = await Promise.all([
                     tx.inventoryUsage.create({
                       data: {
                         processId: process.id,
                         inventoryId: inventory.id,
                         usedQuantity: deductionAmount,
-                        usageType: "PROCESSING", // Yakıt kullanımı da bir işlem parçası
-                        usedById: ownerInfo.userId, // Yakıtın sahibi
-                        fieldId, // İşlemin yapıldığı tarla
+                        usageType: "PROCESSING",
+                        usedById: ownerInfo.userId,
+                        fieldId: field.id,
                       },
                     }),
                     tx.inventory.update({
@@ -480,286 +552,56 @@ export async function POST(request: Request) {
                       },
                     }),
                   ]);
-
-                  // Yakıt kullanım kaydını maliyet hesaplaması için listeye ekle
                   inventoryUsageRecords.push(fuelUsageRecord);
-
                   remainingOwnerShareToDeduct -= deductionAmount;
                 }
               }
             }
 
-            // 4. Proses kaydına inventoryDistribution JSON'ını ekle
-            if (inventoryDistribution) {
-              await tx.process.update({
-                where: { id: process.id },
-                data: {
-                  inventoryDistribution: inventoryDistribution, // JSON string olarak sakla
-                },
-              });
-            }
-
-            // 5. Maliyet hesapla
-            // İşçilik maliyeti (örnek olarak sabit bir değer - Geliştirilmeli)
-            const laborCost = 100; // TODO: Gerçek işçilik maliyeti hesaplaması eklenmeli
-
-            // Ekipman maliyeti (örnek olarak sabit bir değer - Geliştirilmeli)
-            const equipmentCost = equipmentUsageRecords.length > 0 ? 50 : 0; // TODO: Gerçek ekipman maliyeti/amortisman hesaplaması eklenmeli
-
-            // Envanter ve Yakıt Maliyeti (Önce Inventory.costPrice, sonra Purchase.unitPrice)
-            let inventoryCost = 0;
-            console.log("--- Calculating Process Cost (Prioritizing Inventory.costPrice) ---"); // Log Başlangıç
-            console.log("Inventory Usage Records:", JSON.stringify(inventoryUsageRecords, null, 2)); // Log: Kullanım kayıtları
-
-            // 1. Benzersiz inventoryId'leri topla
-            const uniqueInventoryIds = [
-              ...new Set(
-                inventoryUsageRecords
-                  .map((usage) => usage.inventoryId)
-                  .filter((id): id is string => !!id)
-              ),
-            ];
-
-            // 2. İlgili Envanter kayıtlarını (costPrice ile) ve Alış İşlemlerini (purchaseId için) getir
-            let inventoryMap = new Map<string, { costPrice: number | null }>(); // inventoryId -> { costPrice }
-            let inventoryToPurchaseMap = new Map<string, string>(); // inventoryId -> purchaseId (yedek için)
-            if (uniqueInventoryIds.length > 0) {
-              // Envanterleri getir
-              const inventories = await tx.inventory.findMany({
-                where: { id: { in: uniqueInventoryIds } },
-                select: { id: true, costPrice: true },
-              });
-              inventories.forEach((inv) => {
-                inventoryMap.set(inv.id, { costPrice: inv.costPrice });
-              });
-              console.log("Inventory ID to Cost Price Map:", inventoryMap); // Log
-
-              // Alış İşlemlerini getir (yedek olarak)
-              const transactions = await tx.inventoryTransaction.findMany({
-                where: {
-                  inventoryId: { in: uniqueInventoryIds },
-                  type: "PURCHASE",
-                  purchaseId: { not: null },
-                },
-                select: { inventoryId: true, purchaseId: true },
-                distinct: ["inventoryId"], // Her envanter için bir tane al (genelde ilk/en eski)
-              });
-              transactions.forEach((t) => {
-                if (t.purchaseId) {
-                  inventoryToPurchaseMap.set(t.inventoryId, t.purchaseId);
-                }
-              });
-              console.log("Inventory ID to Purchase ID Map (Fallback):", inventoryToPurchaseMap); // Log
-            }
-
-            // 3. Yedek için ilgili Purchase kayıtlarından unitPrice'ları al
-            const uniquePurchaseIdsForFallback = [...new Set(inventoryToPurchaseMap.values())];
-            let purchasePriceMap = new Map<string, number>(); // purchaseId -> unitPrice
-            if (uniquePurchaseIdsForFallback.length > 0) {
-              const purchases = await tx.purchase.findMany({
-                where: { id: { in: uniquePurchaseIdsForFallback } },
-                select: { id: true, unitPrice: true },
-              });
-              purchases.forEach((p) => {
-                if (p.unitPrice !== null && p.unitPrice !== undefined) {
-                  purchasePriceMap.set(p.id, p.unitPrice);
-                } else {
-                  console.warn(`(Fallback) Purchase record ${p.id} is missing unitPrice.`); // Log
-                }
-              });
-              console.log("Purchase ID to Unit Price Map (Fallback):", purchasePriceMap); // Log
-            }
-
-            // 4. Maliyet Hesaplama Döngüsü (Yeni Önceliklendirme Mantığıyla)
-            for (const usage of inventoryUsageRecords) {
-              console.log(`Processing usage record ID: ${usage.id}, Inventory ID: ${usage.inventoryId}, Quantity: ${usage.usedQuantity}`); // Log: Her kullanım kaydı
-              if (!usage.inventoryId || usage.usedQuantity === null || usage.usedQuantity === undefined) {
-                console.warn(`Skipping usage ${usage.id} due to missing inventoryId or usedQuantity.`);
-                continue;
-              }
-
-              let unitCost: number | null | undefined = undefined;
-              let costSource: string = "Not Found";
-
-              // Öncelik 1: Inventory.costPrice'ı kullan
-              const inventoryData = inventoryMap.get(usage.inventoryId);
-              if (inventoryData?.costPrice !== null && inventoryData?.costPrice !== undefined) {
-                unitCost = inventoryData.costPrice;
-                costSource = "Inventory.costPrice";
-              }
-
-              // Öncelik 2: Purchase.unitPrice'ı kullan (Eğer Inventory.costPrice yoksa)
-              if (unitCost === undefined) {
-                const purchaseId = inventoryToPurchaseMap.get(usage.inventoryId);
-                if (purchaseId) {
-                  const fallbackPrice = purchasePriceMap.get(purchaseId);
-                  if (fallbackPrice !== undefined && fallbackPrice !== null) {
-                    unitCost = fallbackPrice;
-                    costSource = "Purchase.unitPrice (Fallback)";
-                  } else {
-                     console.warn(`(Fallback) Could not find unitPrice for Purchase ID: ${purchaseId} (linked to Inventory ID: ${usage.inventoryId}).`);
-                  }
-                } else {
-                   console.warn(`(Fallback) Could not find Purchase Transaction for Inventory ID: ${usage.inventoryId}.`);
-                }
-              }
-
-              // Maliyeti hesapla ve ekle (eğer birim maliyet bulunduysa)
-              if (unitCost !== undefined && unitCost !== null) {
-                const itemCost = usage.usedQuantity * unitCost;
-                inventoryCost += itemCost;
-                console.log(`  Source: ${costSource}, Unit Cost: ${unitCost}. Calculated item cost: ${itemCost}. New total inventoryCost: ${inventoryCost}`); // Log: Maliyet hesaplandı
-              } else {
-                console.error(`Could not determine unit cost for Inventory ID: ${usage.inventoryId}. Cannot calculate cost for this item.`); // Hata logu
-              }
-            }
-
-            // Toplam maliyet (Yakıt maliyeti artık inventoryCost içinde)
-            const totalCost = laborCost + equipmentCost + inventoryCost;
-            console.log(`Final Calculated Costs: Labor=${laborCost}, Equipment=${equipmentCost}, Inventory=${inventoryCost}, Total=${totalCost}`); // Log: Toplam Maliyet
-
-            // Maliyet kaydı oluştur
-            const processCost = await tx.processCost.create({
+            // Proses kaydına inventoryDistribution JSON'ını ekle ve durumu güncelle
+            await tx.process.update({
+              where: { id: process.id },
               data: {
-                processId: process.id,
-                fieldId: fieldId,
-                laborCost,
-                equipmentCost,
-                inventoryCost, // Hem envanter hem yakıt maliyetini içerir
-                fuelCost: 0, // Ayrı yakıt maliyeti kaldırıldı, alan DB'de kalıyorsa 0 olarak ayarla
-                totalCost,
+                inventoryDistribution: inventoryDistribution,
+                status: "PENDING_INVENTORY_EQUIPMENT" as ProcessStatus, // Durumu güncelle
               },
             });
-
-            // 5. Tarla gideri oluştur
-            const fieldExpense = await tx.fieldExpense.create({
-              data: {
-                fieldId,
-                seasonId: seasonId || activeSeason!.id,
-                processCostId: processCost.id,
-                totalCost,
-                periodStart: new Date(date),
-                periodEnd: new Date(date),
-              },
-            });
-
-            // 6. Tarla sahipleri için gider kayıtları oluştur
-            const fieldOwnerships = await tx.fieldOwnership.findMany({
-              where: { fieldId },
-            });
-
-            for (const ownership of fieldOwnerships) {
-              await tx.fieldOwnerExpense.create({
-                data: {
-                  fieldOwnershipId: ownership.id,
-                  processCostId: processCost.id,
-                  userId: ownership.userId, // Kullanıcı ID'si eklendi
-                  amount: totalCost * (ownership.percentage / 100),
-                  percentage: ownership.percentage,
-                  periodStart: new Date(date),
-                  periodEnd: new Date(date),
-                },
-              });
-            }
-
-            // 7. Tüm sahiplere ve yöneticilere bildirim gönder
-            const owners = await tx.user.findMany({
-              where: {
-                OR: [{ role: "OWNER" }, { role: "ADMIN" }],
-              },
-            });
-
-            const worker = await tx.user.findUnique({
-              where: { id: userId },
-              select: { name: true },
-            });
-
-            const processTypeMap: Record<ProcessType, string> = {
-              PLOWING: "Sürme",
-              SEEDING: "Ekim",
-              FERTILIZING: "Gübreleme",
-              PESTICIDE: "İlaçlama",
-              HARVESTING: "Hasat",
-              OTHER: "Diğer",
-            };
-
-            const processTypeName = processTypeMap[type as ProcessType] || type;
-
-            for (const owner of owners) {
-              // İşçilere bildirim gönderme
-              if (owner.id !== userId) {
-                // İşlemi yapan kişiye bildirim gönderme
-                await tx.notification.create({
-                  data: {
-                    title: "Tarla İşlemi Kaydedildi",
-                    message: `${field.name} tarlasının %${processedPercentage}'lik kısmında ${processTypeName} işlemi ${worker?.name || "bir çalışan"} tarafından gerçekleştirildi.`,
-                    type: "FIELD_PROCESSING",
-                    receiverId: owner.id,
-                    senderId: userId,
-                    processId: process.id,
-                    link: `/dashboard/owner/processes/${process.id}`, // Bildirim linki eklendi
-                  },
-                });
-              }
-            }
-
-            // 8. Atanan işçiye bildirim gönder (eğer varsa ve işlemi başlatan kişi değilse)
-            if (selectedWorkerId && selectedWorkerId !== userId) {
-              await tx.notification.create({
-                data: {
-                  title: "Yeni İşlem Atandı",
-                  message: `${field.name} tarlası için size yeni bir ${processTypeName} işlemi atandı.`,
-                  type: "TASK_ASSIGNED", // Hata düzeltildi: TASK_ASSIGNMENT -> TASK_ASSIGNED
-                  receiverId: selectedWorkerId,
-                  senderId: userId, // İşlemi oluşturan yönetici/sahip
-                  processId: process.id,
-                  link: `/dashboard/worker/processes/${process.id}`, // İşçinin işlem detay sayfası
-                  priority: "HIGH", 
-                },
-              });
-            }
 
             return {
-              process,
               equipmentUsages: equipmentUsageRecords,
               inventoryUsages: inventoryUsageRecords,
-              processCost,
-              fieldExpense,
             };
           },
           { timeout: 20000 }
         );
-        break; // Başarılı olursa döngüden çık
+        break;
       } catch (error: any) {
-        console.error(`Transaction attempt ${retries + 1} failed:`, error);
-
-        // Prisma kilitlenme/çakışma hatası (P2034) veya genel transaction hatası
+        console.error(`Update inventory/equipment transaction attempt ${retries + 1} failed:`, error);
         if (
-          error.code === 'P2034' || // Prisma deadlock/write conflict error code
+          error.code === 'P2034' ||
           (error instanceof Error && (error.message.includes('write conflict') || error.message.includes('deadlock')))
         ) {
           retries++;
           if (retries < MAX_RETRIES) {
             await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
-            continue; // Yeniden dene
+            continue;
           }
         }
-        // Diğer hatalar veya yeniden deneme limitine ulaşıldıysa hatayı fırlat
         throw error;
       }
     }
 
-    if (!result) {
-      // Tüm yeniden denemeler başarısız olursa
-      throw new Error("İşlem birden fazla denemeye rağmen tamamlanamadı.");
+    if (!transactionResult) {
+      throw new Error("Envanter ve ekipman güncelleme birden fazla denemeye rağmen tamamlanamadı.");
     }
 
-    return NextResponse.json(result);
+    return NextResponse.json({ message: "Envanter ve ekipman bilgileri başarıyla güncellendi." });
+
   } catch (error: any) {
-    console.error("Error creating process:", error);
+    console.error("Error updating inventory/equipment for process:", error);
     return NextResponse.json(
       {
-        error: "İşlem oluşturulurken bir hata oluştu. Lütfen tekrar deneyin.",
+        error: "Envanter ve ekipman bilgileri güncellenirken bir hata oluştu. Lütfen tekrar deneyin.",
       },
       { status: 500 }
     );
