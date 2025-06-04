@@ -59,7 +59,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const irrigationId = params.irrigationId;
+    const { irrigationId } = await params;
     if (!irrigationId) {
       return NextResponse.json({ error: "Sulama ID'si eksik." }, { status: 400 });
     }

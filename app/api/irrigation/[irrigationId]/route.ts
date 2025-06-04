@@ -352,97 +352,111 @@ export async function PUT(
 
 // Sulama kaydını sil
 export async function DELETE(
-  request: NextRequest, // request parametresi genellikle DELETE için kullanılmaz ama burada kalabilir.
-  { params }: { params: { irrigationId: string } } // params'ı doğrudan destruct ediyoruz. id yerine irrigationId kullan
+  request: NextRequest,
+  { params }: { params: { irrigationId: string } }
 ) {
-  // Next.js 13+ için params nesnesini await etmemiz gerekiyor
-  const resolvedParams = await params;
-  const irrigationId = resolvedParams.irrigationId; // id yerine irrigationId kullan
-
   try {
     const session = await getServerSideSession();
     if (!session || !session.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // const id = params.id; // id yukarıda tanımlandı.
+    const { irrigationId } = await params;
+    if (!irrigationId) {
+      return NextResponse.json({ error: "Sulama ID'si eksik." }, { status: 400 });
+    }
 
-    // 1. Silinecek ilişkili kayıtların ID'lerini ve stok bilgilerini transaction öncesinde topla
-    const inventoryUsagesToDelete = await prisma.irrigationInventoryUsage.findMany({
-        where: { irrigationLogId: irrigationId }, // id yerine irrigationId kullan
+    await prisma.$transaction(async (tx) => {
+      // 1. Silinecek envanter kullanımlarını ve miktarlarını al
+      const inventoryUsagesToDelete = await tx.irrigationInventoryUsage.findMany({
+        where: { irrigationLogId: irrigationId },
         select: { id: true, inventoryId: true, quantity: true }
-    });
-    const inventoryUsageIdsToDelete = inventoryUsagesToDelete.map(usage => usage.id);
+      });
+      const inventoryUsageIdsToDelete = inventoryUsagesToDelete.map(usage => usage.id);
 
-    const fieldUsagesToDelete = await prisma.irrigationFieldUsage.findMany({
-        where: { irrigationLogId: irrigationId }, // id yerine irrigationId kullan
+      // 2. Silinecek tarla kullanımlarını al
+      const fieldUsagesToDelete = await tx.irrigationFieldUsage.findMany({
+        where: { irrigationLogId: irrigationId },
         select: { id: true }
-    });
-    const fieldUsageIdsToDelete = fieldUsagesToDelete.map(usage => usage.id);
+      });
+      const fieldUsageIdsToDelete = fieldUsagesToDelete.map(usage => usage.id);
 
-    // Açık transaction OLMADAN ilişkili kayıtları sırayla sil
-    // (Hata ayıklama adımı - P2028'in kaynağını bulmak için)
-
-    // Adım 1: Envanter sahip kullanımlarını sil
-    if (inventoryUsageIdsToDelete.length > 0) {
-        await prisma.irrigationInventoryOwnerUsage.deleteMany({ // tx yerine prisma
-            where: { irrigationInventoryUsageId: { in: inventoryUsageIdsToDelete } },
+      // 3. Envanter stoklarını geri yükle ve InventoryTransaction kayıtlarını sil
+      for (const usage of inventoryUsagesToDelete) {
+        // Genel stoğu geri artır
+        await tx.inventory.update({
+          where: { id: usage.inventoryId },
+          data: { totalQuantity: { increment: usage.quantity } },
         });
-    }
 
-    // Adım 2: Envanter kullanımlarını sil
-    await prisma.irrigationInventoryUsage.deleteMany({ // tx yerine prisma
-        where: { irrigationLogId: irrigationId }, // id yerine irrigationId kullan
-    });
-
-    // Adım 3: Tarla sahip kullanımlarını sil
-    if (fieldUsageIdsToDelete.length > 0) {
-        await prisma.irrigationOwnerUsage.deleteMany({ // tx yerine prisma
-            where: { irrigationFieldUsageId: { in: fieldUsageIdsToDelete } },
+        // Sahip stoğunu geri artır (eğer IrrigationInventoryOwnerUsage varsa)
+        const ownerUsages = await tx.irrigationInventoryOwnerUsage.findMany({
+          where: { irrigationInventoryUsageId: usage.id },
+          select: { ownerId: true, quantity: true }
         });
-    }
 
-    // Adım 4: Tarla kullanımlarını sil
-    await prisma.irrigationFieldUsage.deleteMany({ // tx yerine prisma
-      where: { irrigationLogId: irrigationId }, // id yerine irrigationId kullan
-    });
-
-    // Adım 5: Kuyu fatura kullanımlarını sil (varsa)
-    await prisma.wellBillingIrrigationUsage.deleteMany({ // tx yerine prisma
-      where: { irrigationLogId: irrigationId }, // id yerine irrigationId kullan
-    });
-
-    // Adım 6: İlişkili Sulama Sahip Özetlerini (IrrigationOwnerSummary) sil
-    await prisma.irrigationOwnerSummary.deleteMany({ // tx yerine prisma
-        where: { irrigationLogId: irrigationId }, // id yerine irrigationId kullan
-    });
-
-    // Adım 7: Ana sulama kaydını sil
-    // ÖNEMLİ: Bu adım başarısız olursa, yukarıdaki adımlar geri alınmaz!
-    await prisma.irrigationLog.delete({ // tx yerine prisma
-      where: { id: irrigationId }, // id yerine irrigationId kullan
-    });
-
-    // Tüm silme işlemleri başarılı olduktan sonra stokları geri yükle
-    if (inventoryUsagesToDelete.length > 0) {
-        for (const usage of inventoryUsagesToDelete) {
-            await prisma.inventory.update({ // tx yerine prisma kullanıyoruz
-                where: { id: usage.inventoryId },
-                data: {
-                    totalQuantity: {
-                        increment: usage.quantity, // Stoğu geri artır
-                    },
-                },
+        for (const ownerUsage of ownerUsages) {
+          const inventoryOwnership = await tx.inventoryOwnership.findFirst({
+            where: { inventoryId: usage.inventoryId, userId: ownerUsage.ownerId },
+          });
+          if (inventoryOwnership) {
+            await tx.inventoryOwnership.update({
+              where: { id: inventoryOwnership.id },
+              data: { shareQuantity: { increment: ownerUsage.quantity } },
             });
+          }
         }
-    }
+
+        // İlgili InventoryTransaction kayıtlarını sil
+        await tx.inventoryTransaction.deleteMany({
+          where: {
+            inventoryId: usage.inventoryId,
+            notes: { contains: `Sulama kaydı #${irrigationId}` }
+          }
+        });
+      }
+
+      // 4. İlişkili kayıtları silme sırası (önce bağımlı olanlar)
+      if (inventoryUsageIdsToDelete.length > 0) {
+        await tx.irrigationInventoryOwnerUsage.deleteMany({
+          where: { irrigationInventoryUsageId: { in: inventoryUsageIdsToDelete } },
+        });
+      }
+      await tx.irrigationInventoryUsage.deleteMany({
+        where: { irrigationLogId: irrigationId },
+      });
+
+      if (fieldUsageIdsToDelete.length > 0) {
+        await tx.irrigationOwnerUsage.deleteMany({
+          where: { irrigationFieldUsageId: { in: fieldUsageIdsToDelete } },
+        });
+      }
+      await tx.irrigationFieldUsage.deleteMany({
+        where: { irrigationLogId: irrigationId },
+      });
+
+      await tx.wellBillingIrrigationUsage.deleteMany({
+        where: { irrigationLogId: irrigationId },
+      });
+
+      await tx.irrigationOwnerSummary.deleteMany({
+        where: { irrigationLogId: irrigationId },
+      });
+
+      // 5. Ana sulama kaydını sil
+      await tx.irrigationLog.delete({
+        where: { id: irrigationId },
+      });
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Error deleting irrigation log:", error);
+    console.error("Sulama kaydı silme hatası:", error);
     return NextResponse.json(
-      { error: "Failed to delete irrigation log" },
+      { error: "Sulama kaydı silinirken bir hata oluştu." },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }

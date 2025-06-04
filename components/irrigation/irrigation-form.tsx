@@ -293,15 +293,15 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
       }
 
       try {
-        const ownerIdsParam = selectedOwnerIds.join(',');
-        const inventoriesRes = await fetch(`/api/inventory?category=FERTILIZER,PESTICIDE&userIds=${ownerIdsParam}&includeOwnershipDetails=true`);
+        // const ownerIdsParam = selectedOwnerIds.join(','); // Bu filtreyi geçici olarak kaldırıyoruz
+        const inventoriesRes = await fetch(`/api/inventory?category=FERTILIZER,PESTICIDE&includeOwnershipDetails=true`); // Tüm ilgili envanterleri getir
 
         if (inventoriesRes.ok) {
           const inventoriesData = await inventoriesRes.json();
           setInventories(inventoriesData.data || inventoriesData || []);
         } else {
-          console.error("Sahip envanterleri yüklenemedi:", inventoriesRes.statusText);
-          toast({ title: "Hata", description: "Sahiplere ait envanterler yüklenemedi.", variant: "destructive" });
+          console.error("Envanterler yüklenemedi:", inventoriesRes.statusText);
+          toast({ title: "Hata", description: "Envanterler yüklenirken bir hata oluştu.", variant: "destructive" });
         }
       } catch (error: any) {
         console.error("Envanter yükleme hatası:", error);
@@ -924,7 +924,7 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
                   </div>
                   <div className="space-y-2 col-span-1">
                     <Label htmlFor="duration">Toplam Sulama Süresi (Dakika)</Label>
-                    <Input id="duration" type="number" {...form.register("duration")} className="neon-border neon-glow" />
+                    <Input id="duration" type="number" {...form.register("duration", { valueAsNumber: true })} className="neon-border neon-glow" />
                     {form.formState.errors.duration && <p className="text-sm text-red-500">{form.formState.errors.duration.message}</p>}
                   </div>
                 </div>
@@ -1080,10 +1080,10 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
             )}
 
             {currentStep === 3 && (
-              <>
-                {displayTotalIrrigatedArea > 0 && (
-                  <div className="space-y-4 border p-4 rounded-md bg-gray-50 mt-6">
-                    <h3 className="text-lg font-medium">Hesaplanan Değerler (Önizleme)</h3>
+              <div className="space-y-4 border p-4 rounded-md bg-gray-50 mt-6">
+                <h3 className="text-lg font-medium">Hesaplanan Değerler (Önizleme)</h3>
+                {displayTotalIrrigatedArea > 0 ? (
+                  <>
                     <div className="space-y-2">
                       <h4 className="font-medium">Toplam Sulanan Alan</h4>
                       <p>{displayTotalIrrigatedArea.toFixed(2)} dekar</p>
@@ -1111,37 +1111,42 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
                         </table>
                       </div>
                     </div>
-                    {displayInventoryDistribution.length > 0 && (
-                      <div className="space-y-2">
-                        <h4 className="font-medium">Hesaplanan Envanter Dağılımı</h4>
-                        {displayInventoryDistribution.map((inventoryGroup, groupIndex) => (
-                          <div key={groupIndex} className="border rounded-md overflow-hidden mb-4">
-                            <div className="bg-gray-100 px-4 py-2">
-                              <span className="font-semibold">{inventoryGroup.inventoryName}</span> - Toplam Kullanılan: {inventoryGroup.totalUsed.toFixed(2)} {inventoryGroup.unit}
-                            </div>
-                            <table className="min-w-full divide-y divide-gray-200">
-                              <thead className="bg-gray-50">
-                                <tr>
-                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sahip</th>
-                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hesaplanan Pay ({inventoryGroup.unit})</th>
-                                </tr>
-                              </thead>
-                              <tbody className="bg-white divide-y divide-gray-200">
-                                {inventoryGroup.distribution.map((dist, distIndex) => (
-                                  <tr key={distIndex}>
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{dist.ownerName}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{dist.quantityShare.toFixed(2)}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Sulama bilgileri henüz girilmedi veya hesaplanamadı.</p>
                 )}
-              </>
+
+                <div className="space-y-2">
+                  <h4 className="font-medium">Hesaplanan Envanter Dağılımı</h4>
+                  {displayInventoryDistribution.length > 0 ? (
+                    displayInventoryDistribution.map((inventoryGroup, groupIndex) => (
+                      <div key={groupIndex} className="border rounded-md overflow-hidden mb-4">
+                        <div className="bg-gray-100 px-4 py-2">
+                          <span className="font-semibold">{inventoryGroup.inventoryName}</span> - Toplam Kullanılan: {inventoryGroup.totalUsed.toFixed(2)} {inventoryGroup.unit}
+                        </div>
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sahip</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hesaplanan Pay ({inventoryGroup.unit})</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {inventoryGroup.distribution.map((dist, distIndex) => (
+                              <tr key={distIndex}>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{dist.ownerName}</td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{dist.quantityShare.toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Kullanılan envanter bulunamadı.</p>
+                  )}
+                </div>
+              </div>
             )}
           </CardContent>
           <CardFooter className="flex justify-between gap-4">
