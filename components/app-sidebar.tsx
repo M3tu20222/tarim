@@ -142,8 +142,16 @@ export function AppSidebar() {
               </div>
             </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => setOpen(!open)}>
-            <Menu className="h-5 w-5" />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setOpen(!open)}
+            className={cn(
+              "border border-green-500 shadow-lg shadow-green-500/50 rounded-sm", // Yeşil neon çerçeve stilini ekle
+              !open && "opacity-0 pointer-events-none" // Sidebar kapalıyken gizle
+            )}
+          >
+            <Menu className="h-5 w-5 text-green-400" /> {/* İkon rengini de neon yeşili yap */}
             <span className="sr-only">Toggle Menu</span>
           </Button>
         </SidebarHeader>

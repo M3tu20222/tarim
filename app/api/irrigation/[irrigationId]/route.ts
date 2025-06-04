@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 // Belirli bir sulama kaydını getir
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { irrigationId: string } } // id yerine irrigationId kullan
 ) {
   try {
     const session = await getServerSideSession(); // Use custom session function
@@ -17,10 +17,10 @@ export async function GET(
 
     // Next.js 13+ için params nesnesini await etmemiz gerekiyor
     const resolvedParams = await params;
-    const id = resolvedParams.id;
+    const irrigationId = resolvedParams.irrigationId; // id yerine irrigationId kullan
 
     const irrigationLog = await prisma.irrigationLog.findUnique({
-      where: { id },
+      where: { id: irrigationId }, // id yerine irrigationId kullan
       include: {
         well: true,
         season: true,
@@ -86,7 +86,7 @@ export async function GET(
 // Sulama kaydını güncelle (İlişkili kayıtları silip yeniden oluşturarak)
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { irrigationId: string } } // id yerine irrigationId kullan
 ) {
   try {
     const session = await getServerSideSession();
@@ -96,7 +96,7 @@ export async function PUT(
 
     // Next.js 13+ için params nesnesini await etmemiz gerekiyor
     const resolvedParams = await params;
-    const id = resolvedParams.id; // IrrigationLog ID
+    const irrigationId = resolvedParams.irrigationId; // IrrigationLog ID - id yerine irrigationId kullan
     const data = await request.json();
     const {
       startDateTime,
@@ -135,7 +135,7 @@ export async function PUT(
 
       // 1a. Mevcut envanter kullanımlarını ve miktarlarını al
       const existingInventoryUsages = await tx.irrigationInventoryUsage.findMany({
-        where: { irrigationLogId: id },
+        where: { irrigationLogId: irrigationId }, // id yerine irrigationId kullan
         select: { id: true, inventoryId: true, quantity: true } // Miktarları ve ID'leri al
       });
 
@@ -160,13 +160,13 @@ export async function PUT(
 
         // 1d. Envanter kullanımlarını sil (stoklar geri yüklendikten sonra)
         await tx.irrigationInventoryUsage.deleteMany({
-          where: { irrigationLogId: id },
+          where: { irrigationLogId: irrigationId }, // id yerine irrigationId kullan
         });
       }
 
       // 1e. Tarla sahip kullanımlarını sil
       const existingFieldUsages = await tx.irrigationFieldUsage.findMany({
-        where: { irrigationLogId: id },
+        where: { irrigationLogId: irrigationId }, // id yerine irrigationId kullan
         select: { id: true } // Sadece id'leri al
       });
       const existingFieldUsageIds = existingFieldUsages.map(usage => usage.id);
@@ -178,19 +178,19 @@ export async function PUT(
 
       // 1f. Tarla kullanımlarını sil
       await tx.irrigationFieldUsage.deleteMany({
-        where: { irrigationLogId: id },
+        where: { irrigationLogId: irrigationId }, // id yerine irrigationId kullan
       });
 
       // 1g. Kuyu fatura kullanımlarını sil (Eğer varsa ve güncellenmesi gerekiyorsa)
       //    Bu örnekte kuyu faturalandırmasıyla ilgili bir güncelleme yapmıyoruz,
       //    ancak silinmesi gerekebilir. İhtiyaç halinde ekleyin.
       // await tx.wellBillingIrrigationUsage.deleteMany({
-      //   where: { irrigationLogId: id },
+      //   where: { irrigationLogId: irrigationId },
       // });
 
       // 2. Ana sulama kaydını güncelle
       const updatedLog = await tx.irrigationLog.update({
-        where: { id },
+        where: { id: irrigationId }, // id yerine irrigationId kullan
         data: {
           startDateTime: new Date(startDateTime),
           duration,
@@ -268,7 +268,7 @@ export async function PUT(
         // Her envanter türü için toplam miktarı sahiplere dekar oranına göre dağıt
         for (const [, group] of inventoryTypeGroups) {
           // Toplam sulanan alanı hesapla
-          const totalIrrigatedArea = ownerDurations.reduce((sum, owner) => sum + (owner.irrigatedArea || 0), 0);
+          const totalIrrigatedArea = ownerDurations.reduce((sum: number, owner: any) => sum + (owner.irrigatedArea || 0), 0);
 
           if (totalIrrigatedArea <= 0) continue;
 
@@ -284,7 +284,7 @@ export async function PUT(
                 unitPrice: deduction.unitPrice,
                 totalCost: totalCost,
                 ownerUsages: {
-                  create: ownerDurations.map((owner, index) => {
+                  create: ownerDurations.map((owner: any, index: number) => {
                     const ownerPercentage = (owner.irrigatedArea || 0) / totalIrrigatedArea;
                     const ownerQuantityShare = group.totalQuantity * ownerPercentage;
                     const ownerCostShare = group.totalCost * ownerPercentage;
@@ -292,13 +292,13 @@ export async function PUT(
                     // Son sahip için kalan miktarı ver (yuvarlama hatalarını önlemek için)
                     const isLastOwner = index === ownerDurations.length - 1;
                     const finalQuantity = isLastOwner ?
-                      group.totalQuantity - ownerDurations.slice(0, -1).reduce((sum, o, i) => {
+                      group.totalQuantity - ownerDurations.slice(0, -1).reduce((sum: number, o: any, i: number) => {
                         const pct = (o.irrigatedArea || 0) / totalIrrigatedArea;
                         return sum + (group.totalQuantity * pct);
                       }, 0) : ownerQuantityShare;
 
                     const finalCost = isLastOwner ?
-                      group.totalCost - ownerDurations.slice(0, -1).reduce((sum, o, i) => {
+                      group.totalCost - ownerDurations.slice(0, -1).reduce((sum: number, o: any, i: number) => {
                         const pct = (o.irrigatedArea || 0) / totalIrrigatedArea;
                         return sum + (group.totalCost * pct);
                       }, 0) : ownerCostShare;
@@ -353,11 +353,11 @@ export async function PUT(
 // Sulama kaydını sil
 export async function DELETE(
   request: NextRequest, // request parametresi genellikle DELETE için kullanılmaz ama burada kalabilir.
-  { params }: { params: { id: string } } // params'ı doğrudan destruct ediyoruz.
+  { params }: { params: { irrigationId: string } } // params'ı doğrudan destruct ediyoruz. id yerine irrigationId kullan
 ) {
   // Next.js 13+ için params nesnesini await etmemiz gerekiyor
   const resolvedParams = await params;
-  const id = resolvedParams.id; // id'yi buradan alıyoruz.
+  const irrigationId = resolvedParams.irrigationId; // id yerine irrigationId kullan
 
   try {
     const session = await getServerSideSession();
@@ -369,13 +369,13 @@ export async function DELETE(
 
     // 1. Silinecek ilişkili kayıtların ID'lerini ve stok bilgilerini transaction öncesinde topla
     const inventoryUsagesToDelete = await prisma.irrigationInventoryUsage.findMany({
-        where: { irrigationLogId: id },
+        where: { irrigationLogId: irrigationId }, // id yerine irrigationId kullan
         select: { id: true, inventoryId: true, quantity: true }
     });
     const inventoryUsageIdsToDelete = inventoryUsagesToDelete.map(usage => usage.id);
 
     const fieldUsagesToDelete = await prisma.irrigationFieldUsage.findMany({
-        where: { irrigationLogId: id },
+        where: { irrigationLogId: irrigationId }, // id yerine irrigationId kullan
         select: { id: true }
     });
     const fieldUsageIdsToDelete = fieldUsagesToDelete.map(usage => usage.id);
@@ -392,7 +392,7 @@ export async function DELETE(
 
     // Adım 2: Envanter kullanımlarını sil
     await prisma.irrigationInventoryUsage.deleteMany({ // tx yerine prisma
-        where: { irrigationLogId: id },
+        where: { irrigationLogId: irrigationId }, // id yerine irrigationId kullan
     });
 
     // Adım 3: Tarla sahip kullanımlarını sil
@@ -404,23 +404,23 @@ export async function DELETE(
 
     // Adım 4: Tarla kullanımlarını sil
     await prisma.irrigationFieldUsage.deleteMany({ // tx yerine prisma
-      where: { irrigationLogId: id },
+      where: { irrigationLogId: irrigationId }, // id yerine irrigationId kullan
     });
 
     // Adım 5: Kuyu fatura kullanımlarını sil (varsa)
     await prisma.wellBillingIrrigationUsage.deleteMany({ // tx yerine prisma
-      where: { irrigationLogId: id },
+      where: { irrigationLogId: irrigationId }, // id yerine irrigationId kullan
     });
 
     // Adım 6: İlişkili Sulama Sahip Özetlerini (IrrigationOwnerSummary) sil
     await prisma.irrigationOwnerSummary.deleteMany({ // tx yerine prisma
-        where: { irrigationLogId: id },
+        where: { irrigationLogId: irrigationId }, // id yerine irrigationId kullan
     });
 
     // Adım 7: Ana sulama kaydını sil
     // ÖNEMLİ: Bu adım başarısız olursa, yukarıdaki adımlar geri alınmaz!
     await prisma.irrigationLog.delete({ // tx yerine prisma
-      where: { id },
+      where: { id: irrigationId }, // id yerine irrigationId kullan
     });
 
     // Tüm silme işlemleri başarılı olduktan sonra stokları geri yükle
