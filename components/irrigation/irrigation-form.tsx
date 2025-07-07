@@ -341,7 +341,7 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
 
       try {
         const ownerIdsParam = selectedOwnerIds.join(',');
-        const inventoriesRes = await fetch(`/api/inventory?category=FERTILIZER,PESTICIDE&includeOwnershipDetails=true&ownerIds=${ownerIdsParam}`);
+        const inventoriesRes = await fetch(`/api/inventory?category=FERTILIZER,PESTICIDE&includeOwnershipDetails=true&userIds=${ownerIdsParam}`);
 
         if (inventoriesRes.ok) {
           const inventoriesData = await inventoriesRes.json();

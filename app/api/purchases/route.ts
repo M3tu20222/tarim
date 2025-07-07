@@ -180,7 +180,7 @@ export async function POST(request: Request) {
             name: productName,
             category: category as InventoryCategory, // Gelen category'yi InventoryCategory'ye cast et
             totalQuantity: quantity,
-            totalStock: quantity, // YENİ: totalStock alanını quantity ile başlat
+            // totalStock alanı şema varsayılanı (0) nedeniyle burada ayarlanamayabilir.
             unit: unit as Unit,
             purchaseDate: new Date(purchaseDate),
             costPrice: unitPrice, // Birim maliyeti kaydet
@@ -188,6 +188,12 @@ export async function POST(request: Request) {
             notes: `"${purchase.id}" ID'li alış ile eklendi.`,
             // ownerships ilişkisi aşağıda ayrıca oluşturulacak
           },
+        });
+
+        // Prisma şemasındaki @default(0) sorununu aşmak için oluşturduktan hemen sonra güncelle
+        inventory = await tx.inventory.update({
+          where: { id: inventory.id },
+          data: { totalStock: quantity },
         });
 
         // 4.4. Envanter Sahipliklerini Oluştur (inventory null kontrolü eklendi)
