@@ -795,10 +795,11 @@ model IrrigationLog {
 model IrrigationFieldUsage {
   id              String      @id @default(auto()) @map("_id") @db.ObjectId
   irrigationLogId String      @db.ObjectId
-  irrigationLog   IrrigationLog @relation(fields: [irrigationLogId], references: [id])
+  irrigationLog   IrrigationLog @relation(fields: [irrigationLogId], references: [id], onDelete: Cascade)
   fieldId         String      @db.ObjectId
   field           Field       @relation(fields: [fieldId], references: [id])
   percentage      Float       // Sulama yüzdesi
+  actualIrrigatedArea Float?  // Gerçek sulanan alan (dekar)
   createdAt       DateTime    @default(now())
 
   // İlişkiler
@@ -821,7 +822,7 @@ model IrrigationOwnerUsage {
 model IrrigationOwnerSummary {
   id                      String        @id @default(auto()) @map("_id") @db.ObjectId
   irrigationLogId         String        @db.ObjectId
-  irrigationLog           IrrigationLog @relation(fields: [irrigationLogId], references: [id])
+  irrigationLog           IrrigationLog @relation(fields: [irrigationLogId], references: [id], onDelete: Cascade)
   ownerId                 String        @db.ObjectId
   owner                   User          @relation(fields: [ownerId], references: [id])
   totalIrrigatedArea      Float         // Bu sahip için bu sulamada toplam sulanan alan (dekar)
@@ -835,7 +836,7 @@ model IrrigationOwnerSummary {
 model IrrigationInventoryUsage {
   id              String      @id @default(auto()) @map("_id") @db.ObjectId
   irrigationLogId String      @db.ObjectId
-  irrigationLog   IrrigationLog @relation(fields: [irrigationLogId], references: [id])
+  irrigationLog   IrrigationLog @relation(fields: [irrigationLogId], references: [id], onDelete: Cascade)
   inventoryId     String      @db.ObjectId
   inventory       Inventory   @relation(fields: [inventoryId], references: [id])
   quantity        Float       // Miktar
@@ -882,7 +883,7 @@ model WellBillingIrrigationUsage {
   wellBillingPeriodId String      @db.ObjectId
   wellBillingPeriod   WellBillingPeriod @relation(fields: [wellBillingPeriodId], references: [id])
   irrigationLogId     String      @db.ObjectId
-  irrigationLog       IrrigationLog @relation(fields: [irrigationLogId], references: [id])
+  irrigationLog       IrrigationLog @relation(fields: [irrigationLogId], references: [id], onDelete: Cascade)
   duration            Float       // Süre
   percentage          Float       // Fatura dönemindeki yüzdesi
   amount              Float       // Tutar

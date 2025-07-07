@@ -17,10 +17,11 @@ export async function GET(request: Request) {
     // URL parametrelerini al
     const { searchParams } = new URL(request.url);
     const activeOnly = searchParams.get("active") === "true";
+    const fetchAll = searchParams.get("fetchAll") === "true";
 
     // Filtre oluştur
     const filter: any = {};
-    if (activeOnly) {
+    if (activeOnly && !fetchAll) {
       filter.isActive = true;
     }
 
@@ -41,7 +42,7 @@ export async function GET(request: Request) {
       },
     });
 
-    return NextResponse.json(seasons);
+    return NextResponse.json({ data: seasons });
   } catch (error) {
     console.error("Error fetching seasons:", error);
     return NextResponse.json(

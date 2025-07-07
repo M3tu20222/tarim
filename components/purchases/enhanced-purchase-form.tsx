@@ -215,11 +215,12 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
       try {
         const response = await fetch("/api/seasons");
         if (response.ok) {
-          const data = await response.json();
-          setSeasons(data);
+          const responseData = await response.json();
+          const seasonsData = responseData.data || []; // API'den gelen 'data' anahtarını kullan
+          setSeasons(seasonsData);
 
           // Aktif sezonu bul ve form değerini güncelle
-          const activeSeason = data.find((season: Season) => season.isActive);
+          const activeSeason = seasonsData.find((season: Season) => season.isActive);
           if (activeSeason) {
             setActiveSeasonId(activeSeason.id);
             form.setValue("seasonId", activeSeason.id);

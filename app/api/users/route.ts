@@ -1,3 +1,32 @@
+/**
+ * @swagger
+ * /api/users:
+ *   get:
+ *     summary: Kullanıcıları listeler
+ *     description: Tüm kullanıcıları veya belirli bir role sahip kullanıcıları listeler. Sadece ADMIN ve OWNER rollerinin erişimi vardır.
+ *     tags:
+ *       - Users
+ *     parameters:
+ *       - in: query
+ *         name: role
+ *         schema:
+ *           type: string
+ *           enum: [ADMIN, OWNER, WORKER]
+ *         description: İsteğe bağlı olarak kullanıcıları role göre filtreler.
+ *     responses:
+ *       200:
+ *         description: Başarılı bir şekilde kullanıcı listesini döndürür.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/User'
+ *       401:
+ *         description: Yetkilendirme hatası (token eksik veya geçersiz).
+ *       403:
+ *         description: Erişim reddedildi.
+ */
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
@@ -63,6 +92,34 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/**
+ * @swagger
+ * /api/users:
+ *   post:
+ *     summary: Yeni kullanıcı oluşturur
+ *     description: Yeni bir kullanıcı kaydı oluşturur. Sadece ADMIN ve OWNER rollerinin erişimi vardır.
+ *     tags:
+ *       - Users
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UserCreateInput'
+ *     responses:
+ *       200:
+ *         description: Başarılı bir şekilde yeni kullanıcıyı döndürür.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/User'
+ *       400:
+ *         description: Eksik veya geçersiz veri.
+ *       401:
+ *         description: Yetkilendirme hatası.
+ *       403:
+ *         description: Erişim reddedildi.
+ */
 // POST metodu da benzer şekilde güncellendi
 export async function POST(request: NextRequest) {
   try {

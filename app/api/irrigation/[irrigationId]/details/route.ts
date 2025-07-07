@@ -83,19 +83,17 @@ export async function PUT(
       fieldIrrigations,
       ownerDurations,
       inventoryDeductions,
-      costAllocations,
     }: {
       fieldIrrigations?: FieldIrrigationInput[];
       ownerDurations?: OwnerDurationInput[];
       inventoryDeductions?: InventoryDeductionInput[];
-      costAllocations?: any[];
     } = requestData;
 
     const result = await prisma.$transaction(async (tx) => {
       // Sulama kaydının varlığını ve taslak durumunu kontrol et
       const irrigationLog = await tx.irrigationLog.findUnique({
         where: { id: irrigationId },
-        select: { id: true, status: true, wellId: true, seasonId: true, createdBy: true },
+        select: { id: true, status: true },
       });
 
       if (!irrigationLog) {
@@ -105,64 +103,44 @@ export async function PUT(
         throw new Error("Sadece taslak durumundaki sulama kayıtları güncellenebilir.");
       }
 
-      // Field Usages işlemleri
-      if (fieldIrrigations && fieldIrrigations.length > 0) {
-        // Mevcut field usages'ları sil
-        await tx.irrigationFieldUsage.deleteMany({
-          where: { irrigationLogId: irrigationId },
-        });
-        // Yeni field usages'ları oluştur
-        const fieldUsageRecords: IrrigationFieldUsageWithFieldAndOwners[] = await Promise.all(fieldIrrigations.map(async (fieldUsage: FieldIrrigationInput) => {
-          const usage = await tx.irrigationFieldUsage.create({
+      // 1. Tarla bilgileri geldiyse, SADECE tarla bilgilerini güncelle
+      if (fieldIrrigations && ownerDurations) {
+        // Mevcut tarla ve sahip özetlerini sil
+        await tx.irrigationOwnerSummary.deleteMany({ where: { irrigationLogId: irrigationId } });
+        const existingFieldUsages = await tx.irrigationFieldUsage.findMany({ where: { irrigationLogId: irrigationId }, select: { id: true } });
+        if (existingFieldUsages.length > 0) {
+          await tx.irrigationOwnerUsage.deleteMany({ where: { irrigationFieldUsageId: { in: existingFieldUsages.map(fu => fu.id) } } });
+        }
+        await tx.irrigationFieldUsage.deleteMany({ where: { irrigationLogId: irrigationId } });
+
+        // Yeni tarla bilgilerini ekle
+        for (const fieldUsage of fieldIrrigations) {
+          await tx.irrigationFieldUsage.create({
             data: {
               irrigationLogId: irrigationId,
               fieldId: fieldUsage.fieldId,
               percentage: fieldUsage.percentage,
             },
-            include: {
-              field: {
-                select: {
-                  id: true,
-                  name: true,
-                  owners: {
-                    select: {
-                      userId: true
-                    }
-                  }
-                }
-              }
-            }
           });
-          return usage;
-        }));
-
-        // Owner Summaries'i güncelle (fieldIrrigations'a göre)
-        if (ownerDurations && ownerDurations.length > 0) {
-          await tx.irrigationOwnerSummary.deleteMany({
-            where: { irrigationLogId: irrigationId },
+        }
+        for (const ownerSummary of ownerDurations) {
+          await tx.irrigationOwnerSummary.create({
+            data: {
+              irrigationLogId: irrigationId,
+              ownerId: ownerSummary.userId,
+              totalAllocatedDuration: round(ownerSummary.duration),
+              totalIrrigatedArea: round(ownerSummary.irrigatedArea ?? 0),
+            },
           });
-          for (const ownerSummary of ownerDurations) {
-            await tx.irrigationOwnerSummary.create({
-              data: {
-                irrigationLogId: irrigationId,
-                ownerId: ownerSummary.userId,
-                totalAllocatedDuration: round(ownerSummary.duration),
-                totalIrrigatedArea: round(ownerSummary.irrigatedArea ?? 0),
-              },
-            });
-          }
         }
       }
 
-      // Envanter kullanımlarını işle (inventoryDeductions üzerinden)
-      if (inventoryDeductions && inventoryDeductions.length > 0) {
-        // Mevcut envanter kullanımlarını sil (ve stokları geri al)
+      // 2. Envanter bilgileri geldiyse, SADECE envanter bilgilerini güncelle
+      if (inventoryDeductions) { // Boş dizi gelirse silme işlemi yapması için .length kontrolü kaldırıldı
+        // Mevcut envanter kullanımlarını sil ve stokları geri al
         const existingInventoryUsages = await tx.irrigationInventoryUsage.findMany({
           where: { irrigationLogId: irrigationId },
-          include: {
-            ownerUsages: true,
-            inventory: { select: { id: true, totalQuantity: true } }
-          }
+          include: { ownerUsages: true }
         });
 
         for (const existingUsage of existingInventoryUsages) {
@@ -183,63 +161,59 @@ export async function PUT(
               });
             }
           }
-          // İşlem kaydını sil
-          await tx.inventoryTransaction.deleteMany({
-            where: {
-              inventoryId: existingUsage.inventoryId,
-              notes: { contains: `Sulama kaydı #${irrigationId}` } // Belirli bir not ile eşleşenleri sil
-            }
-          });
+        }
+        // İlişkili kayıtları ve ana kaydı sil
+        const existingUsageIds = existingInventoryUsages.map(u => u.id);
+        if (existingUsageIds.length > 0) {
+            await tx.irrigationInventoryOwnerUsage.deleteMany({
+                where: { irrigationInventoryUsageId: { in: existingUsageIds } },
+            });
         }
         await tx.irrigationInventoryUsage.deleteMany({
           where: { irrigationLogId: irrigationId },
         });
-        await tx.irrigationInventoryOwnerUsage.deleteMany({
-          where: { irrigationInventoryUsage: { irrigationLogId: irrigationId } },
-        });
 
-
+        // Yeni envanterleri ekle
         for (const deduction of inventoryDeductions) {
           const { inventoryId, quantityUsed, unitPrice, ownerId: deductionOwnerId } = deduction;
 
-          // Stok kontrolleri (tekrar)
+          if (isNaN(quantityUsed) || quantityUsed <= 0 || isNaN(unitPrice) || unitPrice < 0) {
+            throw new Error(`Geçersiz miktar veya birim fiyat. Miktar: ${quantityUsed}, Fiyat: ${unitPrice}`);
+          }
+
           const inventoryItem = await tx.inventory.findUnique({
             where: { id: inventoryId },
             select: { name: true, unit: true, totalQuantity: true },
           });
           if (!inventoryItem || inventoryItem.totalQuantity < quantityUsed) {
-            throw new Error(
-              `Genel ${inventoryItem?.name || inventoryId} stoğu yetersiz. İhtiyaç: ${round(quantityUsed)} ${inventoryItem?.unit || ''}, Mevcut: ${round(inventoryItem?.totalQuantity ?? 0)} ${inventoryItem?.unit || ''}`
-            );
+            throw new Error(`Genel ${inventoryItem?.name || inventoryId} stoğu yetersiz.`);
           }
 
           const ownerInventory = await tx.inventoryOwnership.findFirst({
             where: { inventoryId: inventoryId, userId: deductionOwnerId },
             select: { id: true, shareQuantity: true, user: { select: { name: true } } },
           });
-          const ownerNameForError = ownerInventory?.user?.name || `Sahip ID: ${deductionOwnerId}`;
-
           if (!ownerInventory || ownerInventory.shareQuantity < quantityUsed) {
-            throw new Error(
-              `${ownerNameForError} adlı sahip için ${inventoryItem.name} stoğu yetersiz. İhtiyaç: ${round(quantityUsed)} ${inventoryItem.unit}, Mevcut: ${round(ownerInventory?.shareQuantity ?? 0)} ${inventoryItem.unit}`
-            );
+            throw new Error(`${ownerInventory?.user?.name || 'Bilinmeyen sahip'} için ${inventoryItem.name} stoğu yetersiz.`);
           }
 
-          // 1. IrrigationInventoryUsage
-          const createdIrrigationInventoryUsage = await tx.irrigationInventoryUsage.create({
+          const createdUsage = await tx.irrigationInventoryUsage.create({
             data: {
-              irrigationLogId: irrigationId,
-              inventoryId: inventoryId,
+              irrigationLog: {
+                connect: { id: irrigationId },
+              },
+              inventory: {
+                connect: { id: inventoryId },
+              },
               quantity: round(quantityUsed),
               unitPrice: round(unitPrice),
               totalCost: round(quantityUsed * unitPrice),
             },
           });
 
-          // 2. IrrigationInventoryOwnerUsage
           await tx.irrigationInventoryOwnerUsage.create({
             data: {
-              irrigationInventoryUsageId: createdIrrigationInventoryUsage.id,
+              irrigationInventoryUsageId: createdUsage.id,
               ownerId: deductionOwnerId,
               percentage: 100,
               quantity: round(quantityUsed),
@@ -247,28 +221,14 @@ export async function PUT(
             },
           });
 
-          // 3. Inventory (Toplam Stok Güncelleme)
           await tx.inventory.update({
             where: { id: inventoryId },
             data: { totalQuantity: { decrement: round(quantityUsed) } },
           });
 
-          // 4. InventoryOwnership (Sahip Stoğu Güncelleme)
           await tx.inventoryOwnership.update({
             where: { id: ownerInventory.id },
             data: { shareQuantity: { decrement: round(quantityUsed) } },
-          });
-
-          // 5. InventoryTransaction
-          await tx.inventoryTransaction.create({
-            data: {
-              inventoryId: inventoryId,
-              type: "USAGE",
-              quantity: -round(quantityUsed),
-              date: new Date(), // Güncel tarih
-              notes: `Sulama kaydı #${irrigationId} için ${ownerNameForError} stoğundan kullanıldı.`,
-              userId: session.id,
-            },
           });
         }
       }

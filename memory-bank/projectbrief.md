@@ -10,7 +10,7 @@ Bu proje, tarım işletmelerinin operasyonlarını daha verimli bir şekilde yö
 
 ## 3. Temel Hedefler
 *   **Envanter Yönetimi**: Tohum, gübre, ilaç gibi tarımsal girdilerin stok takibi ve yönetimi.
-*   **Sulama Yönetimi**: Sulama programlarının oluşturulması, takibi ve raporlanması.
+*   **Sulama Yönetimi**: Sulama programlarının oluşturulması, takibi ve raporlanması. **Birden fazla tarlanın tek bir sulama kaydında yönetilmesi ve dekarsal bazda envanter/maliyet dağıtımı yetenekleri eklendi.**
 *   **Süreç Yönetimi**: Tarımsal üretim süreçlerinin (ekim, hasat vb.) planlanması ve izlenmesi.
 *   **Finansal Takip**: Gelir-gider takibi, borç-alacak yönetimi ve faturalandırma.
 *   **Kullanıcı Yönetimi**: Farklı rollerdeki kullanıcılar (yönetici, sahip, işçi) için yetkilendirme ve erişim kontrolü.

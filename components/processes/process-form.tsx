@@ -245,9 +245,10 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
         if (equipmentRes.ok) setEquipment(await equipmentRes.json());
         if (seasonsRes.ok) {
             const seasonsData = await seasonsRes.json();
-            setSeasons(seasonsData);
-            if (seasonsData.length === 1 && !initialData) {
-                form.setValue("seasonId", seasonsData[0].id, { shouldValidate: true });
+            const seasonsArray = seasonsData.data || [];
+            setSeasons(seasonsArray);
+            if (seasonsArray.length === 1 && !initialData) {
+                form.setValue("seasonId", seasonsArray[0].id, { shouldValidate: true });
             }
         }
         if (inventoryTypesRes.ok) {

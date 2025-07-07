@@ -183,12 +183,12 @@ export async function POST(request: NextRequest) {
       startDateTime: string;
       duration: number;
       notes?: string;
-      wellId: string; // wellId artık zorunlu
-      seasonId?: string;
+      wellId: string;
+      seasonId: string; // seasonId artık zorunlu
     } = await request.json();
 
-    if (!startDateTime || !duration || !wellId) {
-      return NextResponse.json({ error: "Eksik alanlar: startDateTime, duration ve wellId gereklidir." }, { status: 400 });
+    if (!startDateTime || !duration || !wellId || !seasonId) { // seasonId kontrolü eklendi
+      return NextResponse.json({ error: "Eksik alanlar: startDateTime, duration, wellId ve seasonId gereklidir." }, { status: 400 });
     }
 
     const irrigationLog = await prisma.irrigationLog.create({
@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
         notes,
         status: "DRAFT", // Başlangıçta taslak olarak oluştur
         wellId: wellId,
-        seasonId: seasonId || null,
+        seasonId: seasonId, // seasonId artık null olamaz
         createdBy: session.id,
       },
     });

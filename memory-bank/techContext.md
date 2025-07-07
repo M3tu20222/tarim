@@ -46,3 +46,9 @@ Bu belge, Tarım Yönetim Sistemi projesinde kullanılan teknolojileri, gelişti
 *   **Git**: Versiyon kontrolü için Git kullanılmaktadır. Her özellik veya hata düzeltmesi ayrı bir branch üzerinde geliştirilmeli ve pull request ile ana branch'e birleştirilmelidir.
 *   **VS Code**: Geliştirme için ana IDE olarak VS Code tercih edilmektedir. Gerekli eklentiler (ESLint, Prettier, Prisma, Tailwind CSS IntelliSense) kurulmalıdır.
 *   **Prisma CLI**: `npx prisma generate` ve `npx prisma migrate dev` gibi komutlar, veritabanı şeması değişikliklerini yönetmek ve client'ı güncel tutmak için düzenli olarak kullanılmalıdır.
+
+## 6. Önemli Geliştirme Notları
+*   **Next.js 15+ Asenkron `params` Kullanımı**: Next.js 15 ve üzeri sürümlerde, sunucu bileşenlerine (Server Components) gelen `params` ve `searchParams` gibi dinamik API'ler asenkron hale gelmiştir. Bu nedenle, bu objelerin özelliklerine erişmeden önce `await` ile beklenmeleri gerekir.
+    *   **Yanlış Kullanım (Hata Verir)**: `const id = params.id;`
+    *   **Doğru Kullanım**: `const { id } = await params;`
+    *   **TypeScript Tipi**: Prop tipi tanımlanırken `params` bir `Promise` olarak belirtilmelidir: `params: Promise<{ id: string }>`

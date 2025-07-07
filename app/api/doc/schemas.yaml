@@ -1,0 +1,54 @@
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Kullanıcı ID'si
+          example: "60d0fe4f5311236168a109ca"
+        name:
+          type: string
+          description: Kullanıcının adı ve soyadı
+          example: "Ahmet Yılmaz"
+        email:
+          type: string
+          format: email
+          description: Kullanıcının e-posta adresi
+          example: "ahmet.yilmaz@example.com"
+        role:
+          type: string
+          enum: [ADMIN, OWNER, WORKER]
+          description: Kullanıcının rolü
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+          description: Kullanıcının durumu
+        createdAt:
+          type: string
+          format: date-time
+          description: Kaydın oluşturulma tarihi
+
+    UserCreateInput:
+      type: object
+      required:
+        - name
+        - email
+        - password
+        - role
+      properties:
+        name:
+          type: string
+          description: Kullanıcının adı ve soyadı
+        email:
+          type: string
+          format: email
+          description: Kullanıcının e-posta adresi
+        password:
+          type: string
+          format: password
+          description: Kullanıcının şifresi
+        role:
+          type: string
+          enum: [ADMIN, OWNER, WORKER]
+          description: Kullanıcının rolü

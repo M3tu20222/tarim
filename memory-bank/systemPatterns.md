@@ -13,7 +13,7 @@ graph TD
     C --> E[API Katmanı]
     D --> E
     E --> F[Prisma ORM]
-    F --> G[PostgreSQL Veritabanı]
+    F --> G[MongoDB Veritabanı]
     E --> H[Harici Servisler/API'ler]
     E -- "Asenkron İşlemler (Kuyruk)" --> I[Arka Plan İşleyici]
     I --> F
@@ -22,10 +22,11 @@ graph TD
 ## 2. Temel Teknik Kararlar
 *   **Next.js App Router**: Modern web uygulamaları için güçlü bir yapı sunması, sunucu ve istemci bileşenlerini bir arada kullanabilme yeteneği.
 *   **TypeScript**: Geliştirme sürecinde tip güvenliği sağlayarak hataları azaltma ve kod kalitesini artırma.
-*   **Prisma ORM**: Veritabanı etkileşimlerini basitleştirme, şema yönetimi ve migrasyon kolaylığı.
+*   **Prisma ORM**: Veritabanı etkileşimlerini basitleştirme, şema yönetimi ve migrasyon kolaylığı. **Özellikle karmaşık ve çok adımlı işlemlerin atomik olarak yönetilmesi için `prisma.$transaction` kullanımı benimsenmiştir.**
+*   **MongoDB**: Esnek şema yapısı ve ölçeklenebilirlik avantajları nedeniyle tercih edilmiştir.
 *   **Tailwind CSS**: Hızlı ve esnek UI geliştirme, stil tutarlılığı.
 *   **NextAuth.js**: Güvenli ve kolay kimlik doğrulama çözümü.
-*   **Parçalı API Tasarımı**: Uzun süren veya karmaşık işlemleri (örn. `Process` kaydetme) daha küçük, yönetilebilir API endpoint'lerine bölme.
+*   **Parçalı API Tasarımı**: Uzun süren veya karmaşık işlemleri (örn. `Process` kaydetme, `IrrigationLog` oluşturma) daha küçük, yönetilebilir API endpoint'lerine bölme.
 *   **Asenkron İşleme Yaklaşımı**: Performans darboğazlarını gidermek ve kullanıcı deneyimini iyileştirmek için zaman alıcı işlemleri (örn. maliyet hesaplama, bildirim gönderme) arka plana taşıma potansiyeli.
 
 ## 3. Tasarım Kalıpları
@@ -33,7 +34,7 @@ graph TD
 *   **Bileşen Tabanlı Mimari**: React bileşenleri kullanılarak UI'ın küçük, yeniden kullanılabilir parçalara ayrılması.
 *   **Katmanlı Mimari**: Uygulama, sunum (UI), iş mantığı (API rotaları, servisler) ve veri erişim (Prisma) katmanlarına ayrılmıştır.
 *   **Repository/Service Pattern**: Veritabanı etkileşimleri için `lib/prisma.ts` üzerinden merkezi bir Prisma istemcisi kullanılması ve iş mantığının servis katmanlarında ayrıştırılması.
-*   **Wizard Form Pattern**: Karmaşık ve çok adımlı veri giriş süreçleri için kullanıcı deneyimini iyileştiren ve backend yükünü dağıtan bir yaklaşım.
+*   **Wizard Form Pattern**: Karmaşık ve çok adımlı veri giriş süreçleri için kullanıcı deneyimini iyileştiren ve backend yükünü dağıtan bir yaklaşım. **Sulama kaydı oluşturma süreci bu kalıba uygun olarak yeniden yapılandırılmıştır.**
 
 ## 4. Bileşen İlişkileri
 *   **`app/`**: Ana uygulama rotalarını ve sayfalarını barındırır. `app/dashboard` gibi alt dizinler, belirli kullanıcı rolleri veya ana bölümler için düzenlenmiştir.
@@ -44,8 +45,9 @@ graph TD
 
 ## 5. Kritik Uygulama Yolları
 *   **Kimlik Doğrulama Akışı**: Kullanıcı girişi -> NextAuth.js ile kimlik doğrulama -> JWT oluşturma -> Oturum yönetimi.
-*   **Veri Akışı (Örnek: İşlem Ekleme - Çok Adımlı)**:
-    1.  **Adım 1 (Temel Bilgiler)**: İstemci bileşeni (form) -> `POST /api/processes` (initiate) -> `Process` taslağı oluşturulur, `processId` döner.
-    2.  **Adım 2 (Envanter/Ekipman)**: İstemci bileşeni (form) -> `PUT /api/processes?processId={id}` (inventory/equipment update) -> Envanter düşüşleri ve ekipman kullanımları yapılır, `Process` durumu güncellenir.
-    3.  **Adım 3 (Sonlandırma)**: İstemci bileşeni (form) -> `POST /api/processes/finalize?processId={id}` (finalize) -> Maliyet hesaplamaları, bildirim gönderme gibi işlemler tetiklenir (potansiyel olarak asenkron), `Process` durumu `FINALIZED` olarak güncellenir.
+*   **Sulama Kaydı Oluşturma Akışı (Çok Adımlı Wizard)**:
+    1.  **Adım 0 (Temel Bilgiler)**: İstemci bileşeni (form) -> `POST /api/irrigation` (initiate) -> `IrrigationLog` taslağı oluşturulur, `irrigationLogId` döner.
+    2.  **Adım 1 (Tarla Bilgileri)**: İstemci bileşeni (form) -> `PUT /api/irrigation/{irrigationLogId}/details` (field details update) -> `IrrigationFieldUsage` kayıtları oluşturulur, tarlaların dekarsal bazda sulanma bilgileri işlenir.
+    3.  **Adım 2 (Envanter Kullanımları)**: İstemci bileşeni (form) -> `PUT /api/irrigation/{irrigationLogId}/details` (inventory update) -> `IrrigationInventoryUsage` ve `IrrigationInventoryOwnerUsage` kayıtları oluşturulur, envanter düşüşleri sahiplik oranlarına göre yapılır, yetersiz stok durumunda borçlar oluşturulur.
+    4.  **Adım 3 (Sonlandırma)**: İstemci bileşeni (form) -> `POST /api/irrigation/{irrigationLogId}/finalize` (finalize) -> `IrrigationOwnerSummary` kayıtları oluşturulur, genel maliyet dağıtımı gibi son işlemler tetiklenir (potansiyel olarak asenkron), `IrrigationLog` durumu `COMPLETED` olarak güncellenir.
 *   **Raporlama Akışı**: Kullanıcı isteği (rapor türü) -> API rotası (GET /api/reports) -> Veritabanından veri çekme -> Veri işleme -> İstemciye rapor verisi gönderme.

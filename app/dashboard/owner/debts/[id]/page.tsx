@@ -38,16 +38,17 @@ export const metadata: Metadata = {
 };
 
 interface DebtDetailsPageProps {
-  params: {
-    id: string;
-  };
+  params: Promise<{ id: string }>;
 }
 
-export default async function DebtDetailsPage({ params }: DebtDetailsPageProps) {
+export default async function DebtDetailsPage({
+  params,
+}: DebtDetailsPageProps) {
+  const { id } = await params;
   // Borç detaylarını getir
   const debt = await prisma.debt.findUnique({
     where: {
-      id: params.id,
+      id: id,
     },
     include: {
       creditor: {
@@ -177,7 +178,7 @@ export default async function DebtDetailsPage({ params }: DebtDetailsPageProps) 
           </Button>
           {debt.status !== "PAID" && debt.status !== "CANCELLED" && (
             <Button asChild>
-              <Link href={`/dashboard/owner/debts/pay/${params.id}`}>
+              <Link href={`/dashboard/owner/debts/pay/${id}`}>
                 <CreditCard className="mr-2 h-4 w-4" />
                 Ödeme Yap
               </Link>
@@ -244,7 +245,7 @@ export default async function DebtDetailsPage({ params }: DebtDetailsPageProps) 
               {debt.status !== "PAID" && debt.status !== "CANCELLED" && (
                 <>
                   <Button variant="outline" size="sm" asChild>
-                    <Link href={`/dashboard/owner/debts/${params.id}/edit`}>
+                    <Link href={`/dashboard/owner/debts/${id}/edit`}>
                       <Edit className="mr-2 h-4 w-4" />
                       Düzenle
                     </Link>

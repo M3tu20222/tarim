@@ -112,6 +112,11 @@ interface Field {
     userName: string;
     percentage: number;
   }[];
+  owners?: { // 'owners' özelliği eklendi
+    userId: string;
+    userName: string;
+    percentage: number;
+  }[];
 }
 
 interface Inventory {
@@ -223,7 +228,7 @@ export function WorkerIrrigationForm({
 
         console.log("Processed fields list:", fieldsList);
         // Her tarla için sahiplik bilgilerini kontrol et
-        fieldsList.forEach((field, index) => {
+        fieldsList.forEach((field: Field, index: number) => { // 'field' ve 'index' tipleri belirtildi
           console.log(`Tarla ${index + 1} (${field.name}):`, {
             id: field.id,
             ownerships: field.ownerships,
@@ -474,11 +479,11 @@ export function WorkerIrrigationForm({
 
   // Form gönderme
   const onSubmit = async (data: IrrigationFormValues) => {
-    if (!calculatedData) {
+    if (!calculatedData || !calculatedData.fieldData || calculatedData.fieldData.length === 0) {
       toast({
         title: "Hata",
         description:
-          "Hesaplama yapılamadı. Lütfen form alanlarını kontrol edin.",
+          "Sulama için en az bir geçerli tarla seçimi gereklidir.",
         variant: "destructive",
       });
       return;
@@ -557,18 +562,46 @@ export function WorkerIrrigationForm({
       const [hours, minutes] = data.startTime.split(':').map(Number);
       dateObj.setHours(hours, minutes, 0, 0);
 
-      const formData = {
-        startDateTime: dateObj.toISOString(), // Tarih ve saati birleştir
+      // API'ye gönderilecek veriyi hazırla (İlk POST isteği için)
+      const initialFormData = {
+        startDateTime: dateObj.toISOString(),
         duration: data.duration,
         notes: data.notes,
         wellId: assignedWell.id,
         createdBy: userId,
+        seasonId: calculatedData.fieldData[0]?.seasonId,
+      };
+
+      // İlk API isteği (Sulama kaydını oluştur)
+      const initialResponse = await fetch("/api/irrigation", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(initialFormData),
+      });
+
+      if (!initialResponse.ok) {
+        const error = await initialResponse.json();
+        throw new Error(
+          error.error || "Sulama kaydı oluşturulurken bir hata oluştu."
+        );
+      }
+
+      const { data: { id: irrigationLogId } } = await initialResponse.json(); // Oluşturulan kaydın ID'sini al
+
+      // İkinci API isteği (Sulama detaylarını güncelle)
+      const updateFormData = {
+        startDateTime: dateObj.toISOString(), // PUT için de gerekli
+        duration: data.duration, // PUT için de gerekli
+        notes: data.notes, // PUT için de gerekli
         fieldIrrigations: calculatedData.fieldData.map((field: any) => ({
           fieldId: field.fieldId,
           percentage: field.irrigationPercentage,
           irrigatedArea: field.irrigatedArea,
           wellId: field.wellId,
           seasonId: field.seasonId,
+          owners: field.ownerships, // PUT endpoint'i owners bekliyor
         })),
         ownerDurations: Object.values(calculatedData.ownerDurations).map(
           (owner: any) => ({
@@ -579,44 +612,24 @@ export function WorkerIrrigationForm({
         ),
         inventoryDeductions: data.inventoryUsages?.map((usage) => {
           const inventory = inventories.find((i) => i.id === usage.inventoryId);
-
-          // Tarla sahiplerini al - bunlar öncelikli olmalı
           const fieldOwners = Object.keys(calculatedData.ownerDurations);
-
-          // Eğer tarla sahibi yoksa, işçinin kendisini kullan
-          if (fieldOwners.length === 0) {
-            console.log(`Envanter: ${inventory?.name}, Tarla sahibi bulunamadı, işçi ID'si kullanılıyor: ${userId}`);
-            return {
-              inventoryId: usage.inventoryId,
-              quantityUsed: usage.quantity,
-              unitPrice: inventory?.unitPrice || 0,
-              ownerId: userId,
-            };
-          }
-
-          // Bu envantere sahip olan tarla sahiplerini bul
           let selectedOwnerId = null;
 
-          if (inventory?.ownerships && Array.isArray(inventory.ownerships)) {
-            // Tarla sahipleri arasından bu envantere sahip olanları bul
+          if (fieldOwners.length === 0) {
+            selectedOwnerId = userId;
+          } else if (inventory?.ownerships && Array.isArray(inventory.ownerships)) {
             for (const fieldOwnerId of fieldOwners) {
               const ownerInventory = inventory.ownerships.find(
                 (ownership) => ownership.userId === fieldOwnerId
               );
-
-              // Bu sahip bu envantere sahipse ve yeterli stoğu varsa
               if (ownerInventory && ownerInventory.shareQuantity && ownerInventory.shareQuantity >= usage.quantity) {
                 selectedOwnerId = fieldOwnerId;
-                console.log(`Envanter: ${inventory?.name}, Yeterli stoğa sahip tarla sahibi bulundu: ${fieldOwnerId}, Stok: ${ownerInventory.shareQuantity}`);
                 break;
               }
             }
           }
-
-          // Eğer hiçbir tarla sahibinin yeterli stoğu yoksa, ilk tarla sahibini kullan (hata API'de yakalanacak)
           if (!selectedOwnerId) {
             selectedOwnerId = fieldOwners[0];
-            console.log(`Envanter: ${inventory?.name}, Yeterli stoğa sahip tarla sahibi bulunamadı, ilk tarla sahibi kullanılıyor: ${selectedOwnerId}`);
           }
 
           return {
@@ -626,21 +639,21 @@ export function WorkerIrrigationForm({
             ownerId: selectedOwnerId,
           };
         }),
+        status: "COMPLETED", // Sulama tamamlandığında status'ü COMPLETED yapabiliriz
       };
 
-      // API isteği
-      const response = await fetch("/api/irrigation", {
-        method: "POST",
+      const updateResponse = await fetch(`/api/irrigation/${irrigationLogId}`, {
+        method: "PUT",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(updateFormData),
       });
 
-      if (!response.ok) {
-        const error = await response.json();
+      if (!updateResponse.ok) {
+        const error = await updateResponse.json();
         throw new Error(
-          error.error || "Sulama kaydı oluşturulurken bir hata oluştu."
+          error.error || "Sulama detayları güncellenirken bir hata oluştu."
         );
       }
 

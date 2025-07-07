@@ -234,17 +234,25 @@ export async function POST(request: Request) {
       // TODO: İlgili kullanıcılara (ortaklar, adminler vb.) bildirim gönderilebilir.
 
       // 4.7. Borç Kaydı Oluşturma
-      // Önce alacaklıyı belirle: Katılımcılardan biri işaretlenmişse o, değilse işlemi yapan kullanıcı
       let creditorId = createdContributors.find(c => c.isCreditor)?.userId;
+
+      // Eğer açıkça bir alacaklı belirtilmemişse
       if (!creditorId) {
-          // Eğer katılımcılardan hiçbiri alacaklı değilse, işlemi yapan kullanıcıyı alacaklı kabul et
-          // Ancak işlemi yapan kullanıcı aynı zamanda ödeme yapmayan bir katılımcıysa, bu durumda alacaklı belirsizdir.
+          // İstek yapan kullanıcının (userId) ödeme yapmamış bir katılımcı olup olmadığını kontrol et
           const requestUserIsUnpaidContributor = createdContributors.some(c => c.userId === userId && !c.hasPaid);
-          if (!requestUserIsUnpaidContributor) {
-              creditorId = userId; // İşlemi yapan kullanıcı alacaklı
-              console.log(`Purchase ${purchase.id}: No explicit creditor found, assuming requesting user (${userId}) is the creditor.`);
+
+          if (requestUserIsUnpaidContributor) {
+              // Eğer istek yapan kullanıcı ödeme yapmamış bir katılımcıysa, kendine borçlu olamaz.
+              // Bu durumda, borcun alacaklısını bir sistem kullanıcısı olarak ata.
+              // TODO: 'YOUR_DEFAULT_SYSTEM_USER_ID' yerine gerçek bir sistem kullanıcısı ID'si veya env değişkeni kullanın.
+              // Geçici çözüm: Geçerli bir MongoDB ObjectID formatında jenerik bir ID kullanıyoruz.
+              creditorId = process.env.SYSTEM_USER_ID || '60c72b2f9b1e8b001c8e4d5a'; // Örnek geçerli ObjectID
+              console.log(`Purchase ${purchase.id}: Requesting user (${userId}) is an unpaid contributor. Assigning system user (${creditorId}) as creditor.`);
           } else {
-              console.warn(`Purchase ${purchase.id}: Cannot determine creditor. Requesting user (${userId}) is also an unpaid contributor.`);
+              // Eğer istek yapan kullanıcı ödeme yapmamış bir katılımcı değilse (yani ya ödemiş ya da hiç katkıda bulunmamış),
+              // işlemi yapan kullanıcıyı alacaklı kabul et.
+              creditorId = userId;
+              console.log(`Purchase ${purchase.id}: No explicit creditor found, assuming requesting user (${userId}) is the creditor.`);
           }
       }
 
@@ -285,8 +293,8 @@ export async function POST(request: Request) {
           });
         await Promise.all(debtPromises);
       } else if (createdContributors.some(c => !c.hasPaid)) {
-          // Alacaklı belirlenemedi ve ödenmemiş pay var
-          console.error(`Purchase ${purchase.id}: Debts could not be created because the creditor could not be determined.`);
+          // Bu else-if bloğu, creditorId her zaman ayarlandığı için artık idealde çalışmamalıdır.
+          console.error(`Purchase ${purchase.id}: Debts could not be created because the creditor could not be determined (fallback error).`);
       }
 
       // Bildirimleri Oluştur

@@ -58,6 +58,9 @@ const Step0Schema = z.object({
   wellId: z.string({
     required_error: "Kuyu seçimi gereklidir.",
   }),
+  seasonId: z.string({
+    required_error: "Sezon seçimi gereklidir.",
+  }),
 });
 
 // Adım 1: Tarla Seçimi Şeması
@@ -75,28 +78,37 @@ const Step1Schema = z.object({
           })
           .max(100, {
             message: "Yüzde en fazla 100 olabilir.",
-          }),
+          })
+          .optional(), // Make percentage optional
+        actualIrrigatedArea: z.coerce
+          .number()
+          .min(0.01, {
+            message: "Sulanan alan en az 0.01 dekar olmalıdır.",
+          })
+          .optional(), // Make actualIrrigatedArea optional
       })
+      .refine(
+        (data) => data.percentage !== undefined || data.actualIrrigatedArea !== undefined,
+        {
+          message: "Yüzde veya sulanan alan belirtilmelidir.",
+          path: ["percentage"], // Or actualIrrigatedArea, or both
+        }
+      )
     )
     .min(1, {
       message: "En az bir tarla seçilmelidir.",
     }),
 });
 
-// Adım 2: Envanter Kullanımları Şeması
+// Adım 2: Envanter Kullanımları Şeması (Yeni Grup Mantığı)
 const Step2Schema = z.object({
-  inventoryUsages: z
+  inventoryGroups: z
     .array(
       z.object({
-        ownerId: z.string({
-          required_error: "Envanterin sahibi seçilmelidir.",
-        }),
-        inventoryId: z.string({
-          required_error: "Envanter seçimi gereklidir.",
-        }),
-        quantity: z.coerce.number().min(0.01, {
-          message: "Miktar en az 0.01 olmalıdır.",
-        }),
+        inventoryTypeId: z.string({ required_error: "Envanter türü seçilmelidir." }),
+        totalQuantity: z.coerce.number().min(0.01, { message: "Miktar en az 0.01 olmalıdır." }),
+        // Her bir sahip için seçilen spesifik envanter ID'sini tutacak alan
+        allocations: z.record(z.string()) // ownerId -> inventoryId
       })
     )
     .optional(),
@@ -110,8 +122,9 @@ const defaultValues: Partial<IrrigationFormValues> = {
   startTime: format(new Date(), "HH:mm"),
   duration: 60,
   wellId: "",
+  seasonId: "",
   fieldIrrigations: [{ fieldId: "", percentage: 50 }],
-  inventoryUsages: [],
+  inventoryGroups: [],
 };
 
 const round = (num: number) => Math.round((num + Number.EPSILON) * 100) / 100;
@@ -142,6 +155,7 @@ interface Inventory {
   id: string;
   name: string;
   unit: string;
+  category: string; // Eklendi
   totalQuantity: number;
   unitPrice: number;
   ownerships?: {
@@ -164,8 +178,9 @@ interface OwnerData {
 
 type FieldDetailForApi = {
   fieldId: string;
-  percentage: number;
+  percentage?: number;
   irrigatedArea: number;
+  actualIrrigatedArea?: number;
   wellId: string | null;
   seasonId: string;
   owners: Field['owners'];
@@ -174,6 +189,13 @@ type FieldDetailForApi = {
 interface Well {
   id: string;
   name: string;
+}
+
+interface Season {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
 }
 
 interface IrrigationFormProps {
@@ -187,10 +209,12 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
   const [irrigationLogId, setIrrigationLogId] = useState<string | null>(propIrrigationLogId || null);
   const [fields, setFields] = useState<Field[]>([]);
   const [wells, setWells] = useState<Well[]>([]);
+  const [seasons, setSeasons] = useState<Season[]>([]); // Yeni eklenen state
   const [inventories, setInventories] = useState<Inventory[]>([]);
   const [involvedOwners, setInvolvedOwners] = useState<InvolvedOwner[]>([]);
   const [loadingFields, setLoadingFields] = useState(false);
   const [loadingWells, setLoadingWells] = useState(false);
+  const [loadingSeasons, setLoadingSeasons] = useState(false); // Yeni eklenen loading state
   const [loadingInventories, setLoadingInventories] = useState(false);
   const [loadingSubmit, setLoadingSubmit] = useState(false);
 
@@ -207,6 +231,12 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
     mode: "onChange",
   });
 
+  useEffect(() => {
+    if (initialData) {
+      form.reset(initialData);
+    }
+  }, [initialData, form.reset]);
+
   const {
     fields: fieldIrrigations,
     append: appendField,
@@ -217,12 +247,12 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
   });
 
   const {
-    fields: usedInventories,
-    append: appendUsedInventory,
-    remove: removeUsedInventory,
+    fields: inventoryGroups,
+    append: appendInventoryGroup,
+    remove: removeInventoryGroup,
   } = useFieldArray({
     control: form.control,
-    name: "inventoryUsages",
+    name: "inventoryGroups",
   });
 
   const watchedFieldIrrigations = useWatch({ control: form.control, name: "fieldIrrigations" });
@@ -259,6 +289,23 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
       }
     };
     fetchWells();
+
+    const fetchSeasons = async () => { // Yeni sezonları çekme fonksiyonu
+      setLoadingSeasons(true);
+      try {
+        const url = isEditMode ? "/api/seasons?fetchAll=true" : "/api/seasons";
+        const seasonsRes = await fetch(url);
+        if (!seasonsRes.ok) throw new Error('Sezonlar yüklenemedi');
+        const seasonsData = await seasonsRes.json();
+        setSeasons(seasonsData.data || []);
+      } catch (error: any) {
+        console.error("Sezon yükleme hatası:", error);
+        toast({ title: "Hata", description: error.message || "Sezonlar yüklenirken bir hata oluştu.", variant: "destructive" });
+      } finally {
+        setLoadingSeasons(false);
+      }
+    };
+    fetchSeasons();
   }, []);
 
   useEffect(() => {
@@ -293,8 +340,8 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
       }
 
       try {
-        // const ownerIdsParam = selectedOwnerIds.join(','); // Bu filtreyi geçici olarak kaldırıyoruz
-        const inventoriesRes = await fetch(`/api/inventory?category=FERTILIZER,PESTICIDE&includeOwnershipDetails=true`); // Tüm ilgili envanterleri getir
+        const ownerIdsParam = selectedOwnerIds.join(',');
+        const inventoriesRes = await fetch(`/api/inventory?category=FERTILIZER,PESTICIDE&includeOwnershipDetails=true&ownerIds=${ownerIdsParam}`);
 
         if (inventoriesRes.ok) {
           const inventoriesData = await inventoriesRes.json();
@@ -319,9 +366,9 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
     let formData: any = {};
 
     if (currentStep === 0) {
-      isValid = await form.trigger(["date", "startTime", "duration", "wellId"]);
+      isValid = await form.trigger(["date", "startTime", "duration", "wellId", "seasonId"]); // seasonId eklendi
       if (isValid) {
-        const { date, startTime, duration, notes, wellId } = form.getValues();
+        const { date, startTime, duration, notes, wellId, seasonId } = form.getValues(); // seasonId eklendi
         const startDate = new Date(date);
         const [hours, minutes] = startTime.split(":").map(Number);
         startDate.setHours(hours, minutes, 0, 0);
@@ -331,6 +378,7 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
           duration,
           notes,
           wellId,
+          seasonId, // seasonId eklendi
         };
 
         setLoadingSubmit(true);
@@ -367,7 +415,17 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
           .map((irrigation): FieldDetailForApi | null => {
             const field = fields.find((f) => f.id === irrigation.fieldId);
             if (!field) return null;
-            const irrigatedArea = (field.size * irrigation.percentage) / 100;
+
+            let irrigatedArea: number;
+            if (irrigation.actualIrrigatedArea !== undefined && irrigation.actualIrrigatedArea !== null) {
+              irrigatedArea = irrigation.actualIrrigatedArea;
+            } else if (irrigation.percentage !== undefined && irrigation.percentage !== null) {
+              irrigatedArea = round((field.size * (irrigation.percentage || 0)) / 100);
+            } else {
+              // This case should ideally be caught by Zod validation, but as a fallback
+              return null;
+            }
+
             totalIrrigatedArea += irrigatedArea;
 
             if (!foundWellId && field.fieldWells?.[0]?.well?.id) {
@@ -378,6 +436,7 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
               fieldId: field.id,
               percentage: irrigation.percentage,
               irrigatedArea: round(irrigatedArea),
+              actualIrrigatedArea: irrigation.actualIrrigatedArea, // Pass actualIrrigatedArea to API
               wellId: field.fieldWells?.[0]?.well?.id || null,
               seasonId: field.seasonId,
               owners: field.owners,
@@ -408,12 +467,13 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
         }
 
         const ownerDataMap: Record<string, OwnerData> = {};
+        const formDuration = form.getValues("duration") || 0;
         fieldDataForApi.forEach((fieldDetail) => {
           if (!Array.isArray(fieldDetail.owners)) return;
           fieldDetail.owners.forEach((ownership) => {
             if (!ownership.user) return;
-            const ownerIrrigatedArea = (fieldDetail.irrigatedArea * ownership.percentage) / 100;
-            const ownerDuration = totalIrrigatedArea > 0 ? (form.getValues("duration") * ownerIrrigatedArea) / totalIrrigatedArea : 0;
+            const ownerIrrigatedArea = (fieldDetail.irrigatedArea * (ownership.percentage || 0)) / 100;
+            const ownerDuration = totalIrrigatedArea > 0 ? (formDuration * ownerIrrigatedArea) / totalIrrigatedArea : 0;
 
             if (ownerDataMap[ownership.userId]) {
               ownerDataMap[ownership.userId].duration += ownerDuration;
@@ -463,9 +523,10 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
         }
       }
     } else if (currentStep === 2) {
-      isValid = await form.trigger("inventoryUsages");
+      isValid = await form.trigger("inventoryGroups");
       if (isValid) {
-        const { inventoryUsages } = form.getValues();
+        const { inventoryGroups } = form.getValues();
+        const { displayOwnerDurations } = calculatedData;
         let formHasStockError = false;
         const inventoryDeductionsForApi: {
           inventoryId: string;
@@ -474,48 +535,73 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
           ownerId: string;
         }[] = [];
 
-        inventoryUsages?.forEach((usage) => {
+        inventoryGroups?.forEach(group => {
           if (formHasStockError) return;
 
-          if (!usage.inventoryId || !usage.ownerId || usage.quantity == null || usage.quantity <= 0) {
-            console.warn("Invalid inventory usage entry:", usage);
-            toast({ title: "Hata", description: `Geçersiz envanter girişi. Lütfen tüm alanları doldurun.`, variant: "destructive" });
-            formHasStockError = true;
+          const totalQuantity = Number(group.totalQuantity);
+          if (isNaN(totalQuantity) || totalQuantity <= 0) {
+            // Skip if quantity is not a valid positive number
             return;
           }
 
-          const inventoryItem = inventories.find((i) => i.id === usage.inventoryId);
-          if (!inventoryItem) {
-            toast({ title: "Hata", description: `Envanter detayı bulunamadı: ID ${usage.inventoryId}.`, variant: "destructive" });
-            formHasStockError = true;
-            return;
-          }
+          const involvedOwnersForDistribution = Object.values(displayOwnerDurations).filter(owner => owner.irrigatedArea > 0);
+          const relevantTotalIrrigatedArea = involvedOwnersForDistribution.reduce((sum, o) => sum + o.irrigatedArea, 0);
 
-          const ownerStock = inventoryItem.ownerships?.find(own => own.userId === usage.ownerId);
-          const ownerName = involvedOwners.find(o => o.id === usage.ownerId)?.name || `Sahip (ID: ${usage.ownerId})`;
+          if (relevantTotalIrrigatedArea <= 0) return;
 
-          if (!ownerStock || ownerStock.shareQuantity < usage.quantity) {
-            toast({
-              title: "Yetersiz Stok",
-              description: `${ownerName} adlı sahip için ${inventoryItem.name} stoğu yetersiz. İstenen: ${usage.quantity.toFixed(2)} ${inventoryItem.unit}, Mevcut: ${round(ownerStock?.shareQuantity ?? 0).toFixed(2)} ${inventoryItem.unit}`,
-              variant: "destructive",
-              duration: 7000,
+          let sumOfDistributedQuantities = 0;
+          for (let i = 0; i < involvedOwnersForDistribution.length; i++) {
+            const owner = involvedOwnersForDistribution[i];
+            const ownerSharePercent = owner.irrigatedArea / relevantTotalIrrigatedArea;
+            let quantityShare = totalQuantity * ownerSharePercent;
+
+            if (i === involvedOwnersForDistribution.length - 1) {
+              quantityShare = round(totalQuantity - sumOfDistributedQuantities);
+            }
+            
+            const roundedQuantityShare = round(quantityShare);
+            if (roundedQuantityShare <= 0) continue;
+            sumOfDistributedQuantities += roundedQuantityShare;
+
+            const specificInventoryId = group.allocations[owner.userId];
+            if (!specificInventoryId) {
+              toast({ title: "Hata", description: `${owner.userName} için bir envanter stoğu seçilmemiş.`, variant: "destructive" });
+              formHasStockError = true;
+              return;
+            }
+
+            const inventoryItem = inventories.find(inv => inv.id === specificInventoryId);
+            if (!inventoryItem) {
+              toast({ title: "Hata", description: `Envanter detayı bulunamadı: ID ${specificInventoryId}.`, variant: "destructive" });
+              formHasStockError = true;
+              return;
+            }
+            
+            const ownerStock = inventoryItem.ownerships?.find(own => own.userId === owner.userId);
+            if (!ownerStock || ownerStock.shareQuantity < roundedQuantityShare) {
+              toast({
+                title: "Yetersiz Stok",
+                description: `${owner.userName} için ${inventoryItem.name} stoğu yetersiz. (Gereken: ${roundedQuantityShare}, Mevcut: ${ownerStock?.shareQuantity || 0})`,
+                variant: "destructive",
+              });
+              formHasStockError = true;
+              return;
+            }
+
+            const unitPrice = inventoryItem.unitPrice ?? 0;
+
+            // Add deduction for each owner's usage from their specific stock
+            inventoryDeductionsForApi.push({
+              inventoryId: specificInventoryId,
+              quantityUsed: roundedQuantityShare,
+              unitPrice: unitPrice,
+              ownerId: owner.userId,
             });
-            formHasStockError = true;
-            return;
           }
-
-          inventoryDeductionsForApi.push({
-            inventoryId: usage.inventoryId,
-            quantityUsed: round(usage.quantity),
-            unitPrice: inventoryItem.unitPrice ?? 0,
-            ownerId: usage.ownerId,
-          });
         });
 
         if (formHasStockError) {
           setLoadingSubmit(false);
-          toast({ title: "İşlem Durduruldu", description: "Formda belirtilen yetersiz stok hatalarını düzeltin.", variant: "destructive" });
           return;
         }
 
@@ -550,7 +636,8 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
   const handleSubmitForm = async () => {
     setLoadingSubmit(true);
     try {
-      const { duration, fieldIrrigations, inventoryUsages } = form.getValues();
+      const { duration, fieldIrrigations, inventoryGroups } = form.getValues();
+      const currentDuration = duration || 0;
 
       // ownerDurationsForApi'yi yeniden hesapla (Finalize API'si için)
       let totalIrrigatedArea = 0;
@@ -558,11 +645,12 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
         .map((irrigation): FieldDetailForApi | null => {
           const field = fields.find((f) => f.id === irrigation.fieldId);
           if (!field) return null;
-          const irrigatedArea = (field.size * irrigation.percentage) / 100;
+          const percentage = irrigation.percentage || 0;
+          const irrigatedArea = (field.size * percentage) / 100;
           totalIrrigatedArea += irrigatedArea;
           return {
             fieldId: field.id,
-            percentage: irrigation.percentage,
+            percentage: percentage,
             irrigatedArea: round(irrigatedArea),
             wellId: field.fieldWells?.[0]?.well?.id || null,
             seasonId: field.seasonId,
@@ -576,8 +664,8 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
         if (!Array.isArray(fieldDetail.owners)) return;
         fieldDetail.owners.forEach((ownership) => {
           if (!ownership.user) return;
-          const ownerIrrigatedArea = (fieldDetail.irrigatedArea * ownership.percentage) / 100;
-          const ownerDuration = totalIrrigatedArea > 0 ? (duration * ownerIrrigatedArea) / totalIrrigatedArea : 0;
+          const ownerIrrigatedArea = (fieldDetail.irrigatedArea * (ownership.percentage || 0)) / 100;
+          const ownerDuration = totalIrrigatedArea > 0 ? (currentDuration * ownerIrrigatedArea) / totalIrrigatedArea : 0;
 
           if (ownerDataMap[ownership.userId]) {
             ownerDataMap[ownership.userId].duration += ownerDuration;
@@ -610,33 +698,59 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
       }
       const aggregatedInventoryUsagesByType = new Map<string, AggregatedInventoryTypeUsage>();
 
-      inventoryUsages?.forEach(usage => {
-        const inventoryItem = inventories.find(inv => inv.id === usage.inventoryId);
-        if (!inventoryItem) return;
+      // Yeni mantık: inventoryGroups'tan veri al
+      inventoryGroups?.forEach(group => {
+        const inventoryType = inventories.find(inv => inv.id === group.inventoryTypeId);
+        if (!inventoryType) return;
 
-        const typeNameKey = inventoryItem.name;
-        const costOfThisDeduction = round(usage.quantity * (inventoryItem.unitPrice ?? 0));
-
+        const typeNameKey = inventoryType.name;
+        
         if (!aggregatedInventoryUsagesByType.has(typeNameKey)) {
           aggregatedInventoryUsagesByType.set(typeNameKey, {
-            inventoryTypeName: inventoryItem.name,
-            unit: inventoryItem.unit,
+            inventoryTypeName: inventoryType.name,
+            unit: inventoryType.unit,
             totalQuantityUsedThisType: 0,
             totalCostThisType: 0,
             contributingStocks: [],
           });
         }
-
+        
         const currentTypeUsage = aggregatedInventoryUsagesByType.get(typeNameKey)!;
-        currentTypeUsage.totalQuantityUsedThisType = round(currentTypeUsage.totalQuantityUsedThisType + usage.quantity);
-        currentTypeUsage.totalCostThisType = round(currentTypeUsage.totalCostThisType + costOfThisDeduction);
-        currentTypeUsage.contributingStocks.push({
-          inventoryId: usage.inventoryId,
-          ownerId: usage.ownerId,
-          quantity: usage.quantity,
-          unitPrice: inventoryItem.unitPrice ?? 0,
-          cost: costOfThisDeduction,
-        });
+        const groupTotalQuantity = Number(group.totalQuantity) || 0;
+        currentTypeUsage.totalQuantityUsedThisType = round(currentTypeUsage.totalQuantityUsedThisType + groupTotalQuantity);
+
+        // Dağıtımı hesapla ve maliyetleri ekle
+        const involvedOwnersForDistribution = ownerDurationsForApi.filter(owner => owner.irrigatedArea > 0);
+        const relevantTotalIrrigatedArea = involvedOwnersForDistribution.reduce((sum, o) => sum + o.irrigatedArea, 0);
+        if(relevantTotalIrrigatedArea <= 0) return;
+
+        let sumOfDistributedQuantities = 0;
+        for (let i = 0; i < involvedOwnersForDistribution.length; i++) {
+            const owner = involvedOwnersForDistribution[i];
+            const ownerSharePercent = owner.irrigatedArea / relevantTotalIrrigatedArea;
+            const groupTotalQuantity = Number(group.totalQuantity) || 0;
+            let quantityShare = groupTotalQuantity * ownerSharePercent;
+
+            if (i === involvedOwnersForDistribution.length - 1) {
+              quantityShare = round(groupTotalQuantity - sumOfDistributedQuantities);
+            }
+            const roundedQuantityShare = round(quantityShare);
+            sumOfDistributedQuantities += roundedQuantityShare;
+
+            const specificInventoryId = group.allocations[owner.userId];
+            const inventoryItem = inventories.find(inv => inv.id === specificInventoryId);
+            const unitPrice = inventoryItem?.unitPrice ?? 0;
+            const cost = round(roundedQuantityShare * unitPrice);
+            
+            currentTypeUsage.totalCostThisType += cost;
+            currentTypeUsage.contributingStocks.push({
+              inventoryId: specificInventoryId,
+              ownerId: owner.userId,
+              quantity: roundedQuantityShare,
+              unitPrice: unitPrice,
+              cost: cost,
+            });
+        }
       });
 
       const costAllocationBreakdownForApi: {
@@ -650,42 +764,15 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
       for (const [, typeUsage] of aggregatedInventoryUsagesByType.entries()) {
         if (typeUsage.totalQuantityUsedThisType <= 0) continue;
 
-        const involvedOwnersForDistribution = ownerDurationsForApi.filter(owner => owner.irrigatedArea > 0);
-        if (involvedOwnersForDistribution.length === 0) continue;
-
-        const relevantTotalIrrigatedArea = involvedOwnersForDistribution.reduce((sum, o) => sum + o.irrigatedArea, 0);
-        if (relevantTotalIrrigatedArea <= 0) continue;
-
-        let sumOfDistributedQuantities = 0;
-        let sumOfDistributedCosts = 0;
-
-        for (let i = 0; i < involvedOwnersForDistribution.length; i++) {
-          const owner = involvedOwnersForDistribution[i];
-          const ownerSharePercent = (owner.irrigatedArea / relevantTotalIrrigatedArea);
-
-          let quantityShare = typeUsage.totalQuantityUsedThisType * ownerSharePercent;
-          let costShare = typeUsage.totalCostThisType * ownerSharePercent;
-
-          if (i === involvedOwnersForDistribution.length - 1) {
-            quantityShare = round(typeUsage.totalQuantityUsedThisType - sumOfDistributedQuantities);
-            costShare = round(typeUsage.totalCostThisType - sumOfDistributedCosts);
-          }
-
-          const roundedQuantityShare = round(quantityShare);
-          const roundedCostShare = round(costShare);
-
-          if (roundedQuantityShare > 0 || roundedCostShare > 0) {
-            sumOfDistributedQuantities = round(sumOfDistributedQuantities + roundedQuantityShare);
-            sumOfDistributedCosts = round(sumOfDistributedCosts + roundedCostShare);
-
-            costAllocationBreakdownForApi.push({
-              ownerId: owner.userId,
-              inventoryTypeName: typeUsage.inventoryTypeName,
-              quantityAllocated: roundedQuantityShare,
-              costAllocated: roundedCostShare,
-              unit: typeUsage.unit,
-            });
-          }
+        // Her bir contributingStock için ayrı ayrı maliyet dağılımı yap
+        for (const stock of typeUsage.contributingStocks) {
+          costAllocationBreakdownForApi.push({
+            ownerId: stock.ownerId,
+            inventoryTypeName: typeUsage.inventoryTypeName,
+            quantityAllocated: stock.quantity,
+            costAllocated: stock.cost,
+            unit: typeUsage.unit,
+          });
         }
       }
 
@@ -724,15 +811,18 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
     appendField({ fieldId: "", percentage: 50 });
   };
 
-  const handleAddUsedInventory = () => {
-    const defaultOwnerId = involvedOwners.length > 0 ? involvedOwners[0].id : "";
-    appendUsedInventory({ ownerId: defaultOwnerId, inventoryId: "", quantity: 0 });
+  const handleAddInventoryGroup = () => {
+    appendInventoryGroup({
+      inventoryTypeId: "",
+      totalQuantity: 0,
+      allocations: {},
+    });
   };
 
   const currentValues = form.watch();
 
   // Önizleme Hesaplamaları (Yeni Dağıtım Mantığı ile)
-  const { displayTotalIrrigatedArea, displayOwnerDurations, displayInventoryDistribution } = useMemo(() => {
+  const calculatedData = useMemo(() => {
     let calculatedTotalIrrigatedArea = 0;
     const calculatedOwnerDurationsMap: Record<string, OwnerData> = {};
     const calculatedInventoryDistribution: {
@@ -746,7 +836,16 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
       const tempFieldData = currentValues.fieldIrrigations.map(irrigation => {
         const field = fields.find(f => f.id === irrigation.fieldId);
         if (!field) return null;
-        const irrigatedArea = (field.size * (irrigation.percentage || 0)) / 100;
+
+        let irrigatedArea: number;
+        if (irrigation.actualIrrigatedArea !== undefined && irrigation.actualIrrigatedArea !== null) {
+          irrigatedArea = irrigation.actualIrrigatedArea;
+        } else if (irrigation.percentage !== undefined && irrigation.percentage !== null) {
+          irrigatedArea = round((field.size * (irrigation.percentage || 0)) / 100);
+        } else {
+          return null; // Should not happen with Zod validation
+        }
+
         calculatedTotalIrrigatedArea += irrigatedArea;
         return { irrigatedArea, owners: field.owners };
       }).filter((item): item is NonNullable<typeof item> => item !== null);
@@ -756,8 +855,8 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
           if (!fieldDetail || !Array.isArray(fieldDetail.owners)) return;
           fieldDetail.owners.forEach(ownership => {
             if (!ownership.user) return;
-            const ownerIrrigatedArea = (fieldDetail.irrigatedArea * ownership.percentage) / 100;
-            const ownerDuration = (currentValues.duration! * ownerIrrigatedArea) / calculatedTotalIrrigatedArea;
+            const ownerIrrigatedArea = (fieldDetail.irrigatedArea * (ownership.percentage || 0)) / 100;
+            const ownerDuration = ((currentValues.duration || 0) * ownerIrrigatedArea) / calculatedTotalIrrigatedArea;
             if (calculatedOwnerDurationsMap[ownership.userId]) {
               calculatedOwnerDurationsMap[ownership.userId].duration += ownerDuration;
               calculatedOwnerDurationsMap[ownership.userId].irrigatedArea += ownerIrrigatedArea;
@@ -768,82 +867,47 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
         });
       }
 
-      if (currentValues.inventoryUsages && inventories.length > 0 && Object.keys(calculatedOwnerDurationsMap).length > 0) {
-        const previewAggregatedInventoryUsagesByType = new Map<string, {
-          inventoryTypeName: string;
-          unit: string;
-          totalQuantityUsedThisType: number;
-        }>();
+      // Yeni envanter dağıtım mantığı
+      if (currentValues.inventoryGroups && inventories.length > 0 && Object.keys(calculatedOwnerDurationsMap).length > 0) {
+        const involvedOwnersForDistribution = Object.values(calculatedOwnerDurationsMap).filter(owner => owner.irrigatedArea > 0);
+        const relevantTotalIrrigatedArea = involvedOwnersForDistribution.reduce((sum, o) => sum + o.irrigatedArea, 0);
 
-        currentValues.inventoryUsages.forEach((usage) => {
-          if (!usage.inventoryId || !usage.ownerId || usage.quantity == null || usage.quantity <= 0) return;
+        currentValues.inventoryGroups.forEach(group => {
+          const inventoryType = inventories.find(inv => inv.id === group.inventoryTypeId);
+          const currentGroupTotalQuantity = Number(group.totalQuantity) || 0; // Ensure it's a number, default to 0
 
-          const inventoryItem = inventories.find((i) => i.id === usage.inventoryId);
-          if (!inventoryItem) return;
-
-          const typeNameKey = inventoryItem.name;
-
-          if (!previewAggregatedInventoryUsagesByType.has(typeNameKey)) {
-            previewAggregatedInventoryUsagesByType.set(typeNameKey, {
-              inventoryTypeName: inventoryItem.name,
-              unit: inventoryItem.unit,
-              totalQuantityUsedThisType: 0,
-            });
-          }
-          const currentTypeUsage = previewAggregatedInventoryUsagesByType.get(typeNameKey)!;
-          currentTypeUsage.totalQuantityUsedThisType = round(currentTypeUsage.totalQuantityUsedThisType + usage.quantity);
-        });
-
-        const currentOwnerDurationsArray = Object.values(calculatedOwnerDurationsMap);
-
-        for (const [, typeUsage] of previewAggregatedInventoryUsagesByType.entries()) {
-          if (typeUsage.totalQuantityUsedThisType <= 0) continue;
+          if (!inventoryType || currentGroupTotalQuantity <= 0 || relevantTotalIrrigatedArea <= 0) return;
 
           const distribution: { ownerName: string; quantityShare: number }[] = [];
           let sumOfDistributedQuantities = 0;
-          const involvedOwnersForPreview = currentOwnerDurationsArray.filter(owner => owner.irrigatedArea > 0);
-          const relevantTotalIrrigatedArea = involvedOwnersForPreview.reduce((sum, o) => sum + o.irrigatedArea, 0);
 
-          if (involvedOwnersForPreview.length === 0 || relevantTotalIrrigatedArea <= 0) continue;
+          for (let i = 0; i < involvedOwnersForDistribution.length; i++) {
+            const owner = involvedOwnersForDistribution[i];
+            const ownerSharePercent = owner.irrigatedArea / relevantTotalIrrigatedArea;
+            let quantityShare = currentGroupTotalQuantity * ownerSharePercent;
 
-          for (let i = 0; i < involvedOwnersForPreview.length; i++) {
-            const owner = involvedOwnersForPreview[i];
-            const ownerSharePercent = (owner.irrigatedArea / relevantTotalIrrigatedArea);
-            let quantityShare = typeUsage.totalQuantityUsedThisType * ownerSharePercent;
-
-            if (i === involvedOwnersForPreview.length - 1) {
-              quantityShare = round(typeUsage.totalQuantityUsedThisType - sumOfDistributedQuantities);
+            // Son sahip için yuvarlama hatalarını düzelt
+            if (i === involvedOwnersForDistribution.length - 1) {
+              quantityShare = round(currentGroupTotalQuantity - sumOfDistributedQuantities);
             }
 
             const roundedQuantityShare = round(quantityShare);
             if (roundedQuantityShare > 0) {
-              sumOfDistributedQuantities = round(sumOfDistributedQuantities + roundedQuantityShare);
+              sumOfDistributedQuantities += roundedQuantityShare;
               distribution.push({
                 ownerName: owner.userName,
                 quantityShare: roundedQuantityShare,
               });
             }
           }
-
-          const finalTotalDistributed = round(distribution.reduce((sum, item) => sum + item.quantityShare, 0));
-          if (finalTotalDistributed !== round(typeUsage.totalQuantityUsedThisType) && distribution.length > 0) {
-            const diff = round(typeUsage.totalQuantityUsedThisType - finalTotalDistributed);
-            const lastDistItem = distribution[distribution.length - 1];
-            const adjustedShare = round(lastDistItem.quantityShare + diff);
-            if (adjustedShare >= 0) {
-              lastDistItem.quantityShare = adjustedShare;
-            }
-          }
-
-          if (distribution.length > 0) {
-            calculatedInventoryDistribution.push({
-              inventoryName: typeUsage.inventoryTypeName,
-              unit: typeUsage.unit,
-              totalUsed: typeUsage.totalQuantityUsedThisType,
-              distribution: distribution.filter(d => d.quantityShare > 0),
-            });
-          }
-        }
+          
+          calculatedInventoryDistribution.push({
+            inventoryName: inventoryType.name,
+            unit: inventoryType.unit,
+            totalUsed: currentGroupTotalQuantity, // Use the already validated number
+            distribution: distribution,
+          });
+        });
       }
     }
 
@@ -852,8 +916,10 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
       displayOwnerDurations: calculatedOwnerDurationsMap,
       displayInventoryDistribution: calculatedInventoryDistribution,
     };
-  }, [currentValues.fieldIrrigations, currentValues.duration, currentValues.inventoryUsages, fields, inventories]);
+  }, [currentValues.fieldIrrigations, currentValues.duration, currentValues.inventoryGroups, fields, inventories]);
 
+  const { displayTotalIrrigatedArea, displayOwnerDurations, displayInventoryDistribution } = calculatedData;
+  
   const getCardTitle = () => {
     switch (currentStep) {
       case 0: return isEditMode ? "Sulama Kaydını Düzenle (Adım 1/3)" : "Sulama Kaydı Oluştur (Adım 1/3)";
@@ -947,6 +1013,21 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
                   </Select>
                   {form.formState.errors.wellId && <p className="text-sm text-red-500">{form.formState.errors.wellId.message}</p>}
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="seasonId">Sezon Seçimi</Label>
+                  <Select
+                    onValueChange={(value) => form.setValue("seasonId", value, { shouldValidate: true })}
+                    defaultValue={form.watch("seasonId")}
+                    disabled={loadingSeasons}
+                  >
+                    <SelectTrigger className="neon-border neon-glow"><SelectValue placeholder={loadingSeasons ? "Sezonlar yükleniyor..." : "Sezon Seçin"} /></SelectTrigger>
+                    <SelectContent>
+                      {!loadingSeasons && seasons.length === 0 && <p className="p-4 text-sm text-muted-foreground">Uygun sezon bulunamadı.</p>}
+                      {seasons.map((s) => (<SelectItem key={s.id} value={s.id}>{s.name} ({format(new Date(s.startDate), 'dd.MM.yyyy')} - {format(new Date(s.endDate), 'dd.MM.yyyy')})</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                  {form.formState.errors.seasonId && <p className="text-sm text-red-500">{form.formState.errors.seasonId.message}</p>}
+                </div>
               </>
             )}
 
@@ -981,10 +1062,50 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
                       </Select>
                       {form.formState.errors.fieldIrrigations?.[index]?.fieldId && <p className="text-sm text-red-500">{form.formState.errors.fieldIrrigations[index]?.fieldId?.message}</p>}
                     </div>
-                    <div className="col-span-4 space-y-2">
+                    <div className="col-span-3 space-y-2">
                       <Label htmlFor={`fieldIrrigations.${index}.percentage`}>Sulanan Alan (%)</Label>
-                      <Input id={`fieldIrrigations.${index}.percentage`} type="number" min="1" max="100" {...form.register(`fieldIrrigations.${index}.percentage` as const, { valueAsNumber: true })} className="neon-border neon-glow" />
+                      <Input
+                        id={`fieldIrrigations.${index}.percentage`}
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        {...form.register(`fieldIrrigations.${index}.percentage` as const, { valueAsNumber: true })}
+                        className="neon-border neon-glow"
+                        onChange={(e) => {
+                          const percentage = parseFloat(e.target.value);
+                          const field = fields.find(f => f.id === form.getValues(`fieldIrrigations.${index}.fieldId`));
+                          if (field && !isNaN(percentage)) {
+                            form.setValue(`fieldIrrigations.${index}.actualIrrigatedArea`, round((field.size * percentage) / 100));
+                          } else {
+                            form.setValue(`fieldIrrigations.${index}.actualIrrigatedArea`, undefined);
+                          }
+                          form.setValue(`fieldIrrigations.${index}.percentage`, percentage);
+                        }}
+                      />
                       {form.formState.errors.fieldIrrigations?.[index]?.percentage && <p className="text-sm text-red-500">{form.formState.errors.fieldIrrigations[index]?.percentage?.message}</p>}
+                    </div>
+                    <div className="col-span-3 space-y-2">
+                      <Label htmlFor={`fieldIrrigations.${index}.actualIrrigatedArea`}>Gerçek Sulanan Alan (Dekar)</Label>
+                      <Input
+                        id={`fieldIrrigations.${index}.actualIrrigatedArea`}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        {...form.register(`fieldIrrigations.${index}.actualIrrigatedArea` as const, { valueAsNumber: true })}
+                        className="neon-border neon-glow"
+                        onChange={(e) => {
+                          const actualIrrigatedArea = parseFloat(e.target.value);
+                          const field = fields.find(f => f.id === form.getValues(`fieldIrrigations.${index}.fieldId`));
+                          if (field && !isNaN(actualIrrigatedArea) && field.size > 0) {
+                            form.setValue(`fieldIrrigations.${index}.percentage`, round((actualIrrigatedArea / field.size) * 100));
+                          } else {
+                            form.setValue(`fieldIrrigations.${index}.percentage`, undefined);
+                          }
+                          form.setValue(`fieldIrrigations.${index}.actualIrrigatedArea`, actualIrrigatedArea);
+                        }}
+                      />
+                      {form.formState.errors.fieldIrrigations?.[index]?.actualIrrigatedArea && <p className="text-sm text-red-500">{form.formState.errors.fieldIrrigations[index]?.actualIrrigatedArea?.message}</p>}
                     </div>
                     <div className="col-span-1">{index > 0 && <Button type="button" variant="ghost" size="icon" onClick={() => removeField(index)} className="text-red-500"><Trash2 className="h-4 w-4" /></Button>}</div>
                   </div>
@@ -997,84 +1118,86 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <h3 className="text-lg font-medium">Kullanılan Envanterler</h3>
-                  <Button type="button" variant="outline" size="sm" onClick={handleAddUsedInventory} disabled={involvedOwners.length === 0 || loadingInventories} className="btn-cyberpunk">
-                    <Plus className="h-4 w-4 mr-2" />Kullanılan Envanteri Ekle
+                  <Button type="button" variant="outline" size="sm" onClick={handleAddInventoryGroup} disabled={involvedOwners.length === 0} className="btn-cyberpunk">
+                    <Plus className="h-4 w-4 mr-2" />Envanter Grubu Ekle
                   </Button>
                 </div>
-                {involvedOwners.length === 0 && !loadingFields && <div className="p-4 border rounded-md text-center text-gray-500"><p>Lütfen önce envanter eklemek için sulama yapılacak tarlaları seçin.</p></div>}
-                {involvedOwners.length > 0 && loadingInventories && <div className="p-4 border rounded-md text-center text-gray-500"><p>İlgili sahiplerin envanterleri yükleniyor...</p></div>}
-                {involvedOwners.length > 0 && !loadingInventories && inventories.length === 0 && <div className="p-4 border rounded-md text-center text-gray-500"><p>Seçili tarlaların sahiplerine ait uygun (Gübre/Pestisit) envanter bulunamadı.</p></div>}
-
-                {usedInventories.map((item, index) => {
-                  const currentOwnerId = form.watch(`inventoryUsages.${index}.ownerId`);
-                  const availableInventoriesForOwner = inventories.filter(inv => {
-                    if (!currentOwnerId) return false;
-                    return inv.ownerships?.some(own => own.userId === currentOwnerId && own.shareQuantity > 0);
-                  });
-
-                  const selectedInventoryDetails = availableInventoriesForOwner.find(inv => inv.id === form.watch(`inventoryUsages.${index}.inventoryId`));
-                  const unit = selectedInventoryDetails?.unit || 'Birim';
-
+                {inventoryGroups.map((group, index) => {
+                  const inventoryType = inventories.find(inv => inv.id === group.inventoryTypeId);
+                  const distribution = displayInventoryDistribution.find(d => d.inventoryName === inventoryType?.name)?.distribution || [];
+                  
                   return (
-                    <div key={item.id} className="grid grid-cols-12 gap-4 items-start border p-4 rounded-md">
-                      <div className="col-span-3 space-y-2">
-                        <Label htmlFor={`inventoryUsages.${index}.ownerId`}>Sahip</Label>
-                        <Select
-                          onValueChange={(value) => {
-                            form.setValue(`inventoryUsages.${index}.ownerId`, value, { shouldValidate: true });
-                            form.setValue(`inventoryUsages.${index}.inventoryId`, "", { shouldValidate: false });
-                            form.setValue(`inventoryUsages.${index}.quantity`, 0, { shouldValidate: false });
-                          }}
-                          defaultValue={form.watch(`inventoryUsages.${index}.ownerId`)}
-                          disabled={involvedOwners.length === 0}
-                      >
-                        <SelectTrigger className="neon-border neon-glow"><SelectValue placeholder="Sahip Seçin" /></SelectTrigger>
-                        <SelectContent>
-                          {involvedOwners.map((owner) => (<SelectItem key={owner.id} value={owner.id}>{owner.name}</SelectItem>))}
-                          </SelectContent>
-                        </Select>
-                        {form.formState.errors.inventoryUsages?.[index]?.ownerId && <p className="text-sm text-red-500">{form.formState.errors.inventoryUsages[index]?.ownerId?.message}</p>}
+                    <div key={group.id} className="p-4 border rounded-md space-y-4">
+                      <div className="grid grid-cols-12 gap-4">
+                        <div className="col-span-6 space-y-2">
+                          <Label>Envanter Türü</Label>
+                          <Select
+                            onValueChange={(value) => form.setValue(`inventoryGroups.${index}.inventoryTypeId`, value)}
+                            defaultValue={group.inventoryTypeId}
+                          >
+                            <SelectTrigger><SelectValue placeholder="Envanter türü seçin..." /></SelectTrigger>
+                            <SelectContent>
+                              {inventories
+                                .filter(inv => inv.category === 'FERTILIZER' || inv.category === 'PESTICIDE')
+                                .map(inv => <SelectItem key={inv.id} value={inv.id}>{inv.name} ({inv.unit})</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="col-span-5 space-y-2">
+                          <Label>Toplam Miktar ({inventoryType?.unit || 'Birim'})</Label>
+                          <Input
+                            type="number"
+                            {...form.register(`inventoryGroups.${index}.totalQuantity`)}
+                          />
+                        </div>
+                        <div className="col-span-1 flex items-end">
+                          <Button type="button" variant="ghost" size="icon" onClick={() => removeInventoryGroup(index)} className="text-red-500"><Trash2 className="h-4 w-4" /></Button>
+                        </div>
                       </div>
-                      <div className="col-span-5 space-y-2">
-                        <Label htmlFor={`inventoryUsages.${index}.inventoryId`}>Envanter Türü</Label>
-                        <Select
-                          onValueChange={(value) => form.setValue(`inventoryUsages.${index}.inventoryId`, value, { shouldValidate: true })}
-                          defaultValue={form.watch(`inventoryUsages.${index}.inventoryId`)}
-                          disabled={!currentOwnerId || loadingInventories || availableInventoriesForOwner.length === 0}
-                        >
-                          <SelectTrigger className="neon-border neon-glow"><SelectValue placeholder={!currentOwnerId ? "Önce Sahip Seçin" : (loadingInventories ? "Yükleniyor..." : (availableInventoriesForOwner.length === 0 ? "Uygun Envanter Yok" : "Envanter Seçin"))} /></SelectTrigger>
-                          <SelectContent>
-                            {availableInventoriesForOwner.map((inv) => (
-                              <SelectItem key={inv.id} value={inv.id}>
-                                {inv.name} (Stok: {inv.ownerships?.find(o => o.userId === currentOwnerId)?.shareQuantity ?? 0} {inv.unit})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {form.formState.errors.inventoryUsages?.[index]?.inventoryId && <p className="text-sm text-red-500">{form.formState.errors.inventoryUsages[index]?.inventoryId?.message}</p>}
-                      </div>
-                      <div className="col-span-3 space-y-2">
-                        <Label htmlFor={`inventoryUsages.${index}.quantity`}>Bu Stoktan Kullanılacak Miktar ({unit})</Label>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild><Info className="h-4 w-4 text-muted-foreground cursor-help inline-block ml-1" /></TooltipTrigger>
-                            <TooltipContent className="max-w-xs">Seçilen bu spesifik stoktan ne kadar kullanılacağını girin. Bu miktar doğrudan bu sahibin stoğundan düşülecektir.</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        <Input
-                          id={`inventoryUsages.${index}.quantity`}
-                          type="number" step="0.01" min="0.01"
-                          {...form.register(`inventoryUsages.${index}.quantity` as const, { valueAsNumber: true })}
-                          disabled={!form.watch(`inventoryUsages.${index}.inventoryId`)}
-                          className="neon-border neon-glow"
-                        />
-                        {form.formState.errors.inventoryUsages?.[index]?.quantity && <p className="text-sm text-red-500">{form.formState.errors.inventoryUsages[index]?.quantity?.message}</p>}
-                      </div>
-                      <div className="col-span-1 flex items-end pb-2">
-                        <Button type="button" variant="ghost" size="icon" onClick={() => removeUsedInventory(index)} className="text-red-500"><Trash2 className="h-4 w-4" /></Button>
+                      <div>
+                        <h4 className="text-md font-medium mb-2">Otomatik Dağıtım ve Stok Seçimi</h4>
+                        <div className="border rounded-md overflow-hidden">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sahip</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Düşülecek Miktar</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kullanılacak Stok</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {distribution.map(dist => {
+                                const owner = involvedOwners.find(o => o.name === dist.ownerName);
+                                if (!owner) return null;
+                                const ownerInventories = inventories.filter(inv => inv.name === inventoryType?.name && inv.ownerships?.some(o => o.userId === owner.id));
+                                return (
+                                  <tr key={owner.id}>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{dist.ownerName}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{dist.quantityShare.toFixed(2)} {inventoryType?.unit}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">
+                                      <Select
+                                        onValueChange={(value) => form.setValue(`inventoryGroups.${index}.allocations.${owner.id}`, value)}
+                                        defaultValue={group.allocations[owner.id]}
+                                      >
+                                        <SelectTrigger><SelectValue placeholder="Stok Seçin" /></SelectTrigger>
+                                        <SelectContent>
+                                          {ownerInventories.map(inv => (
+                                            <SelectItem key={inv.id} value={inv.id}>
+                                              {inv.name} (Mevcut: {inv.ownerships?.find(o => o.userId === owner.id)?.shareQuantity.toFixed(2)})
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     </div>
-                  );
+                  )
                 })}
               </div>
             )}
@@ -1155,14 +1278,14 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
             )}
             <div className="flex-grow"></div> {/* Boşluk bırakmak için */}
             {currentStep < 3 && (
-              <Button type="button" onClick={handleNext} disabled={loadingSubmit || loadingFields || loadingInventories || loadingWells} className="btn-cyberpunk">İleri</Button>
+              <Button type="button" onClick={handleNext} disabled={loadingSubmit || loadingFields || loadingInventories || loadingWells || loadingSeasons} className="btn-cyberpunk">İleri</Button>
             )}
             {currentStep === 3 && (
               <Button
                 type="button"
                 onClick={handleSubmitForm}
                 className="btn-cyberpunk"
-                disabled={loadingSubmit || loadingFields || loadingInventories || loadingWells}
+                disabled={loadingSubmit || loadingFields || loadingInventories || loadingWells || loadingSeasons}
               >
                 {loadingSubmit ? "Kaydediliyor..." : (isEditMode ? "Değişiklikleri Kaydet" : "Kaydet")}
               </Button>
