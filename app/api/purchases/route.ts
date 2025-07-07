@@ -180,6 +180,7 @@ export async function POST(request: Request) {
             name: productName,
             category: category as InventoryCategory, // Gelen category'yi InventoryCategory'ye cast et
             totalQuantity: quantity,
+            totalStock: quantity, // YENİ: totalStock alanını quantity ile başlat
             unit: unit as Unit,
             purchaseDate: new Date(purchaseDate),
             costPrice: unitPrice, // Birim maliyeti kaydet
