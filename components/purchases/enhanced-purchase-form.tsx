@@ -45,7 +45,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { Unit, InventoryCategory } from "@prisma/client";
+import { Unit, InventoryCategory, PaymentMethod } from "@prisma/client";
 import { useAuth } from "@/components/auth-provider";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -69,6 +69,7 @@ const partnerSchema = z.object({
     .max(100, "Ortaklık yüzdesi 100'den büyük olamaz"),
   hasPaid: z.boolean().default(false),
   dueDate: z.date().optional(),
+  isCreditor: z.boolean().optional(), // isCreditor alanı eklendi
 });
 
 const formSchema = z.object({
@@ -90,12 +91,16 @@ const formSchema = z.object({
   totalCost: z.coerce.number().positive({
     message: "Toplam maliyet pozitif bir sayı olmalıdır.",
   }),
-  paymentMethod: z.enum(["CASH", "CREDIT_CARD", "CREDIT", "BANK_TRANSFER"], {
+  paymentMethod: z.nativeEnum(PaymentMethod, {
     required_error: "Lütfen bir ödeme yöntemi seçin.",
   }),
   purchaseDate: z.date({
     required_error: "Lütfen bir tarih seçin.",
   }),
+  creditorId: z.string({
+    required_error: "Ödemeyi yapan kişi seçilmelidir.",
+  }),
+  creditorPaymentDueDate: z.date().optional(),
   notes: z.string().optional(),
   partners: z.array(partnerSchema).min(1, {
     message: "En az bir ortak eklenmelidir.",
@@ -131,6 +136,7 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
       totalCost: 0,
       paymentMethod: "CASH",
       purchaseDate: new Date(),
+      creditorId: user?.id || "",
       notes: "",
       isTemplate: false,
       templateName: "",
@@ -142,7 +148,7 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
               userName: user.name,
               sharePercentage: 100,
               hasPaid: true,
-              dueDate: new Date(new Date().setDate(new Date().getDate() + 30)),
+              isCreditor: true,
             },
           ]
         : [],
@@ -162,6 +168,8 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
   const unitPrice = form.watch("unitPrice");
   const partners = form.watch("partners");
   const isTemplate = form.watch("isTemplate");
+  const paymentMethod = form.watch("paymentMethod");
+  const creditorPaymentDueDate = form.watch("creditorPaymentDueDate");
 
   // Miktar veya birim fiyat değiştiğinde toplam maliyeti hesapla
   useEffect(() => {
@@ -172,16 +180,12 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
   }, [quantity, unitPrice, form]);
 
   // Calculate total percentage when partners change
-  // 1. Toplam yüzde hesaplamasını düzelt
   useEffect(() => {
     const total = partners.reduce((sum, partner) => {
-      // Sayısal değere dönüştürme işlemini güçlendirelim
       const percentage =
         Number.parseFloat(String(partner.sharePercentage)) || 0;
       return sum + percentage;
     }, 0);
-
-    // Virgülden sonra 2 basamak ve sayısal değer olarak saklayalım
     setTotalPercentage(Number(total.toFixed(2)));
   }, [partners]);
 
@@ -189,7 +193,7 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const response = await fetch("/api/users");
+        const response = await fetch("/api/users?role=OWNER");
         if (response.ok) {
           const data = await response.json();
           setUsers(data);
@@ -219,7 +223,6 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
           const seasonsData = responseData.data || []; // API'den gelen 'data' anahtarını kullan
           setSeasons(seasonsData);
 
-          // Aktif sezonu bul ve form değerini güncelle
           const activeSeason = seasonsData.find((season: Season) => season.isActive);
           if (activeSeason) {
             setActiveSeasonId(activeSeason.id);
@@ -233,7 +236,7 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
 
     fetchUsers();
     fetchTemplates();
-    fetchSeasons(); // Sezonları getir
+    fetchSeasons();
   }, [form]);
 
   // Fetch template data if templateId is provided
@@ -244,25 +247,26 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
           const response = await fetch(`/api/purchase-templates/${templateId}`);
           if (response.ok) {
             const template = await response.json();
-
-            // Form değerlerini şablondan doldur
             form.reset({
               product: template.product,
+              category: template.category,
               quantity: template.quantity,
               unit: template.unit,
               unitPrice: template.unitPrice,
               totalCost: template.totalCost,
               paymentMethod: template.paymentMethod,
               purchaseDate: new Date(),
+              creditorId: user?.id || "",
               notes: template.description,
               isTemplate: false,
               templateName: "",
-              seasonId: activeSeasonId || "", // Aktif sezon ID'sini kullan
+              seasonId: activeSeasonId || "",
               partners: template.contributors.map((contributor: any) => ({
                 userId: contributor.userId,
                 userName: contributor.user.name,
                 sharePercentage: contributor.sharePercentage,
                 hasPaid: false,
+                isCreditor: contributor.userId === user?.id,
                 dueDate: undefined,
               })),
             });
@@ -271,48 +275,9 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
           console.error("Error fetching template:", error);
         }
       };
-
       fetchTemplate();
     }
-  }, [templateId, form, activeSeasonId]);
-
-  // Handle template selection
-  const handleTemplateChange = async (templateId: string) => {
-    if (!templateId) return;
-
-    setSelectedTemplate(templateId);
-
-    try {
-      const response = await fetch(`/api/purchase-templates/${templateId}`);
-      if (response.ok) {
-        const template = await response.json();
-
-        // Form değerlerini şablondan doldur
-        form.reset({
-          product: template.product,
-          quantity: template.quantity,
-          unit: template.unit,
-          unitPrice: template.unitPrice,
-          totalCost: template.totalCost,
-          paymentMethod: template.paymentMethod,
-          purchaseDate: new Date(),
-          notes: template.description,
-          isTemplate: false,
-          templateName: "",
-          seasonId: activeSeasonId || "", // Aktif sezon ID'sini kullan
-          partners: template.contributors.map((contributor: any) => ({
-            userId: contributor.userId,
-            userName: contributor.user.name,
-            sharePercentage: contributor.sharePercentage,
-            hasPaid: false,
-            dueDate: undefined,
-          })),
-        });
-      }
-    } catch (error) {
-      console.error("Error fetching template:", error);
-    }
-  };
+  }, [templateId, form, activeSeasonId, user]);
 
   // Add a new partner
   const addPartner = () => {
@@ -321,61 +286,19 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
       userName: "",
       sharePercentage: 0,
       hasPaid: false,
-      dueDate: new Date(new Date().setDate(new Date().getDate() + 30)), // 30 gün sonrası için varsayılan vade
     });
-
-    // Yeni eklenen ortağın görünür olması için daha güvenilir bir yöntem
-    setTimeout(() => {
-      window.scrollTo({
-        top: document.body.scrollHeight,
-        behavior: "smooth",
-      });
-    }, 100);
   };
 
-  // Distribute remaining percentage
-  const distributeRemaining = () => {
-    if (fields.length <= 1) return;
-
-    const remainingPercentage = 100 - totalPercentage;
-    if (remainingPercentage <= 0) return;
-
-    // Find partners with 0 percentage
-    const zeroPartners = partners.filter((p) => p.sharePercentage === 0);
-
-    if (zeroPartners.length > 0) {
-      // Distribute equally among partners with 0 percentage
-      const sharePerPartner = remainingPercentage / zeroPartners.length;
-
-      partners.forEach((partner, index) => {
-        if (partner.sharePercentage === 0) {
-          update(index, { ...partner, sharePercentage: sharePerPartner });
-        }
-      });
-    } else {
-      // Add to the last partner
-      const lastIndex = partners.length - 1;
-      update(lastIndex, {
-        ...partners[lastIndex],
-        sharePercentage:
-          partners[lastIndex].sharePercentage + remainingPercentage,
-      });
-    }
-  };
-
-  // Equal distribution
+  // Distribute equally
   const distributeEqually = () => {
     if (fields.length === 0) return;
-
     const equalShare = 100 / fields.length;
-
-    partners.forEach((partner, index) => {
-      update(index, { ...partner, sharePercentage: equalShare });
+    fields.forEach((_, index) => {
+      form.setValue(`partners.${index}.sharePercentage`, equalShare);
     });
   };
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    // Validate total percentage is 100%
     if (Math.abs(totalPercentage - 100) > 0.01) {
       toast({
         title: "Hata!",
@@ -385,49 +308,29 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
       return;
     }
 
+    const finalPartners = values.partners.map(p => ({
+      ...p,
+      isCreditor: p.userId === values.creditorId,
+    }));
+
     setIsSubmitting(true);
-
-    // Form işleme fonksiyonunda, "no-season" değerini null olarak işleyelim:
-    const seasonId = values.seasonId === "no-season" ? null : values.seasonId;
-
     try {
       const response = await fetch("/api/purchases", {
         method: "POST",
-        headers: {
-           "Content-Type": "application/json",
-         },
-         // Rename 'product' to 'productName' to match API expectation
-         body: JSON.stringify({ ...values, productName: values.product, seasonId }),
-       });
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...values, productName: values.product, partners: finalPartners }),
+      });
 
-       if (!response.ok) {
+      if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(
-          errorData.error || "Alış kaydı oluşturulurken bir hata oluştu."
-        );
+        throw new Error(errorData.error || "Alış kaydı oluşturulamadı.");
       }
 
-      toast({
-        title: "Başarılı!",
-        description: values.isTemplate
-          ? "Alış şablonu başarıyla oluşturuldu."
-          : "Alış kaydı başarıyla oluşturuldu.",
-      });
-
-      router.push(
-        values.isTemplate
-          ? "/dashboard/owner/purchases/templates"
-          : "/dashboard/owner/purchases"
-      );
+      toast({ title: "Başarılı!", description: "Alış kaydı başarıyla oluşturuldu." });
+      router.push("/dashboard/owner/purchases");
       router.refresh();
     } catch (error: any) {
-      console.error("Alış oluşturma hatası:", error);
-      toast({
-        title: "Hata!",
-        description:
-          error.message || "Alış kaydı oluşturulurken bir hata oluştu.",
-        variant: "destructive",
-      });
+      toast({ title: "Hata!", description: error.message, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -436,612 +339,86 @@ export function EnhancedPurchaseForm({ templateId }: { templateId?: string }) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-        {templates.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Şablon Seçimi</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Select
-                onValueChange={handleTemplateChange}
-                value={selectedTemplate}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Şablon seçin (opsiyonel)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {templates.map((template) => (
-                    <SelectItem key={template.id} value={template.id}>
-                      {template.templateName || template.product}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </CardContent>
-          </Card>
-        )}
-
+        {/* Form content */}
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          <FormField
-            control={form.control}
-            name="product"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Ürün Adı</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="Örn: Amonyum Sülfat, Tohum, vb."
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <FormField control={form.control} name="product" render={({ field }) => (<FormItem><FormLabel>Ürün Adı</FormLabel><FormControl><Input placeholder="Örn: Amonyum Sülfat" {...field} /></FormControl><FormMessage /></FormItem>)} />
+          <FormField control={form.control} name="category" render={({ field }) => (<FormItem><FormLabel>Ürün Kategorisi</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Kategori seçin" /></SelectTrigger></FormControl><SelectContent><SelectItem value="FERTILIZER">Gübre</SelectItem><SelectItem value="SEED">Tohum</SelectItem><SelectItem value="PESTICIDE">İlaç</SelectItem><SelectItem value="FUEL">Yakıt</SelectItem><SelectItem value="EQUIPMENT">Ekipman</SelectItem><SelectItem value="OTHER">Diğer</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
+          <FormField control={form.control} name="purchaseDate" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Alış Tarihi</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={`w-full pl-3 text-left font-normal ${!field.value ? "text-muted-foreground" : ""}`}>{field.value ? format(field.value, "PPP", { locale: tr }) : <span>Tarih seçin</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => date > new Date() || date < new Date("1900-01-01")} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>)} />
+          <FormField control={form.control} name="quantity" render={({ field }) => (<FormItem><FormLabel>Miktar</FormLabel><FormControl><Input type="number" min="0" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>)} />
+          <FormField control={form.control} name="unit" render={({ field }) => (<FormItem><FormLabel>Birim</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Birim seçin" /></SelectTrigger></FormControl><SelectContent><SelectItem value="KG">Kilogram (kg)</SelectItem><SelectItem value="TON">Ton</SelectItem><SelectItem value="LITRE">Litre (L)</SelectItem><SelectItem value="ADET">Adet</SelectItem><SelectItem value="CUVAL">Çuval</SelectItem><SelectItem value="BIDON">Bidon</SelectItem><SelectItem value="PAKET">Paket</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
+          <FormField control={form.control} name="unitPrice" render={({ field }) => (<FormItem><FormLabel>Birim Fiyat (₺)</FormLabel><FormControl><Input type="number" min="0" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>)} />
+          <FormField control={form.control} name="totalCost" render={({ field }) => (<FormItem><FormLabel>Toplam Maliyet (₺)</FormLabel><FormControl><Input type="number" min="0" step="0.01" {...field} readOnly className="bg-muted/50" /></FormControl><FormDescription>Miktar × Birim Fiyat</FormDescription><FormMessage /></FormItem>)} />
+          <FormField control={form.control} name="paymentMethod" render={({ field }) => (<FormItem><FormLabel>Ödeme Yöntemi</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Ödeme yöntemi seçin" /></SelectTrigger></FormControl><SelectContent><SelectItem value="CASH">Nakit</SelectItem><SelectItem value="CREDIT_CARD">Kredi Kartı</SelectItem><SelectItem value="CREDIT">Kredi</SelectItem><SelectItem value="BANK_TRANSFER">Banka Transferi</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
+          
+          <FormField control={form.control} name="creditorId" render={({ field }) => (<FormItem><FormLabel>Ödemeyi Yapan (Alacaklı)</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Ödemeyi yapan ortağı seçin" /></SelectTrigger></FormControl><SelectContent>{users.map((u) => (<SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>))}</SelectContent></Select><FormDescription>Diğer ortaklar bu kişiye borçlanacaktır.</FormDescription><FormMessage /></FormItem>)} />
 
-          <FormField
-            control={form.control}
-            name="category"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Ürün Kategorisi</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Kategori seçin" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="FERTILIZER">Gübre</SelectItem>
-                    <SelectItem value="SEED">Tohum</SelectItem>
-                    <SelectItem value="PESTICIDE">İlaç</SelectItem>
-                    <SelectItem value="FUEL">Yakıt</SelectItem>
-                    <SelectItem value="EQUIPMENT">Ekipman</SelectItem>
-                    <SelectItem value="OTHER">Diğer</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="purchaseDate"
-            render={({ field }) => (
-              <FormItem className="flex flex-col">
-                <FormLabel>Alış Tarihi</FormLabel>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <FormControl>
-                      <Button
-                        variant={"outline"}
-                        className={`w-full pl-3 text-left font-normal ${!field.value ? "text-muted-foreground" : ""}`}
-                      >
-                        {field.value ? (
-                          format(field.value, "PPP", { locale: tr })
-                        ) : (
-                          <span>Tarih seçin</span>
-                        )}
-                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                      </Button>
-                    </FormControl>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={field.value}
-                      onSelect={field.onChange}
-                      disabled={(date) =>
-                        date > new Date() || date < new Date("1900-01-01")
-                      }
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="quantity"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Miktar</FormLabel>
-                <FormControl>
-                  <Input type="number" min="0" step="0.01" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="unit"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Birim</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Birim seçin" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="KG">Kilogram (kg)</SelectItem>
-                    <SelectItem value="TON">Ton</SelectItem>
-                    <SelectItem value="LITRE">Litre (L)</SelectItem>
-                    <SelectItem value="ADET">Adet</SelectItem>
-                    <SelectItem value="CUVAL">Çuval</SelectItem>
-                    <SelectItem value="BIDON">Bidon</SelectItem>
-                    <SelectItem value="PAKET">Paket</SelectItem>
-                    <SelectItem value="METRE">Metre (m)</SelectItem>
-                    <SelectItem value="METREKARE">Metrekare (m²)</SelectItem>
-                    <SelectItem value="DIGER">Diğer</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="unitPrice"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Birim Fiyat (₺)</FormLabel>
-                <FormControl>
-                  <Input type="number" min="0" step="0.01" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="totalCost"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Toplam Maliyet (₺)</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    {...field}
-                    readOnly
-                    className="bg-muted/50"
-                  />
-                </FormControl>
-                <FormDescription>
-                  Miktar × Birim Fiyat otomatik hesaplanır
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="paymentMethod"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Ödeme Yöntemi</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Ödeme yöntemi seçin" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="CASH">Nakit</SelectItem>
-                    <SelectItem value="CREDIT_CARD">Kredi Kartı</SelectItem>
-                    <SelectItem value="CREDIT">Kredi</SelectItem>
-                    <SelectItem value="BANK_TRANSFER">
-                      Banka Transferi
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Sezon seçimi alanı */}
-          <FormField
-            control={form.control}
-            name="seasonId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Sezon</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sezon seçin" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {seasons.length === 0 ? (
-                      <SelectItem value="no-season" disabled>
-                        Sezon bulunamadı
-                      </SelectItem>
-                    ) : (
-                      seasons.map((season) => (
-                        <SelectItem key={season.id} value={season.id}>
-                          {season.name} {season.isActive && "(Aktif)"}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="approvalRequired"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-center justify-between space-x-3 space-y-0 rounded-md border p-4">
-                <div className="space-y-1 leading-none">
-                  <FormLabel>Onay Gerekli</FormLabel>
-                  <FormDescription>
-                    Bu alış için onay gerekip gerekmediğini belirtin
-                  </FormDescription>
-                </div>
-                <FormControl>
-                  <Switch
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
-                </FormControl>
-              </FormItem>
-            )}
-          />
-
-          {form.watch("approvalRequired") && (
-            <FormField
-              control={form.control}
-              name="approvalThreshold"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Onay Eşiği (₺)</FormLabel>
-                  <FormDescription>
-                    Bu tutarın üzerindeki alışlar için onay gerekir
-                  </FormDescription>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="100"
-                      {...field}
-                      onChange={(e) =>
-                        field.onChange(Number.parseFloat(e.target.value))
-                      }
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-
-          <FormField
-            control={form.control}
-            name="isTemplate"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-center justify-between space-x-3 space-y-0 rounded-md border p-4">
-                <div className="space-y-1 leading-none">
-                  <FormLabel>Şablon Olarak Kaydet</FormLabel>
-                  <FormDescription>
-                    Bu alışı şablon olarak kaydedin ve gelecekte tekrar kullanın
-                  </FormDescription>
-                </div>
-                <FormControl>
-                  <Switch
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
-                </FormControl>
-              </FormItem>
-            )}
-          />
-
-          {isTemplate && (
-            <FormField
-              control={form.control}
-              name="templateName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Şablon Adı</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Örn: Aylık Gübre Alışı" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          {(paymentMethod === "CREDIT" || paymentMethod === "CREDIT_CARD") && (
+            <FormField control={form.control} name="creditorPaymentDueDate" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Alacaklının Son Ödeme Tarihi</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={`w-full pl-3 text-left font-normal ${!field.value ? "text-muted-foreground" : ""}`}>{field.value ? format(field.value, "PPP", { locale: tr }) : <span>Tarih seçin</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => date < new Date()} initialFocus /></PopoverContent></Popover><FormDescription>Kredi kartı ekstresi gibi, alacaklının bu alım için yapacağı son ödeme tarihini girin.</FormDescription><FormMessage /></FormItem>)} />
           )}
         </div>
 
-        <FormField
-          control={form.control}
-          name="notes"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Notlar</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder="Alış hakkında ek bilgiler..."
-                  className="resize-none"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Partners Section */}
+        <FormField control={form.control} name="notes" render={({ field }) => (<FormItem><FormLabel>Notlar</FormLabel><FormControl><Textarea placeholder="Alış hakkında ek bilgiler..." {...field} /></FormControl><FormMessage /></FormItem>)} />
+        
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>Ortaklar</span>
-              <div className="text-sm font-normal">
-                Toplam:{" "}
-                <span
-                  className={
-                    Math.abs(totalPercentage - 100) < 0.01
-                      ? "text-green-500"
-                      : "text-red-500"
-                  }
-                >
-                  %{totalPercentage.toFixed(2)}
-                </span>
-              </div>
-            </CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="flex items-center justify-between"><span>Ortaklar</span><div className="text-sm font-normal">Toplam: <span className={Math.abs(totalPercentage - 100) < 0.01 ? "text-green-500" : "text-red-500"}>%{totalPercentage.toFixed(2)}</span></div></CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            {/* Toplam yüzde 100 değilse uyarı göster */}
-            {/* typeof kontrolü eklendi */}
-            {typeof totalPercentage === "number" &&
-              Math.abs(totalPercentage - 100) > 0.01 && (
-                <Alert variant="destructive">
-                  <AlertTitle>Dikkat</AlertTitle>
-                  <AlertDescription>
-                    Ortaklık yüzdelerinin toplamı %100 olmalıdır. Şu anda
-                    toplam: %{totalPercentage.toFixed(2)}
-                  </AlertDescription>
-                </Alert>
-              )}
-
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={distributeEqually}
-              >
-                Eşit Dağıt
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={distributeRemaining}
-              >
-                Kalanı Dağıt
-              </Button>
-            </div>
-
-            {fields.length === 0 && (
-              <div className="flex h-24 items-center justify-center rounded-md border border-dashed">
-                <p className="text-sm text-muted-foreground">
-                  Henüz ortak eklenmemiş.
-                </p>
-              </div>
-            )}
-
-            {fields.map((field, index) => (
+            <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" onClick={distributeEqually}>Eşit Dağıt</Button></div>
+            {fields.map((field, index) => {
+              const isDueDateDisabled = (paymentMethod === "CREDIT" || paymentMethod === "CREDIT_CARD") && !!creditorPaymentDueDate;
+              return (
               <div key={field.id} className="rounded-md border p-4">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                  <FormField
-                    control={form.control}
-                    name={`partners.${index}.userId`}
-                    render={({ field }) => (
-                      <FormItem className="partner-select">
-                        <FormLabel>Ortak</FormLabel>
-                        <Select
-                          onValueChange={(value) => {
-                            field.onChange(value);
-                            // Kullanıcı adını da güncelle
-                            const selectedUser = users.find(
-                              (u) => u.id === value
-                            );
-                            if (selectedUser) {
-                              form.setValue(
-                                `partners.${index}.userName`,
-                                selectedUser.name
-                              );
-                            }
-                          }}
-                          value={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Ortak seçin" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent position="popper" className="z-50">
-                            {users.map((user) => (
-                              <SelectItem key={user.id} value={user.id}>
-                                {user.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name={`partners.${index}.sharePercentage`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Ortaklık Yüzdesi (%)</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.01" // Ondalık girişi destekler
-                            placeholder="Örn: 75.5" // Nokta kullanımı için ipucu
-                            {...field}
-                            // Zod 'coerce' zaten string'i number'a çevirecek
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Ondalık için nokta (.) kullanın.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name={`partners.${index}.hasPaid`}
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 pt-6">
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                        <div className="space-y-1 leading-none">
-                          <FormLabel>Ödeme Yaptı</FormLabel>
-                        </div>
-                      </FormItem>
-                    )}
-                  />
-
+                  <FormField control={form.control} name={`partners.${index}.userId`} render={({ field }) => (<FormItem><FormLabel>Ortak</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Ortak seçin" /></SelectTrigger></FormControl><SelectContent>{users.map((u) => (<SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />
+                  <FormField control={form.control} name={`partners.${index}.sharePercentage`} render={({ field }) => (<FormItem><FormLabel>Ortaklık Yüzdesi (%)</FormLabel><FormControl><Input type="number" min="0" max="100" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={form.control} name={`partners.${index}.hasPaid`} render={({ field }) => (<FormItem className="flex flex-row items-start space-x-3 space-y-0 pt-6"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Ödeme Yaptı</FormLabel></div></FormItem>)} />
                   {!form.watch(`partners.${index}.hasPaid`) && (
-                    <FormField
-                      control={form.control}
-                      name={`partners.${index}.dueDate`}
-                      render={({ field }) => (
-                        <FormItem className="flex flex-col">
-                          <FormLabel>Vade Tarihi</FormLabel>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <FormControl>
-                                <Button
-                                  variant="outline"
-                                  className="w-full pl-3 text-left font-normal"
-                                >
-                                  {field.value ? (
-                                    format(field.value, "PPP", { locale: tr })
-                                  ) : (
-                                    <span>Tarih seçin</span>
-                                  )}
-                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                </Button>
-                              </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent
-                              className="w-auto p-0 z-[100]"
-                              align="start"
-                              side="bottom"
-                            >
-                              <Calendar
-                                mode="single"
-                                selected={field.value}
-                                onSelect={(date) => {
-                                  if (date) {
-                                    field.onChange(date);
-                                    console.log("Tarih seçildi:", date);
-                                  }
-                                }}
-                                disabled={(date) => date < new Date()}
-                                initialFocus
-                              />
-                            </PopoverContent>
-                          </Popover>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                  <FormField 
+                    control={form.control} 
+                    name={`partners.${index}.dueDate`} 
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Vade Tarihi</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button 
+                                variant="outline" 
+                                className={`w-full pl-3 text-left font-normal ${!field.value ? "text-muted-foreground" : ""}`}
+                                disabled={isDueDateDisabled}
+                              >
+                                {field.value ? format(field.value, "PPP", { locale: tr }) : <span>Tarih seçin</span>}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                            <Calendar 
+                              mode="single" 
+                              selected={field.value} 
+                              onSelect={field.onChange} 
+                              disabled={(date) => date < new Date() || isDueDateDisabled}
+                              initialFocus 
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        {isDueDateDisabled && <FormDescription>Merkezi vade tarihi girildiği için bu alan devre dışıdır.</FormDescription>}
+                        <FormMessage />
+                      </FormItem>
+                    )} 
+                  />
                   )}
-
-                  {/* Partner actions */}
-                  <div className="flex items-center justify-end md:col-span-2 lg:col-span-4">
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => remove(index)}
-                      disabled={index === 0 && fields.length === 1} // Prevent removing the last partner
-                    >
-                      <Trash className="mr-2 h-4 w-4" />
-                      Ortağı Kaldır
-                    </Button>
-                  </div>
+                  <div className="flex items-center justify-end md:col-span-2 lg:col-span-4"><Button type="button" variant="destructive" size="sm" onClick={() => remove(index)} disabled={fields.length === 1}><Trash className="mr-2 h-4 w-4" />Ortağı Kaldır</Button></div>
                 </div>
               </div>
-            ))}
-
-            <Button type="button" variant="outline" onClick={addPartner}>
-              <Plus className="mr-2 h-4 w-4" />
-              Ortak Ekle
-            </Button>
+              );
+            })}
+            <Button type="button" variant="outline" onClick={addPartner}><Plus className="mr-2 h-4 w-4" />Ortak Ekle</Button>
           </CardContent>
         </Card>
 
         <div className="flex justify-end gap-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => router.push("/dashboard/owner/purchases")}
-            disabled={isSubmitting}
-          >
-            İptal
-          </Button>
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Kaydediliyor...
-              </>
-            ) : isTemplate ? (
-              <>
-                <Template className="mr-2 h-4 w-4" />
-                Şablon Olarak Kaydet
-              </>
-            ) : (
-              <>
-                <Save className="mr-2 h-4 w-4" />
-                Kaydet
-              </>
-            )}
-          </Button>
+          <Button type="button" variant="outline" onClick={() => router.back()} disabled={isSubmitting}>İptal</Button>
+          <Button type="submit" disabled={isSubmitting}>{isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Kaydediliyor...</> : <><Save className="mr-2 h-4 w-4" />Kaydet</>}</Button>
         </div>
       </form>
     </Form>

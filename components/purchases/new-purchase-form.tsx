@@ -56,9 +56,10 @@ const partnerSchema = z.object({
     .max(100, "Ortaklık yüzdesi 100'den büyük olamaz"),
   hasPaid: z.boolean().default(false),
   dueDate: z.date().optional(),
+  isCreditor: z.boolean().optional(), // isCreditor alanı eklendi
 });
 
-// formSchema'ya category alanını ekleyelim
+// formSchema'ya category ve creditorId alanını ekleyelim
 const formSchema = z.object({
   product: z.string().min(2, {
     message: "Ürün adı en az 2 karakter olmalıdır.",
@@ -83,6 +84,9 @@ const formSchema = z.object({
   }),
   purchaseDate: z.date({
     required_error: "Lütfen bir tarih seçin.",
+  }),
+  creditorId: z.string({
+    required_error: "Ödemeyi yapan kişi seçilmelidir.",
   }),
   notes: z.string().optional(),
   saveAsTemplate: z.boolean().default(false),
@@ -121,6 +125,7 @@ export function NewPurchaseForm() {
       totalCost: 0,
       paymentMethod: "CASH",
       purchaseDate: new Date(),
+      creditorId: user?.id || "",
       notes: "",
       saveAsTemplate: false,
       templateName: "",
@@ -131,6 +136,7 @@ export function NewPurchaseForm() {
               userName: user.name,
               sharePercentage: 100,
               hasPaid: true,
+              isCreditor: true,
             },
           ]
         : [],
@@ -259,6 +265,13 @@ export function NewPurchaseForm() {
       return;
     }
 
+    // Set the creditor flag based on the creditorId from the form
+    const finalPartners = values.partners.map(partner => ({
+        ...partner,
+        isCreditor: partner.userId === values.creditorId,
+    }));
+
+
     setIsSubmitting(true);
     try {
       const response = await fetch("/api/purchases", {
@@ -266,7 +279,7 @@ export function NewPurchaseForm() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(values),
+        body: JSON.stringify({...values, partners: finalPartners}),
       });
 
       if (!response.ok) {
@@ -500,6 +513,48 @@ export function NewPurchaseForm() {
           />
         </div>
 
+        {/* Creditor Selector */}
+        <FormField
+            control={form.control}
+            name="creditorId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Ödemeyi Yapan (Alacaklı)</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Ödemeyi yapan ortağı seçin" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {isLoadingUsers ? (
+                      <SelectItem value="loading" disabled>
+                        Yükleniyor...
+                      </SelectItem>
+                    ) : users.length > 0 ? (
+                      users.map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no-data" disabled>
+                        Kullanıcı bulunamadı
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                <FormDescription>
+                    Bu alımın ödemesini kimin yaptığını belirtin. Diğer ortaklar bu kişiye borçlanacaktır.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
         <FormField
           control={form.control}
           name="saveAsTemplate"
@@ -539,8 +594,7 @@ export function NewPurchaseForm() {
                 <FormMessage />
               </FormItem>
             )}
-          />
-        )}
+          )}
 
         <FormField
           control={form.control}

@@ -327,6 +327,7 @@ model Purchase {
   unitPrice         Float
   totalCost         Float
   paymentMethod     PaymentMethod
+  creditorPaymentDueDate DateTime? // YENİ: Alacaklının son ödeme tarihi
   dueDate           DateTime? // Ödeme vadesi (ör: 3 ay sonra)
   description       String?
   createdAt         DateTime        @default(now())

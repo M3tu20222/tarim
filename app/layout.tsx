@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import type { Metadata } from "next";
 import { Mona_Sans as FontSans } from "next/font/google";
 
+import { Providers } from "./providers";
+
 const fontSans = FontSans({
   subsets: ["latin"],
   variable: "--font-sans",
@@ -29,16 +31,18 @@ export default function RootLayout({
           fontSans.variable
         )}
       >
-        <AuthProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="dark"
-            forcedTheme="dark"
-            disableTransitionOnChange
-          >
-            {children}
-          </ThemeProvider>
-        </AuthProvider>
+        <Providers>
+          <AuthProvider>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="dark"
+              forcedTheme="dark"
+              disableTransitionOnChange
+            >
+              {children}
+            </ThemeProvider>
+          </AuthProvider>
+        </Providers>
       </body>
     </html>
   );

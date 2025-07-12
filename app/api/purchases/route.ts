@@ -81,8 +81,9 @@ export async function POST(request: Request) {
       unit,
       unitPrice,
       paymentMethod,
+      creditorPaymentDueDate, // YENİ: Alacaklının son ödeme tarihi
       notes,
-      partners, // [{ userId: string, sharePercentage: number, hasPaid: boolean, dueDate?: Date }]
+      partners, // [{ userId: string, sharePercentage: number, hasPaid: boolean, isCreditor: boolean, dueDate?: Date }]
       isTemplate,
       templateName,
       seasonId, // Opsiyonel
@@ -141,7 +142,7 @@ export async function POST(request: Request) {
           unitPrice,
           totalCost,
           paymentMethod: paymentMethod as PaymentMethod,
-          // purchaseDate alanı Purchase modelinde yok, kaldırıldı.
+          creditorPaymentDueDate: creditorPaymentDueDate ? new Date(creditorPaymentDueDate) : null,
           description: notes,
           seasonId: seasonId || undefined, // Eğer sezon ID yoksa undefined ata
           isTemplate,
@@ -241,67 +242,53 @@ export async function POST(request: Request) {
       // TODO: İlgili kullanıcılara (ortaklar, adminler vb.) bildirim gönderilebilir.
 
       // 4.7. Borç Kaydı Oluşturma
-      let creditorId = createdContributors.find(c => c.isCreditor)?.userId;
+      // Ön yüzden gelen `isCreditor` bayrağına göre alacaklıyı bul.
+      const creditor = createdContributors.find(c => c.isCreditor);
 
-      // Eğer açıkça bir alacaklı belirtilmemişse
-      if (!creditorId) {
-          // İstek yapan kullanıcının (userId) ödeme yapmamış bir katılımcı olup olmadığını kontrol et
-          const requestUserIsUnpaidContributor = createdContributors.some(c => c.userId === userId && !c.hasPaid);
-
-          if (requestUserIsUnpaidContributor) {
-              // Eğer istek yapan kullanıcı ödeme yapmamış bir katılımcıysa, kendine borçlu olamaz.
-              // Bu durumda, borcun alacaklısını bir sistem kullanıcısı olarak ata.
-              // TODO: 'YOUR_DEFAULT_SYSTEM_USER_ID' yerine gerçek bir sistem kullanıcısı ID'si veya env değişkeni kullanın.
-              // Geçici çözüm: Geçerli bir MongoDB ObjectID formatında jenerik bir ID kullanıyoruz.
-              creditorId = process.env.SYSTEM_USER_ID || '60c72b2f9b1e8b001c8e4d5a'; // Örnek geçerli ObjectID
-              console.log(`Purchase ${purchase.id}: Requesting user (${userId}) is an unpaid contributor. Assigning system user (${creditorId}) as creditor.`);
-          } else {
-              // Eğer istek yapan kullanıcı ödeme yapmamış bir katılımcı değilse (yani ya ödemiş ya da hiç katkıda bulunmamış),
-              // işlemi yapan kullanıcıyı alacaklı kabul et.
-              creditorId = userId;
-              console.log(`Purchase ${purchase.id}: No explicit creditor found, assuming requesting user (${userId}) is the creditor.`);
-          }
+      if (!creditor && createdContributors.some(c => !c.hasPaid)) {
+          // Ödeme yapmamış ortaklar varken alacaklı belirtilmemişse bu bir hatadır.
+          console.error(`Purchase ${purchase.id}: Creditor not specified for a purchase with unpaid partners.`);
+          throw new Error("Ödeme yapmamış ortaklar varken, ödemeyi yapan alacaklı belirtilmelidir.");
       }
 
-      if (creditorId) { // Alacaklı belirlenebildiyse borçları oluştur
+      if (creditor) {
         const debtPromises = createdContributors
-          .filter(contributor => !contributor.hasPaid && contributor.userId !== creditorId) // Ödeme yapmamış VE alacaklı olmayanlar
+          // Ödeme yapmamış VE alacaklı olmayanlar için borç oluştur
+          .filter(contributor => !contributor.hasPaid && contributor.userId !== creditor.userId)
           .map(debtor => {
             // Borçlu ortağın formdan gelen verisini bul (dueDate için)
             const partnerData = partners.find((p: any) => p.userId === debtor.userId);
 
             // Vade tarihini belirle:
-            // 1. Ortağa özel vade tarihi var mı? (Formdan gelen)
-            // 2. Alışın genel vade tarihi var mı?
+            // 1. Alacaklının genel bir son ödeme tarihi var mı? Varsa 1 gün öncesini al.
+            // 2. Ortağa özel vade tarihi var mı? (Formdan gelen)
             // 3. Hiçbiri yoksa varsayılan (3 ay sonrası)
             let dueDate;
-            if (partnerData?.dueDate) {
+            if (purchase.creditorPaymentDueDate) {
+              dueDate = new Date(purchase.creditorPaymentDueDate);
+              dueDate.setDate(dueDate.getDate() - 1); // 1 gün öncesi
+            } else if (partnerData?.dueDate) {
               dueDate = new Date(partnerData.dueDate);
-            } else if (purchase.dueDate) { // purchase (yeni oluşturulan alış) nesnesini kullan
-              dueDate = new Date(purchase.dueDate);
             } else {
               dueDate = new Date(new Date().setMonth(new Date().getMonth() + 3));
             }
 
-            console.log(`Creating debt for Purchase ${purchase.id}: Debtor=${debtor.userId}, Creditor=${creditorId}, Amount=${debtor.contribution}, DueDate=${dueDate}`); // Log güncellendi
+            console.log(`Creating debt for Purchase ${purchase.id}: Debtor=${debtor.userId}, Creditor=${creditor.userId}, Amount=${debtor.contribution}, DueDate=${dueDate}`);
 
             return tx.debt.create({
               data: {
-                amount: debtor.contribution, // Borç miktarı, katkı payı kadar
+                amount: debtor.contribution,
                 dueDate: dueDate,
                 status: 'PENDING',
                 description: `${purchase.product} alışı için borç`,
-                reason: 'PURCHASE', // Borç nedeni: Alış
-                creditorId: creditorId, // Belirlenen alacaklı ID'si
-                debtorId: debtor.userId, // Borçlu ID'si
-                purchaseId: purchase.id, // İlişkili alış ID'si
+                reason: 'PURCHASE',
+                creditorId: creditor.userId, // Belirlenen alacaklı ID'si
+                debtorId: debtor.userId,
+                purchaseId: purchase.id,
               },
             });
           });
         await Promise.all(debtPromises);
-      } else if (createdContributors.some(c => !c.hasPaid)) {
-          // Bu else-if bloğu, creditorId her zaman ayarlandığı için artık idealde çalışmamalıdır.
-          console.error(`Purchase ${purchase.id}: Debts could not be created because the creditor could not be determined (fallback error).`);
       }
 
       // Bildirimleri Oluştur
