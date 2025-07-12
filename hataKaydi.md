@@ -132,3 +132,161 @@ Sulama kayıtları sayfasındaki (`/dashboard/owner/irrigation`) filtreler için
 
 ### Uygulanan Çözüm
 Sorunu çözmek için ilgili tüm `useQuery` sorgu fonksiyonları güncellendi. Sorgu fonksiyonları, API yanıtında `data` alanı bulunmadığı veya `null` olduğu durumlarda `undefined` yerine boş bir dizi (`[]`) döndürecek şekilde `...then(data => data.data || [])` mantığıyla düzeltildi. Bu değişiklik, bileşenin veri olmadan da kararlı bir şekilde çalışmasını sağladı ve hatayı ortadan kaldırdı.  
+
+**Başlık**: Borçlar Sayfasında Ondalık Sayı Hatası
+**Durum:** Çözüldü
+
+### Sorun
+Yeni bir alış kaydı oluşturulduktan sonra `/dashboard/owner/debts` sayfası açılmıyordu veya borçları doğru listeleyemiyordu. Sorunun, bir borç kaydının `amount` (tutar) alanında `9800.000000000002` gibi hatalı bir ondalık sayı bulunmasından kaynaklandığı tespit edildi.
+
+### Analiz ve Kök Neden
+Hatanın kök nedeni, `app/api/purchases/route.ts` içerisindeki alış oluşturma mantığında yapılan finansal hesaplamaların (toplam maliyet ve ortak payları) standart kayan nokta (floating-point) sayıları ile yapılmasıydı. Bu durum, JavaScript'in ondalık sayıları işlemedeki doğal hassasiyet sorunları nedeniyle, veritabanına çok uzun ondalıklı sayıların kaydedilmesine yol açıyordu. Bu hatalı veri, borç listeleme sayfasında okunurken (gerek API'de gerekse ön yüzde) beklenmedik hatalara ve çökmelere neden oluyordu.
+
+### Uygulanan Çözüm
+Sorun iki aşamada çözüldü:
+
+1.  **Kalıcı Kod Düzeltmesi:**
+    *   `app/api/purchases/route.ts` dosyasındaki `POST` fonksiyonu güncellendi.
+    *   Toplam maliyet (`totalCost`) ve her bir ortağın katkı payı (`contribution`) hesaplandıktan hemen sonra, sonuçlar `Number(... .toFixed(2))` yöntemi kullanılarak iki ondalık basamağa yuvarlandı.
+    *   Bu değişiklik, veritabanına yazılan tüm finansal verilerin tutarlı ve doğru formatta olmasını sağlayarak hatanın tekrarlanmasını engeller.
+
+2.  **Mevcut Verinin Düzeltilmesi:**
+    *   Veritabanında mevcut olan hatalı kaydı (`amount: 9800.000000000002`) düzeltmek için geçici bir `ts-node` script'i oluşturuldu ve çalıştırıldı.
+    *   Bu script, sorunlu bor�� kaydını bularak `amount` alanını doğru değeri olan `9800.00` ile güncelledi.
+    *   İşlem tamamlandıktan sonra geçici script projeden silindi.
+
+Bu iki adımlı çözümle hem mevcut sorun giderildi hem de gelecekte benzer hataların oluşması engellendi.
+
+**sorun**: http://localhost:3000/dashboard/owner/debts adresi hala çalışmıyor.
+**durum** : Çözülmedi
+**neler oldu** : Önceki düzeltmeler işe yarmadı
+**logs** : 
+vscode: ○ Compiling /dashboard/owner/debts ...
+ ✓ Compiled /dashboard/owner/debts in 1551ms (4275 modules)
+E:\Web_site\mart\tarim-yonetim-sistemi\node_modules\@prisma\client\runtime\library.js: Invalid source map. Only conformant source maps can be used to find the original code. Cause: TypeError [ERR_INVALID_ARG_TYPE]: The "payload" argument must be of type object. Received null
+E:\Web_site\mart\tarim-yonetim-sistemi\node_modules\@prisma\client\runtime\library.js: Invalid source map. Only conformant source maps can be used to find the original code. Cause: TypeError [ERR_INVALID_ARG_TYPE]: The "payload" argument must be of type object. Received null
+E:\Web_site\mart\tarim-yonetim-sistemi\node_modules\@prisma\client\runtime\library.js: Invalid source map. Only conformant source maps can be used to find the original code. Cause: TypeError [ERR_INVALID_ARG_TYPE]: The "payload" argument must be of type object. Received null
+E:\Web_site\mart\tarim-yonetim-sistemi\node_modules\@prisma\client\runtime\library.js: Invalid source map. Only conformant source maps can be used to find the original code. Cause: TypeError [ERR_INVALID_ARG_TYPE]: The "payload" argument must be of type object. Received null
+ ⨯ Error [PrismaClientUnknownRequestError]:
+Invalid `prisma.debt.findMany()` invocation:
+
+
+Inconsistent query result: Field creditor is required to return data, got `null` instead.
+    at async DebtsPage (app\dashboard\owner\debts\page.tsx:16:16)
+  14 | export default async function DebtsPage() {
+  15 |   // Tüm borçları getir
+> 16 |   const debts = await prisma.debt.findMany({
+     |                ^
+  17 |     include: {
+  18 |       creditor: {
+  19 |         select: { {
+  clientVersion: '6.7.0',
+  digest: '3076049759'
+}
+ GET /dashboard/owner/debts 200 in 2379ms
+ browser: Unhandled Runtime Error
+Server
+
+
+PrismaClientUnknownRequestError: 
+Invalid `prisma.debt.findMany()` invocation:
+
+
+Inconsistent query result: Field creditor is required to return data, got `null` instead.
+
+app\dashboard\owner\debts\page.tsx (16:17) @ async DebtsPage
+
+
+  14 | export default async function DebtsPage() {
+  15 |   // Tüm borçları getir
+> 16 |   const debts = await prisma.debt.findMany({
+     |                 ^
+  17 |     include: {
+  18 |       creditor: {
+  19 |         select: {
+Call Stack
+7
+
+Hide 6 ignore-listed frame(s)
+async DebtsPage
+app\dashboard\owner\debts\page.tsx (16:17)
+resolveErrorDev
+node_modules\next\dist\compiled\react-server-dom-webpack\cjs\react-server-dom-webpack-client.browser.development.js (1845:1)
+processFullStringRow
+node_modules\next\dist\compiled\react-server-dom-webpack\cjs\react-server-dom-webpack-client.browser.development.js (2225:1)
+processFullBinaryRow
+node_modules\next\dist\compiled\react-server-dom-webpack\cjs\react-server-dom-webpack-client.browser.development.js (2213:1)
+progress
+node_modules\next\dist\compiled\react-server-dom-webpack\cjs\react-server-dom-webpack-client.browser.development.js (2459:1)
+InnerLayoutRouter
+..\src\client\components\layout-router.tsx (408:5)
+OuterLayoutRouter
+..\src\client\components\layout-router.tsx (607:19)
+**database** : mongodb (migrate yapma)
+**mongodb son debt  kayıtları**:
+id
+68721b2bf4f4eb983419185e
+amount
+5600
+dueDate
+2025-10-10T21:00:00.000+00:00
+status
+"PENDING"
+description
+"PotNitrat_Me_Be alışı için borç"
+createdAt
+2025-07-12T08:22:02.849+00:00
+reminderSent
+false
+reason
+"PURCHASE"
+creditorId
+60c72b2f9b1e8b001c8e4d5a
+debtorId
+67e6fcdfc5ca6634a4456844
+purchaseId
+68721b27f4f4eb9834191856
+_id
+68723f26f5cb791c33b57573
+amount
+4200
+dueDate
+2025-10-09T21:00:00.000+00:00
+status
+"PENDING"
+description
+"PotNitrat_H_M_B alışı için borç"
+createdAt
+2025-07-12T10:55:34.600+00:00
+reminderSent
+false
+reason
+"PURCHASE"
+creditorId
+67e6fcc2c5ca6634a4456843
+debtorId
+67e6fcdfc5ca6634a4456844
+purchaseId
+68723f23f5cb791c33b5756a
+_id
+68723f26f5cb791c33b57574
+amount
+9800
+dueDate
+2025-10-09T21:00:00.000+00:00
+status
+"PENDING"
+description
+"PotNitrat_H_M_B alışı için borç"
+createdAt
+2025-07-12T10:55:34.600+00:00
+reminderSent
+false
+reason
+"PURCHASE"
+creditorId
+67e6fcc2c5ca6634a4456843
+debtorId
+67e5b093c8fccd39d1444093
+purchaseId
+68723f23f5cb791c33b5756a

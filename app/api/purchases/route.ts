@@ -127,8 +127,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. Toplam Maliyeti Hesapla
-    const totalCost = quantity * unitPrice;
+    // 3. Toplam Maliyeti Hesapla (Ondalık sayı sorununu önlemek için yuvarlama)
+    const totalCost = Number((quantity * unitPrice).toFixed(2));
 
     // 4. Prisma Transaction ile Veritabanı İşlemleri
     const result = await prisma.$transaction(async (tx) => {
@@ -140,7 +140,7 @@ export async function POST(request: Request) {
           quantity,
           unit: unit as Unit,
           unitPrice,
-          totalCost,
+          totalCost, // Yuvarlanmış toplam maliyet
           paymentMethod: paymentMethod as PaymentMethod,
           creditorPaymentDueDate: creditorPaymentDueDate ? new Date(creditorPaymentDueDate) : null,
           description: notes,
@@ -156,18 +156,19 @@ export async function POST(request: Request) {
 
       // 4.2. Alış Katılımcılarını Oluştur
       const contributorPromises = partners.map((partner: any) => {
-        const contribution = totalCost * (partner.sharePercentage / 100);
+        // Katkı payını hesaplarken ondalık sayı sorununu önlemek için yuvarlama
+        const contribution = Number((totalCost * (partner.sharePercentage / 100)).toFixed(2));
         return tx.purchaseContributor.create({
           data: {
             purchaseId: purchase.id,
             userId: partner.userId,
             sharePercentage: partner.sharePercentage,
-            contribution: contribution,
-            expectedContribution: contribution, // Başlangıçta beklenen ve katkı aynı
+            contribution: contribution, // Yuvarlanmış katkı payı
+            expectedContribution: contribution, // Yuvarlanmış beklenen katkı payı
             hasPaid: partner.hasPaid ?? false,
             paymentDate: partner.hasPaid ? new Date() : undefined,
             isCreditor: partner.isCreditor ?? false, // Frontend'den gelen isCreditor bilgisini kullan
-            remainingAmount: partner.hasPaid ? 0 : contribution, // Kalan miktar hesaplaması eklendi
+            remainingAmount: partner.hasPaid ? 0 : contribution, // Yuvarlanmış kalan miktar
           },
         });
       });
@@ -277,7 +278,7 @@ export async function POST(request: Request) {
 
             return tx.debt.create({
               data: {
-                amount: debtor.contribution,
+                amount: debtor.contribution, // Bu değer zaten yukarıda yuvarlandı
                 dueDate: dueDate,
                 status: 'PENDING',
                 description: `${purchase.product} alışı için borç`,
