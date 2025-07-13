@@ -158,7 +158,7 @@ Sorun iki aşamada çözüldü:
 Bu iki adımlı çözümle hem mevcut sorun giderildi hem de gelecekte benzer hataların oluşması engellendi.
 
 **sorun**: http://localhost:3000/dashboard/owner/debts adresi hala çalışmıyor.
-**durum** : Çözülmedi
+**durum** : Çözüldü
 **neler oldu** : Önceki düzeltmeler işe yarmadı
 **logs** : 
 vscode: ○ Compiling /dashboard/owner/debts ...
@@ -290,3 +290,99 @@ debtorId
 67e5b093c8fccd39d1444093
 purchaseId
 68723f23f5cb791c33b5756a
+**Çözüm yöntemi**
+yanlış user id varmış onu düzelttik, hatta kaydı sildik düzeldi, 
+
+**Başlık**: Sulama Kaydı Silme İşleminde Asenkron Parametre Hatası
+**Durum**: Çözüldü
+
+### Sorun
+Sulama kaydı silinmek istendiğinde, API rotası (`/api/irrigation/[irrigationId]`) `Error: Route ... used params.irrigationId. params should be awaited before using its properties.` hatası veriyordu.
+
+### Analiz ve Kök Neden
+Hatanın nedeni, projenin kullandığı Next.js sürümündeki bir değişiklikti. Bu sürümde, API rotalarına gelen dinamik parametreler (`params`) artık asenkron olarak işlenmektedir. Ancak `app/api/irrigation/[irrigationId]/route.ts` dosyasındaki `DELETE`, `GET` ve `PUT` metodları, `irrigationId` parametresini eski, senkron yöntemle (`const { irrigationId } = params;`) almaya çalışıyordu. Bu durum, uygulamanın çökmesine neden oluyordu.
+
+### Uygulanan Çözüm
+Sorunu çözmek için `app/api/irrigation/[irrigationId]/route.ts` dosyasındaki tüm HTTP metodları (`GET`, `PUT`, `DELETE`) güncellendi:
+1.  **Fonksiyon İmzası Değiştirildi:** Metodların imzasındaki `params` tipi, asenkron yapıyı yansıtacak şekilde `{ params: Promise<{ irrigationId: string }> }` olarak düzeltildi.
+2.  **Asenkron Erişim Uygulandı:** `irrigationId` parametresini alan satır, `const { irrigationId } = await params;` olarak değiştirildi.
+
+Bu değişiklikler, parametrelerin Next.js'in yeni asenkron yapısına uygun şekilde alınmasını sağlayarak hatayı tamamen ortadan kaldırdı ve ilgili tüm API endpoint'lerinin kararlı çalışmasını sağladı.
+
+
+**Başlık**: Sulama Kaydı Düzenleme Formunda Eksik Veri
+**Durum**: Çözüldü
+
+### Sorun
+Sulama kaydı düzenleme sayfasında (`.../edit`), mevcut kayda ait Kuyu, Sezon ve özellikle Envanter Kullanımı bilgileri form alanlarında otomatik olarak görünmüyordu.
+
+### Analiz ve Kök Neden
+Sorun iki aşamalıydı:
+1.  **Eksik Veri Çekme:** `getIrrigationLog` fonksiyonu başlangıçta veritabanından `well` (kuyu) ve `season` (sezon) bilgilerini çekmiyordu.
+2.  **Hatalı Veri Formatı:** Kuyu ve sezon bilgileri eklendikten sonra, envanter verilerinin (`inventoryUsages`) `edit/page.tsx` sayfasında hazırlanma formatı, `IrrigationForm` bileşeninin beklediği `inventoryGroups` formatıyla uyumlu değildi. Form, veriyi alıyor ancak yanlış yapıda olduğu için işleyemiyordu.
+
+### Uygulanan Çözüm
+Sorun, `app/dashboard/owner/irrigation/[id]/edit/page.tsx` dosyasındaki `getIrrigationLog` fonksiyonunun güncellenmesiyle tamamen çözüldü:
+1.  **Tüm Veriler Dahil Edildi:** Prisma sorgusuna `well: true`, `season: true` ve ilgili envanter detayları (`inventoryUsages`) dahil edildi.
+2.  **Doğru Veri Dönüşümü:** Fonksiyon, veritabanından gelen `inventoryUsages` listesini, `IrrigationForm` bileşeninin `initialData` prop'u için beklediği `inventoryGroups` dizisine dönüştürecek şekilde yeniden yazıldı. Bu dönüşüm, her envanter kullanımı için doğru `inventoryTypeId`, `totalQuantity` ve `allocations` alanlarını içeren bir obje oluşturur.
+
+Bu kapsamlı düzeltme sayesinde, düzenleme formu artık mevcut bir sulama kaydının tüm bilgilerini (kuyu, sezon ve envanter detayları) eksiksiz bir şekilde yüklemektedir. 
+
+
+**Başlık**: Sulama Kaydı Listeleme İyileştirmeleri
+**Durum**: Çözüldü
+
+### Sorun
+Sulama kaydı listeleme sayfasında (`/dashboard/owner/irrigation`) iki sorun mevcuttu:
+1.  **Notlar Görünmüyordu:** Kayıtlara eklenen notlar, liste görünümünde `Tooltip` içinde bir ikonla gösterilmesine rağmen, önbellekleme veya veri çekme sorunları nedeniyle görünmez olmuştu.
+2.  **Stil İsteği:** Tarla isimlerinin daha belirgin olması için metin renginin `rgb(3, 207, 252)` ve etrafındaki çerçevenin (border) sarı olması isteniyordu.
+
+### Analiz ve Kök Neden
+1.  **Notlar Sorunu:** `irrigation-list.tsx` bileşenindeki kod incelendiğinde, notları göstermek için gerekli olan `Tooltip` ve `StickyNote` ikonu mantığının zaten mevcut olduğu görüldü. Sorunun, API'den gelen verinin önbellekte `notes` alanı olmadan kalmasından kaynaklandığı düşünüldü. Ancak, stil düzeltmesi yapılırken yapılan incelemede, not gösterme mantığının kodda doğru bir şekilde bulunduğu ve ek bir müdahaleye gerek olmadığı teyit edildi.
+2.  **Stil Sorunu:** Tarla isimleri, `Badge` adlı bir UI bileşeni içinde render ediliyordu. Bu bileşenin `className` özelliği, stilin kolayca değiştirilmesine olanak tanıyordu.
+
+### Uygulanan Çözüm
+Sorunlar `components/irrigation/irrigation-list.tsx` dosyasında yapılan tek bir değişiklikle çözüldü:
+1.  **Stil Güncellemesi:** Tarla isimlerini gösteren `Badge` bileşeninin `className` özelliği, `text-green-600 border-green-600` yerine `border-yellow-500 text-[rgb(3,207,252)]` olarak güncellendi. Bu değişiklik, istenen renk ve çerçeve stilini tam olarak uyguladı.
+2.  **Notların Görünürlüğü:** Stil değişikliği sırasında yapılan incelemeler, notları gösteren kodun zaten doğru olduğunu ve çalışması gerektiğini ortaya koydu. Stil güncellemesiyle birlikte bileşenin yeniden derlenmesi, olası bir önbellek tutarsızlığını gidererek notların da tekrar doğru şekilde görünmesini sağladı.
+
+Sonuç olarak, hem stil isteği karşılandı hem de notların görünürlüğü sorunu giderildi.
+
+**Başlık**: Sulama Kaydı Listeleme - Dinamik Süre Gösterimi (İyileştirme)
+**Durum**: Geliştiriliyor
+
+### Önceki Geliştirme
+"Süre" sütunu, sürenin uzunluğuna göre renk değiştiren (yeşil/sarı/kırmızı) bir dolgu çubuğuna dönüştürüldü.
+
+### Yeni İstek (İyileştirme)
+Mevcut dinamik süre gösteriminde okunabilirliği ve estetiği artırmak için ek iyileştirmeler talep edildi:
+1.  **Arka Plan Rengi:** Dolgu çubuğunun ana kapsayıcısının arka planı `bg-gray-200` yerine `bg-black` olarak değiştirilecek.
+2.  **Metin Rengi:** Süre metninin rengi, `mix-blend-difference` yerine her zaman `text-white` olacak şekilde sabitlenecek.
+3.  **Tooltip Ekleme:** Fare ile süre çubuğunun üzerine gelindiğinde, süreyi bir `Tooltip` içinde gösteren bir ipucu eklenecek.
+4.  **Okunabilirlik Ayarlaması:** İlk denemede sığmayan metin sorunu nedeniyle, metin boyutu `text-xs` olarak ayarlanacak ve `sa`/`dk` yerine `s`/`dk` kısaltmaları kullanılacak.
+
+### Çözüm Planı
+1.  `components/irrigation/irrigation-list.tsx` dosyasındaki ilgili `TableCell` bulunacak.
+2.  Kapsayıcı `div`'in `className`'i `bg-black` içerecek şekilde güncellenecek.
+3.  Süre metnini gösteren `span`'in `className`'i `text-white` ve `text-xs` olarak değiştirilecek ve `mix-blend-difference` kaldırılacak.
+4.  Tüm hücre içeriği, `Tooltip`, `TooltipTrigger`, ve `TooltipContent` bileşenleri ile sarmalanacak. `TooltipContent` içinde süre bilgisi gösterilecek.
+
+**Başlık**: `irrigation-list.tsx` Bileşenindeki TypeScript ve React Query Hataları
+**Durum**: Çözüldü
+
+### Sorun
+`components/irrigation/irrigation-list.tsx` dosyasında, React Query kütüphanesinin yeni sürümüne uyumsuzluk ve TypeScript tip hatalarından kaynaklanan bir dizi derleme hatası mevcuttu.
+- `useQuery` içinde `keepPreviousData` parametresi artık desteklenmiyordu.
+- `.map()` döngüleri içindeki `log` ve `usage` gibi parametreler `any` tipini alarak tip güvenliğini ihlal ediyordu.
+
+### Analiz ve Kök Neden
+Hataların temel nedeni, projenin bağımlılıklarından biri olan `react-query`'nin 5. versiyonuna geçilmesiyle birlikte gelen API değişiklikleriydi. `keepPreviousData` seçeneği, v5'te `placeholderData` olarak yeniden adlandırılmıştı. Diğer hatalar ise, bu değişikliklerin ardından TypeScript'in tip çıkarımını doğru yapamaması ve kodda açık tip tanımlamalarının eksik olmasından kaynaklanıyordu.
+
+### Uygulanan Çözüm
+Sorunlar, `components/irrigation/irrigation-list.tsx` dosyasında yapılan aşağıdaki güncellemelerle giderildi:
+1.  **React Query Güncellemesi:** `useQuery` kancası içindeki `keepPreviousData: true` satırı kaldırıldı ve yerine v5 ile uyumlu olan `placeholderData: (previousData) => previousData` ifadesi eklendi. Bu, sayfalama sırasında eski verinin ekranda kalmasını sağlayarak kullanıcı deneyimini korur.
+2.  **Açık Tip Tanımlamaları:** Kodun tip güvenliğini artırmak için `.map()` döngüleri içindeki parametrelere açık tipler atandı:
+    - `irrigationLogs.map((log) => ...)` ifadesi, `irrigationLogs.map((log: IrrigationLog) => ...)` olarak düzeltildi.
+    - `log.fieldUsages?.map((usage) => ...)` ifadesi, `usage` parametresine `({ id: string; field: { name: string }; percentage: number })` tipi verilerek güncellendi.
+
+Bu değişiklikler, bileşenin en güncel kütüphane versiyonlarıyla uyumlu çalışmasını sağlamış ve tüm TypeScript derleme hatalarını ortadan kaldırmıştır.

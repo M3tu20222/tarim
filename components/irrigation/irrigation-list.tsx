@@ -118,7 +118,7 @@ export function IrrigationList() {
   const { data, isLoading, isError, error } = useQuery<ApiResponse, Error>({
     queryKey: ['irrigationLogs', filters, page],
     queryFn: () => fetchIrrigationLogs(filters, page),
-    keepPreviousData: true,
+    placeholderData: (previousData) => previousData,
   });
 
   // Silme işlemi
@@ -291,7 +291,7 @@ export function IrrigationList() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {irrigationLogs.map((log) => (
+                    {irrigationLogs.map((log: IrrigationLog) => (
                       <TableRow key={log.id}>
                         <TableCell>
                           <div className="flex items-center">
@@ -303,15 +303,48 @@ export function IrrigationList() {
                         </TableCell>
                         <TableCell>{log.well?.name || "-"}</TableCell>
                         <TableCell>
-                          <div className="flex items-center">
-                            <Clock className="mr-2 h-4 w-4 text-muted-foreground" />
-                            {Math.floor(log.duration / 60)}s {log.duration % 60}dk
-                          </div>
+                          {(() => {
+                            const maxDurationInMinutes = 20 * 60; // 20 hours
+                            const duration = log.duration;
+                            const percentage = Math.min((duration / maxDurationInMinutes) * 100, 100);
+                            const durationInHours = duration / 60;
+                            const durationText = `${Math.floor(duration / 60)}s ${duration % 60}dk`;
+
+                            let bgColorClass = '';
+                            if (durationInHours < 4) {
+                              bgColorClass = 'bg-green-500';
+                            } else if (durationInHours <= 10) {
+                              bgColorClass = 'bg-yellow-500';
+                            } else {
+                              bgColorClass = 'bg-red-500';
+                            }
+
+                            return (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="w-full bg-black rounded-md h-6 relative overflow-hidden border border-gray-500">
+                                    <div
+                                      className={`h-full rounded-md ${bgColorClass} transition-all duration-500`}
+                                      style={{ width: `${percentage}%` }}
+                                    />
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                      <span className="text-xs font-medium text-white px-2">
+                                        {durationText}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>{durationText}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            {log.fieldUsages?.map((usage) => (
-                              <Badge key={usage.id} variant="outline" className="text-green-600 border-green-600">
+                            {log.fieldUsages?.map((usage: { id: string; field: { name: string }; percentage: number }) => (
+                              <Badge key={usage.id} variant="outline" className="border-yellow-500 text-[rgb(3,207,252)]">
                                 {usage.field?.name} (%{usage.percentage})
                               </Badge>
                             ))}

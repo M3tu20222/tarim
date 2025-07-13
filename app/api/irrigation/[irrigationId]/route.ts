@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 // Belirli bir sulama kaydını getir
 export async function GET(
   request: NextRequest,
-  { params }: { params: { irrigationId: string } }
+  { params }: { params: Promise<{ irrigationId: string }> }
 ) {
   try {
     const session = await getServerSideSession();
@@ -15,7 +15,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { irrigationId } = params;
+    const { irrigationId } = await params;
 
     const irrigationLog = await prisma.irrigationLog.findUnique({
       where: { id: irrigationId },
@@ -84,7 +84,7 @@ export async function GET(
 // Sulama kaydını güncelle
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { irrigationId: string } }
+  { params }: { params: Promise<{ irrigationId: string }> }
 ) {
   try {
     const session = await getServerSideSession();
@@ -92,7 +92,7 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { irrigationId } = params;
+    const { irrigationId } = await params;
     const data = await request.json();
     const {
       startDateTime,
@@ -262,7 +262,7 @@ export async function PUT(
 // Sulama kaydını sil
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { irrigationId: string } }
+  { params }: { params: Promise<{ irrigationId: string }> }
 ) {
   try {
     const session = await getServerSideSession();
@@ -270,7 +270,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { irrigationId } = params;
+    const { irrigationId } = await params;
     if (!irrigationId) {
       return NextResponse.json({ error: "Sulama ID'si eksik." }, { status: 400 });
     }
