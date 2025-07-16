@@ -242,8 +242,9 @@ export default async function InventoryDetailPage({
                   return inventory.inventoryTransactions.map(async (transaction) => {
                     let transactionNote = transaction.notes;
                     let transactionLink: string | null = null;
+                    let responsibleUser: string | null = transaction.user?.name || "Bilinmeyen Kullanıcı";
 
-                    if (transactionNote?.startsWith("Sulama kaydı #")) {
+                    if (transaction.type === 'USAGE' && transactionNote?.startsWith("Sulama kaydı #")) {
                       const match = transactionNote.match(/([a-f0-9]{24})/);
                       const irrigationLogId = match ? match[0] : null;
                       if (irrigationLogId) {
@@ -279,7 +280,7 @@ export default async function InventoryDetailPage({
                           }
                         }
 
-                        if (irrigationLog && irrigationLog.fieldUsages.length > 0) {
+                        if (irrigationLog) {
                           const fieldNames = irrigationLog.fieldUsages
                             .map((fu: any) => fu.field.name)
                             .join(", ");
@@ -288,14 +289,11 @@ export default async function InventoryDetailPage({
                             .flatMap((invUsage: any) =>
                               invUsage.ownerUsages.map((ownerUsage: any) => ownerUsage.owner.name)
                             )
-                            .filter((name: string, index: number, self: string[]) => self.indexOf(name) === index) // Benzersiz isimler
+                            .filter((name: string, index: number, self: string[]) => self.indexOf(name) === index)
                             .join(", ");
-
-                          const usageNote = ownerNames ? ` (Kullanan: ${ownerNames})` : '';
                           
-                          transactionNote = `${fieldNames} - ${formatDate(
-                            irrigationLog.startDateTime
-                          )} sulama işlemi${usageNote}`;
+                          responsibleUser = ownerNames || "Belirtilmemiş";
+                          transactionNote = `${fieldNames} - ${formatDate(irrigationLog.date)} sulama işlemi`;
                           transactionLink = `/dashboard/owner/irrigation/${irrigationLogId}`;
                         }
                       }
@@ -331,8 +329,8 @@ export default async function InventoryDetailPage({
                           )}
                         </div>
                         <div className="text-right">
-                          <p className="text-sm">
-                            {transaction.user?.name || "Bilinmeyen Kullanıcı"}
+                          <p className="text-sm font-semibold">
+                            {responsibleUser}
                           </p>
                         </div>
                       </div>

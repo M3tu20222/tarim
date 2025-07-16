@@ -267,3 +267,14 @@ body {
 .bg-muted {
   background-color: hsla(var(--muted), 0.7);
 }
+
+/* react-day-picker chevron icon color fix for dark mode */
+.dark .rdp-chevron {
+  fill: hsl(var(--popover-foreground));
+}
+
+
+/* react-day-picker chevron icon color fix for dark mode */
+.dark .rdp-chevron {
+  fill: hsl(var(--popover-foreground));
+}

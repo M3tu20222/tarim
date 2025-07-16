@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { CalendarIcon } from "lucide-react";
-import { addDays, format } from "date-fns";
+import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import type { DateRange } from "react-day-picker";
 
@@ -15,23 +15,35 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
+interface CalendarDateRangePickerProps extends React.HTMLAttributes<HTMLDivElement> {
+  date: DateRange | undefined;
+  onSelect: (date: DateRange | undefined) => void;
+}
+
 export function CalendarDateRangePicker({
   className,
-}: React.HTMLAttributes<HTMLDivElement>) {
-  const [date, setDate] = React.useState<DateRange | undefined>({
-    from: new Date(),
-    to: addDays(new Date(), 7),
-  });
+  date,
+  onSelect,
+}: CalendarDateRangePickerProps) {
+  const [isOpen, setIsOpen] = React.useState(false);
+
+  const handleSelect = (selectedDate: DateRange | undefined) => {
+    onSelect(selectedDate);
+    // Eğer bir başlangıç ve bitiş tarihi seçildiyse, popover'ı kapat
+    if (selectedDate?.from && selectedDate?.to) {
+      setIsOpen(false);
+    }
+  };
 
   return (
     <div className={cn("grid gap-2", className)}>
-      <Popover>
+      <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
           <Button
             id="date"
             variant={"outline"}
             className={cn(
-              "w-[260px] justify-start text-left font-normal",
+              "w-full md:w-[260px] justify-start text-left font-normal",
               !date && "text-muted-foreground"
             )}
           >
@@ -39,24 +51,24 @@ export function CalendarDateRangePicker({
             {date?.from ? (
               date.to ? (
                 <>
-                  {format(date.from, "LLL dd, y", { locale: tr })} -{" "}
-                  {format(date.to, "LLL dd, y", { locale: tr })}
+                  {format(date.from, "d MMMM yyyy", { locale: tr })} -{" "}
+                  {format(date.to, "d MMMM yyyy", { locale: tr })}
                 </>
               ) : (
-                format(date.from, "LLL dd, y", { locale: tr })
+                format(date.from, "d MMMM yyyy", { locale: tr })
               )
             ) : (
-              <span>Tarih seçin</span>
+              <span>Tarih aralığı seçin</span>
             )}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="end">
+        <PopoverContent className="w-auto p-0" align="start">
           <Calendar
             initialFocus
             mode="range"
             defaultMonth={date?.from}
             selected={date}
-            onSelect={setDate}
+            onSelect={handleSelect}
             numberOfMonths={2}
             locale={tr}
           />

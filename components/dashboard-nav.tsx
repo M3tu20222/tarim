@@ -16,6 +16,7 @@ import {
   Map,
   Droplet,
   Tractor,
+  AreaChart, // Raporlar için yeni ikon
 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 
@@ -39,49 +40,64 @@ export function DashboardNav() {
     },
     {
       title: "Kullanıcılar",
-      href: "/dashboard/users",
+      href: "/dashboard/admin/users", // Admin rolüne özel path düzeltmesi
       icon: <Users className="h-5 w-5" />,
       roles: ["ADMIN"],
     },
     {
       title: "Tarlalar",
-      href: "/dashboard/fields",
+      href: "/dashboard/owner/fields", // Owner rolüne özel path
       icon: <Map className="h-5 w-5" />,
+      roles: ["OWNER"],
     },
     {
       title: "Envanter",
-      href: "/dashboard/inventory",
+      href: "/dashboard/owner/inventory", // Owner rolüne özel path
       icon: <Package className="h-5 w-5" />,
+      roles: ["OWNER"],
     },
     {
       title: "Alışlar",
-      href: "/dashboard/purchases",
+      href: "/dashboard/owner/purchases", // Owner rolüne özel path
       icon: <ShoppingCart className="h-5 w-5" />,
+      roles: ["OWNER"],
     },
     {
       title: "Borçlar",
-      href: "/dashboard/debts",
+      href: "/dashboard/owner/debts", // Owner rolüne özel path
       icon: <CreditCard className="h-5 w-5" />,
+      roles: ["OWNER"],
     },
     {
       title: "Faturalar",
-      href: "/dashboard/invoices",
+      href: "/dashboard/owner/invoices", // Owner rolüne özel path
       icon: <FileText className="h-5 w-5" />,
+      roles: ["OWNER"],
+    },
+    {
+      title: "Raporlar",
+      href: "/dashboard/owner/reports",
+      icon: <AreaChart className="h-5 w-5" />,
+      roles: ["OWNER"],
     },
     {
       title: "İşlemler",
-      href: "/dashboard/processes",
+      href: "/dashboard/worker/processes", // Worker rolüne özel path
       icon: <Tractor className="h-5 w-5" />,
+      roles: ["WORKER"],
     },
     {
       title: "Sulama",
-      href: "/dashboard/irrigation",
+      href: "/dashboard/worker/irrigation", // Worker rolüne özel path
       icon: <Droplet className="h-5 w-5" />,
+      roles: ["WORKER"],
     },
+    // Genel roller için linkler
     {
       title: "Ayarlar",
       href: "/dashboard/settings",
       icon: <Settings className="h-5 w-5" />,
+      roles: ["ADMIN", "OWNER", "WORKER"], // Herkes görebilir
     },
   ];
 
@@ -90,23 +106,37 @@ export function DashboardNav() {
     (item) => !item.roles || item.roles.includes(userRole)
   );
 
+  // Adjust hrefs based on role for shared pages
+  const getRoleSpecificPath = (basePath: string) => {
+    if (userRole.toLowerCase() === 'admin') return basePath;
+    return `/dashboard/${userRole.toLowerCase()}${basePath.substring('/dashboard'.length)}`;
+  }
+
   return (
     <nav className="grid items-start gap-2 px-2 py-4 text-sm">
-      {filteredNavItems.map((item) => (
-        <Link
-          key={item.href}
-          href={item.href}
-          className={cn(
-            "flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:bg-accent",
-            pathname === item.href
-              ? "bg-accent text-accent-foreground"
-              : "text-muted-foreground"
-          )}
-        >
-          {item.icon}
-          {item.title}
-        </Link>
-      ))}
+      {filteredNavItems.map((item) => {
+        // Adjust the dashboard link for each role
+        let finalHref = item.href;
+        if (item.title === 'Dashboard') {
+            finalHref = `/dashboard/${userRole.toLowerCase()}/dashboard`;
+        }
+
+        return (
+            <Link
+              key={finalHref}
+              href={finalHref}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:bg-accent",
+                pathname === finalHref
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground"
+              )}
+            >
+              {item.icon}
+              {item.title}
+            </Link>
+        );
+      })}
     </nav>
   );
 }
