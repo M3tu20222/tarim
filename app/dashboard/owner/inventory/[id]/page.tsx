@@ -236,34 +236,109 @@ export default async function InventoryDetailPage({
               <p className="text-muted-foreground">İşlem geçmişi bulunamadı.</p>
             ) : (
               <div className="space-y-4">
-                {inventory.inventoryTransactions.map((transaction) => (
-                  <div
-                    key={transaction.id}
-                    className="flex justify-between items-center border-b pb-2"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline">
-                          {getTransactionTypeLabel(transaction.type)}
-                        </Badge>
-                        <p className="font-medium">
-                          {transaction.quantity} {inventory.unit}
-                        </p>
+                {(() => {
+                  const irrigationLogCache = new Map();
+
+                  return inventory.inventoryTransactions.map(async (transaction) => {
+                    let transactionNote = transaction.notes;
+                    let transactionLink: string | null = null;
+
+                    if (transactionNote?.startsWith("Sulama kaydı #")) {
+                      const match = transactionNote.match(/([a-f0-9]{24})/);
+                      const irrigationLogId = match ? match[0] : null;
+                      if (irrigationLogId) {
+                        let irrigationLog;
+                        if (irrigationLogCache.has(irrigationLogId)) {
+                          irrigationLog = irrigationLogCache.get(irrigationLogId);
+                        } else {
+                          try {
+                            irrigationLog = await prisma.irrigationLog.findUnique({
+                              where: { id: irrigationLogId },
+                              include: {
+                                fieldUsages: {
+                                  include: {
+                                    field: { select: { id: true, name: true } },
+                                  },
+                                },
+                                inventoryUsages: {
+                                  where: { inventoryId: inventory.id },
+                                  include: {
+                                    ownerUsages: {
+                                      include: {
+                                        owner: { select: { id: true, name: true } },
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                            });
+                            irrigationLogCache.set(irrigationLogId, irrigationLog);
+                          } catch (e) {
+                            console.error("Error fetching irrigation log for note:", e);
+                            irrigationLog = null;
+                          }
+                        }
+
+                        if (irrigationLog && irrigationLog.fieldUsages.length > 0) {
+                          const fieldNames = irrigationLog.fieldUsages
+                            .map((fu: any) => fu.field.name)
+                            .join(", ");
+
+                          const ownerNames = irrigationLog.inventoryUsages
+                            .flatMap((invUsage: any) =>
+                              invUsage.ownerUsages.map((ownerUsage: any) => ownerUsage.owner.name)
+                            )
+                            .filter((name: string, index: number, self: string[]) => self.indexOf(name) === index) // Benzersiz isimler
+                            .join(", ");
+
+                          const usageNote = ownerNames ? ` (Kullanan: ${ownerNames})` : '';
+                          
+                          transactionNote = `${fieldNames} - ${formatDate(
+                            irrigationLog.startDateTime
+                          )} sulama işlemi${usageNote}`;
+                          transactionLink = `/dashboard/owner/irrigation/${irrigationLogId}`;
+                        }
+                      }
+                    }
+
+                    return (
+                      <div
+                        key={transaction.id}
+                        className="flex justify-between items-center border-b pb-2"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">
+                              {getTransactionTypeLabel(transaction.type)}
+                            </Badge>
+                            <p className="font-medium">
+                              {transaction.quantity} {inventory.unit}
+                            </p>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {formatDate(transaction.date)}
+                          </p>
+                          {transactionNote && (
+                            <p className="text-sm">
+                              {transactionLink ? (
+                                <Link href={transactionLink} className="text-blue-500 hover:underline">
+                                  {transactionNote}
+                                </Link>
+                              ) : (
+                                transactionNote
+                              )}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm">
+                            {transaction.user?.name || "Bilinmeyen Kullanıcı"}
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        {formatDate(transaction.date)}
-                      </p>
-                      {transaction.notes && (
-                        <p className="text-sm">{transaction.notes}</p>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm">
-                        {transaction.user?.name || "Bilinmeyen Kullanıcı"}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                    );
+                  });
+                })()}
               </div>
             )}
           </CardContent>
