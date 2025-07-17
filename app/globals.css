@@ -66,35 +66,29 @@ body {
 
     /* Sidebar variables */
     --sidebar-width: 16rem;
-    /* EKLENDİ */
     --sidebar-width-icon: 3rem;
   }
 
   .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 50%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    --background: 222 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222 47% 11.2%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 212 72% 51%;
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
@@ -116,9 +110,8 @@ body {
   }
 }
 
-/* Dark mode için body arka planını güncelleyelim */
+/* --- YENİLİKLER VE GÜNCELLEMELER BU BÖLÜMDEDİR --- */
 
-/* Cyberpunk grid arka planını güncelleyelim */
 /* Cyberpunk grid arka planını güncelleyelim - daha belirgin yapalım */
 .cyberpunk-grid {
   background-image: radial-gradient(circle at center, rgba(139, 92, 246, 0.2) 0%, rgba(0, 0, 0, 0) 70%),
@@ -129,8 +122,7 @@ body {
   background-repeat: no-repeat, repeat, repeat;
 }
 
-/* Dark mode için grid renklerini ayarlayalım */
-
+/* Neon efektleri için yardımcı sınıflar */
 .neon-border {
   box-shadow: 0 0 5px theme("colors.purple.500"), 0 0 10px theme("colors.purple.500");
   border: 1px solid theme("colors.purple.500");
@@ -168,51 +160,112 @@ body {
   box-shadow: 0 0 5px theme("colors.pink.500"), 0 0 10px theme("colors.pink.500");
 }
 
-/* Animations */
+/* 
+  --- ANIMASYON KEYFRAMES ---
+  Mevcut animasyonlarınız ve yenileri burada tanımlanmıştır.
+*/
 @keyframes pulse-neon {
 
   0%,
   100% {
     opacity: 1;
+    box-shadow: 0 0 5px theme("colors.cyan.500"), 0 0 10px theme("colors.cyan.600");
   }
 
   50% {
-    opacity: 0.7;
+    opacity: 0.8;
+    box-shadow: 0 0 10px theme("colors.cyan.400"), 0 0 20px theme("colors.cyan.500");
   }
-}
-
-.animate-pulse-neon {
-  animation: pulse-neon 2s ease-in-out infinite;
 }
 
 @keyframes glow-flicker {
 
   0%,
-  19.999%,
+  18%,
   22%,
-  62.999%,
-  64%,
-  64.999%,
-  70%,
+  25%,
+  53%,
+  57%,
   100% {
-    opacity: 0.99;
-    filter: drop-shadow(0 0 1px rgba(124, 58, 237, 0.5)) drop-shadow(0 0 5px rgba(124, 58, 237, 0.3));
+    opacity: 1;
+    text-shadow:
+      0 0 4px theme('colors.purple.300'),
+      0 0 10px theme('colors.purple.400'),
+      0 0 18px theme('colors.purple.500');
   }
 
   20%,
-  21.999%,
-  63%,
-  63.999%,
-  65%,
-  69.999% {
-    opacity: 0.4;
-    filter: none;
+  24%,
+  55% {
+    opacity: 0.6;
+    text-shadow: none;
   }
 }
 
-.animate-flicker {
-  animation: glow-flicker 4s linear infinite;
+/* YENİ EKLENDİ: Scanline efekti */
+@keyframes scanline {
+  0% {
+    background-position: 0 0;
+  }
+
+  100% {
+    background-position: 0 100%;
+  }
 }
+
+/* YENİ EKLENDİ: Butonlar için arka plan kaydırma animasyonu */
+@keyframes background-pan {
+  0% {
+    background-position: 0% center;
+  }
+
+  100% {
+    background-position: 200% center;
+  }
+}
+
+/* 
+  --- ANIMASYON YARDIMCI SINIFLARI (@layer utilities içinde) ---
+  Yukarıdaki keyframe'leri kullanan sınıflar.
+*/
+@layer utilities {
+  .animate-pulse-neon {
+    animation: pulse-neon 6s ease-in-out ;
+  }
+
+  .animate-flicker {
+    animation: glow-flicker 10s linear ;
+  }
+
+  /* YENİ EKLENDİ: Scanline animasyonunu uygular */
+  .animate-scanline {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .animate-scanline::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: linear-gradient(to bottom,
+        rgba(255, 255, 255, 0.05) 1px,
+        transparent 2px);
+    background-size: 100% 6px;
+    animation: scanline 10s linear infinite;
+    pointer-events: none;
+    /* Üstündeki tıklamaları engellemez */
+  }
+
+  /* YENİ EKLENDİ: Arka plan kaydırma animasyonunu uygular */
+  .animate-background-pan {
+    background-size: 200% auto;
+    animation: background-pan 3s linear infinite;
+  }
+}
+
 
 /* Improved card styling */
 .card-cyberpunk {
@@ -225,54 +278,34 @@ body {
 
 /* Improved button styling */
 .btn-cyberpunk {
-  @apply bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-700 hover:to-cyan-700 transition-all duration-300;
+  /* animate-background-pan sınıfını doğrudan buraya ekleyebilir veya bileşende kullanabilirsiniz. */
+  @apply bg-gradient-to-r from-purple-600 via-cyan-500 to-purple-600 text-white font-bold py-2 px-4 rounded transition-all duration-300 transform hover:scale-[1.02];
 }
 
 .btn-cyberpunk:hover {
-  @apply neon-glow scale-[1.02];
+  @apply neon-glow-cyan;
 }
 
-/* Sidebar specific styles */
-.bg-sidebar {
-  background-color: hsl(var(--sidebar-background));
-}
 
-.text-sidebar-foreground {
-  color: hsl(var(--sidebar-foreground));
-}
+/* --- Diğer Stiller --- */
 
-/* Sadece ilgili kısımları güncelliyorum */
-
-/* Sidebar ve içerik alanları için şeffaflık ekleyelim */
+/* Sidebar ve içerik alanları için şeffaflık */
 .bg-sidebar {
   background-color: hsla(var(--sidebar-background), 0.85);
-  /* 85% opaklık */
-  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
-  /* Safari için eklendi */
-  /* Hafif bulanıklık ekler */
+  -webkit-backdrop-filter: blur(4px);
 }
 
-/* Card ve diğer içerik alanları için şeffaflık */
 .bg-card,
 .bg-background {
   background-color: hsla(var(--card), 0.7);
-  /* 70% opaklık */
-  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
-  /* Safari için eklendi */
+  -webkit-backdrop-filter: blur(4px);
 }
 
-/* Tablo başlıkları ve satırları için şeffaflık */
 .bg-muted {
   background-color: hsla(var(--muted), 0.7);
 }
-
-/* react-day-picker chevron icon color fix for dark mode */
-.dark .rdp-chevron {
-  fill: hsl(var(--popover-foreground));
-}
-
 
 /* react-day-picker chevron icon color fix for dark mode */
 .dark .rdp-chevron {

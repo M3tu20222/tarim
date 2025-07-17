@@ -400,53 +400,20 @@ Mevcut dinamik süre gösteriminde okunabilirliği ve estetiği artırmak için 
 - **Analiz**: `prisma.schema` incelendiğinde, `IrrigationLog` modelinin tarlalara doğrudan `fieldId` ile değil, `IrrigationFieldUsage` ara tablosu üzerinden bağlandığı tespit edildi.
 - **Çözüm**: API (`app/api/reports/field-summary/route.ts`) içerisindeki Prisma sorgusu, doğru ilişki ve alan adlarını kullanacak şekilde güncellendi. Filtreleme artık `where: { fieldUsages: { some: { fieldId: fieldId } }, startDateTime: { ... } }` yapısıyla doğru bir şekilde çalışmaktadır.
 
-**sorun devam ediyor **
 
-API isteği: /api/reports/field-summary
-Kullanıcı ID: 67e5b093c8fccd39d1444093, Rol: OWNER
-E:\Web_site\mart\tarim-yonetim-sistemi\node_modules\@prisma\client\runtime\library.js: Invalid source map. Only conformant source maps can be used to find the original code. Cause: TypeError [ERR_INVALID_ARG_TYPE]: The "payload" argument must be of type object. Received null
-E:\Web_site\mart\tarim-yonetim-sistemi\node_modules\@prisma\client\runtime\library.js: Invalid source map. Only conformant source maps can be used to find the original code. Cause: TypeError [ERR_INVALID_ARG_TYPE]: The "payload" argument must be of type object. Received null
-E:\Web_site\mart\tarim-yonetim-sistemi\node_modules\@prisma\client\runtime\library.js: Invalid source map. Only conformant source maps can be used to find the original code. Cause: TypeError [ERR_INVALID_ARG_TYPE]: The "payload" argument must be of type object. Received null
-E:\Web_site\mart\tarim-yonetim-sistemi\node_modules\@prisma\client\runtime\library.js: Invalid source map. Only conformant source maps can be used to find the original code. Cause: TypeError [ERR_INVALID_ARG_TYPE]: The "payload" argument must be of type object. Received null
-E:\Web_site\mart\tarim-yonetim-sistemi\node_modules\@prisma\client\runtime\library.js: Invalid source map. Only conformant source maps can be used to find the original code. Cause: TypeError [ERR_INVALID_ARG_TYPE]: The "payload" argument must be of type object. Received null
-Rapor oluşturma hatası: Error [PrismaClientValidationError]: 
-Invalid `prisma.irrigationLog.findMany()` invocation:
 
-{
-  where: {
-    fieldUsages: {
-      some: {
-        fieldId: "67f02593a008aaf8061a04c5"
-      }
-    },
-    startDateTime: {
-      gte: new Date("2025-05-22T21:00:00.000Z"),
-      lte: new Date("2025-07-16T21:29:25.580Z")
-    }
-  },
-  include: {
-    inventoryUsages: {
-      include: {
-        inventoryItem: true,
-        ~~~~~~~~~~~~~
-?       irrigationLog?: true,
-?       inventory?: true,
-?       ownerUsages?: true
-      }
-    }
-  }
-}
+**Başlık**: Raporlama API - Hatalı `include` ve Alan Adı Kullanımı
+**Durum**: Çözüldü
 
-Unknown field `inventoryItem` for include statement on model `IrrigationInventoryUsage`. Available options are marked with ?.
-    at async getFieldSummary.revalidate (app\api\reports\field-summary\route.ts:16:27)
-    at async POST (app\api\reports\field-summary\route.ts:96:24)
-  14 | const getFieldSummary = cache(
-  15 |   async (fieldId: string, startDate: string, endDate: string) => {
-> 16 |     const irrigationLogs = await prisma.irrigationLog.findMany({
-     |                           ^
-  17 |       where: {
-  18 |         fieldUsages: {
-  19 |           some: { {
-  clientVersion: '6.7.0'
-}
- POST /api/reports/field-summary 500 in 316ms
+### Sorun
+Önceki düzeltmelere rağmen, `/api/reports/field-summary` API'si `PrismaClientValidationError` hatası vermeye devam ediyordu. Hata mesajı, `IrrigationInventoryUsage` modeli için yapılan `include` sorgusunda `inventoryItem` adında bilinmeyen bir alanın kullanılmasından kaynaklanıyordu.
+
+### Analiz ve Kök Neden
+`prisma/schema.prisma` dosyası incelendiğinde, `IrrigationInventoryUsage` modelinin `Inventory` modeline `inventory` alanı üzerinden bağlandığı görüldü. Ancak, `app/api/reports/field-summary/route.ts` dosyasındaki sorgu, `inventoryItem` adında yanlış bir alan adı kullanıyordu. Ek olarak, bu sorgudan dönen veriyi işleyen döngüde de `quantityUsed` gibi yine modelde bulunmayan bir alan adı (`quantity` olmalıydı) kullanılıyordu.
+
+### Uygulanan Çözüm
+Sorun, `app/api/reports/field-summary/route.ts` dosyasındaki `getFieldSummary` fonksiyonunda yapılan iki temel düzeltme ile çözüldü:
+1.  **`include` İfadesi Düzeltildi:** Prisma sorgusundaki `include: { inventoryUsages: { include: { inventoryItem: true } } }` satırı, doğru ilişki adı olan `include: { inventoryUsages: { include: { inventory: true } } }` olarak değiştirildi.
+2.  **Alan Adları Düzeltildi:** Sorgu sonucunu işleyen `forEach` döngüsü içindeki `const { inventoryItem, quantityUsed } = usage;` satırı, `prisma.schema` ile uyumlu olacak şekilde `const { inventory, quantity } = usage;` olarak güncellendi.
+
+Bu değişiklikler, API'nin veritabanı şemasıyla tutarlı bir şekilde çalışmasını sağlayarak hatayı tamamen ortadan kaldırdı.
