@@ -173,63 +173,85 @@ export async function PUT(
           where: { irrigationLogId: irrigationId },
         });
 
-        // Yeni envanterleri ekle
-        for (const deduction of inventoryDeductions) {
-          const { inventoryId, quantityUsed, unitPrice, ownerId: deductionOwnerId } = deduction;
+        // Yeni envanterleri işlemeden önce birleştir
+        const aggregatedDeductions: Record<string, { totalQuantity: number; unitPrice: number; owners: Record<string, number> }> = {};
 
-          if (isNaN(quantityUsed) || quantityUsed <= 0 || isNaN(unitPrice) || unitPrice < 0) {
-            throw new Error(`Geçersiz miktar veya birim fiyat. Miktar: ${quantityUsed}, Fiyat: ${unitPrice}`);
+        for (const deduction of inventoryDeductions) {
+          const { inventoryId, quantityUsed, unitPrice, ownerId } = deduction;
+          if (!aggregatedDeductions[inventoryId]) {
+            aggregatedDeductions[inventoryId] = {
+              totalQuantity: 0,
+              unitPrice: unitPrice, // Fiyatın aynı olduğu varsayılır
+              owners: {},
+            };
+          }
+          aggregatedDeductions[inventoryId].totalQuantity += quantityUsed;
+          if (!aggregatedDeductions[inventoryId].owners[ownerId]) {
+            aggregatedDeductions[inventoryId].owners[ownerId] = 0;
+          }
+          aggregatedDeductions[inventoryId].owners[ownerId] += quantityUsed;
+        }
+
+        // Birleştirilmiş envanterleri ekle
+        for (const inventoryId in aggregatedDeductions) {
+          const { totalQuantity, unitPrice, owners } = aggregatedDeductions[inventoryId];
+
+          if (isNaN(totalQuantity) || totalQuantity <= 0 || isNaN(unitPrice) || unitPrice < 0) {
+            throw new Error(`Geçersiz miktar veya birim fiyat. Miktar: ${totalQuantity}, Fiyat: ${unitPrice}`);
           }
 
           const inventoryItem = await tx.inventory.findUnique({
             where: { id: inventoryId },
             select: { name: true, unit: true, totalQuantity: true },
           });
-          if (!inventoryItem || inventoryItem.totalQuantity < quantityUsed) {
+          if (!inventoryItem || inventoryItem.totalQuantity < totalQuantity) {
             throw new Error(`Genel ${inventoryItem?.name || inventoryId} stoğu yetersiz.`);
           }
 
-          const ownerInventory = await tx.inventoryOwnership.findFirst({
-            where: { inventoryId: inventoryId, userId: deductionOwnerId },
-            select: { id: true, shareQuantity: true, user: { select: { name: true } } },
-          });
-          if (!ownerInventory || ownerInventory.shareQuantity < quantityUsed) {
-            throw new Error(`${ownerInventory?.user?.name || 'Bilinmeyen sahip'} için ${inventoryItem.name} stoğu yetersiz.`);
-          }
-
+          // Ana envanter kullanım kaydını oluştur
           const createdUsage = await tx.irrigationInventoryUsage.create({
             data: {
-              irrigationLog: {
-                connect: { id: irrigationId },
-              },
-              inventory: {
-                connect: { id: inventoryId },
-              },
-              quantity: round(quantityUsed),
+              irrigationLog: { connect: { id: irrigationId } },
+              inventory: { connect: { id: inventoryId } },
+              quantity: round(totalQuantity),
               unitPrice: round(unitPrice),
-              totalCost: round(quantityUsed * unitPrice),
+              totalCost: round(totalQuantity * unitPrice),
             },
           });
 
-          await tx.irrigationInventoryOwnerUsage.create({
-            data: {
-              irrigationInventoryUsageId: createdUsage.id,
-              ownerId: deductionOwnerId,
-              percentage: 100,
-              quantity: round(quantityUsed),
-              cost: round(quantityUsed * unitPrice),
-            },
-          });
-
+          // Genel stoktan düş
           await tx.inventory.update({
             where: { id: inventoryId },
-            data: { totalQuantity: { decrement: round(quantityUsed) } },
+            data: { totalQuantity: { decrement: round(totalQuantity) } },
           });
 
-          await tx.inventoryOwnership.update({
-            where: { id: ownerInventory.id },
-            data: { shareQuantity: { decrement: round(quantityUsed) } },
-          });
+          // Sahip bazında kullanımları ve stokları işle
+          for (const ownerId in owners) {
+            const quantityUsedByOwner = owners[ownerId];
+            const ownerInventory = await tx.inventoryOwnership.findFirst({
+              where: { inventoryId: inventoryId, userId: ownerId },
+              select: { id: true, shareQuantity: true, user: { select: { name: true } } },
+            });
+
+            if (!ownerInventory || ownerInventory.shareQuantity < quantityUsedByOwner) {
+              throw new Error(`${ownerInventory?.user?.name || 'Bilinmeyen sahip'} için ${inventoryItem.name} stoğu yetersiz.`);
+            }
+
+            await tx.irrigationInventoryOwnerUsage.create({
+              data: {
+                irrigationInventoryUsageId: createdUsage.id,
+                ownerId: ownerId,
+                percentage: round((quantityUsedByOwner / totalQuantity) * 100),
+                quantity: round(quantityUsedByOwner),
+                cost: round(quantityUsedByOwner * unitPrice),
+              },
+            });
+
+            await tx.inventoryOwnership.update({
+              where: { id: ownerInventory.id },
+              data: { shareQuantity: { decrement: round(quantityUsedByOwner) } },
+            });
+          }
         }
       }
 

@@ -9,6 +9,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ irrigationId: string }> }
 ) {
+  let data; // data'yı burada tanımla
   try {
     const session = await getServerSideSession();
     if (!session || !session.id) {
@@ -86,6 +87,7 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ irrigationId: string }> }
 ) {
+  let data;
   try {
     const session = await getServerSideSession();
     if (!session || !session.id) {
@@ -93,7 +95,7 @@ export async function PUT(
     }
 
     const { irrigationId } = await params;
-    const data = await request.json();
+    data = await request.json(); // Değeri burada ata
     const {
       startDateTime,
       duration,
@@ -111,13 +113,11 @@ export async function PUT(
       );
     }
 
-    const primaryFieldUsage = fieldIrrigations[0];
-    const wellId = primaryFieldUsage?.wellId;
-    const seasonId = primaryFieldUsage?.seasonId;
+    const { wellId, seasonId } = data;
 
     if (!wellId || !seasonId) {
       return NextResponse.json(
-        { error: "Could not determine wellId or seasonId" },
+        { error: "Could not determine wellId or seasonId from the main request body" },
         { status: 400 }
       );
     }
@@ -182,16 +182,13 @@ export async function PUT(
             irrigationLogId: updatedLog.id,
             fieldId: fieldUsageData.fieldId,
             percentage: fieldUsageData.percentage,
+            actualIrrigatedArea: fieldUsageData.irrigatedArea,
             ownerUsages: {
-              create: ownerDurations
-                .filter((od: { userId: string }) =>
-                  fieldUsageData.owners?.some((owner: { userId: string }) => owner.userId === od.userId)
-                )
-                .map((od: { userId: string, duration: number, irrigatedArea: number }) => ({
-                  ownerId: od.userId,
-                  duration: od.duration,
-                  irrigatedArea: od.irrigatedArea,
-                })),
+              create: fieldUsageData.owners.map((owner: { userId: string, percentage: number }) => ({
+                ownerId: owner.userId,
+                ownershipPercentage: owner.percentage,
+                usagePercentage: owner.percentage, 
+              })),
             },
           },
         });
@@ -250,10 +247,19 @@ export async function PUT(
     });
 
     return NextResponse.json({ data: { id: updatedIrrigationLog.id } });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error updating irrigation log:", error);
+    // Hata mesajını daha detaylı hale getir
+    const errorMessage = error.message || "Failed to update irrigation log";
+    const errorStack = error.stack || "No stack trace available";
+    // Gelen veriyi de logla (hassas veri olmamasına dikkat et)
+    console.error("Request body:", data ? JSON.stringify(data, null, 2) : "No request body");
     return NextResponse.json(
-      { error: "Failed to update irrigation log" },
+      { 
+        error: "Failed to update irrigation log",
+        details: errorMessage,
+        stack: process.env.NODE_ENV === "development" ? errorStack : undefined,
+      },
       { status: 500 }
     );
   }

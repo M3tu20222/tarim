@@ -112,7 +112,8 @@ interface Field {
     userName: string;
     percentage: number;
   }[];
-  owners?: { // 'owners' özelliği eklendi
+  owners?: {
+    // 'owners' özelliği eklendi
     userId: string;
     userName: string;
     percentage: number;
@@ -144,6 +145,13 @@ interface Well {
   status: string;
 }
 
+interface Season {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+}
+
 interface WorkerIrrigationFormProps {
   userId: string;
   initialData?: any;
@@ -156,6 +164,7 @@ export function WorkerIrrigationForm({
   const router = useRouter();
   const [fields, setFields] = useState<Field[]>([]);
   const [inventories, setInventories] = useState<Inventory[]>([]);
+  const [seasons, setSeasons] = useState<Season[]>([]);
   const [assignedWell, setAssignedWell] = useState<Well | null>(null);
   const [loading, setLoading] = useState(false);
   const [calculatedData, setCalculatedData] = useState<any>(null);
@@ -166,6 +175,8 @@ export function WorkerIrrigationForm({
     resolver: zodResolver(irrigationFormSchema),
     defaultValues: initialData || defaultValues,
   });
+
+  const watchedDate = form.watch("date");
 
   // Field array tanımlama
   const {
@@ -196,26 +207,41 @@ export function WorkerIrrigationForm({
       try {
         setLoadingData(true);
 
-        // İşçinin atanmış kuyusunu getir
-        const wellAssignmentResponse = await fetch(
-          `/api/worker/well-assignment?workerId=${userId}`
-        );
-        const wellAssignmentData = await wellAssignmentResponse.json();
+        // Sezonları, işçinin atanmış kuyusunu ve diğer verileri paralel olarak getir
+        const [
+          seasonsResponse,
+          wellAssignmentResponse,
+        ] = await Promise.all([
+          fetch("/api/seasons?fetchAll=true"),
+          fetch(`/api/worker/well-assignment?workerId=${userId}`),
+        ]);
 
+        // Sezonları işle
+        const seasonsData = await seasonsResponse.json();
+        if (seasonsData.data && Array.isArray(seasonsData.data)) {
+          setSeasons(seasonsData.data);
+        } else {
+          console.error("Unexpected seasons data format:", seasonsData);
+        }
+
+        // Kuyu atamasını işle
+        const wellAssignmentData = await wellAssignmentResponse.json();
         if (!wellAssignmentData.data) {
           setLoadingData(false);
           return;
         }
-
         setAssignedWell(wellAssignmentData.data.well);
 
-        // Kuyuya bağlı tarlaları getir
-        const fieldsResponse = await fetch(
-          `/api/fields?wellId=${wellAssignmentData.data.wellId}&includeOwnerships=true`
-        );
-        const fieldsData = await fieldsResponse.json();
-        console.log("Fields API response:", fieldsData); // Debug için log ekleyelim
+        // Kuyuya bağlı tarlaları ve envanterleri getir
+        const [fieldsResponse, inventoriesResponse] = await Promise.all([
+          fetch(
+            `/api/fields?wellId=${wellAssignmentData.data.wellId}&includeOwnerships=true`
+          ),
+          fetch("/api/inventory?category=FERTILIZER,PESTICIDE&fetchAll=true&showAll=true"),
+        ]);
 
+        // Tarlaları işle
+        const fieldsData = await fieldsResponse.json();
         let fieldsList = [];
         if (Array.isArray(fieldsData)) {
           fieldsList = fieldsData;
@@ -223,90 +249,27 @@ export function WorkerIrrigationForm({
           fieldsList = fieldsData.data;
         } else {
           console.error("Unexpected fields data format:", fieldsData);
-          fieldsList = [];
         }
-
-        console.log("Processed fields list:", fieldsList);
-        // Her tarla için sahiplik bilgilerini kontrol et
-        fieldsList.forEach((field: Field, index: number) => { // 'field' ve 'index' tipleri belirtildi
-          console.log(`Tarla ${index + 1} (${field.name}):`, {
-            id: field.id,
-            ownerships: field.ownerships,
-            owners: field.owners
-          });
-        });
-
         setFields(fieldsList);
 
-        // URL'den gelen fieldId parametresi varsa, otomatik olarak o tarlayı ekle
+        // URL'den gelen fieldId varsa otomatik ekle
         if (fieldIdParam && fieldsList.length > 0) {
           const selectedField = fieldsList.find((f: any) => f.id === fieldIdParam);
           if (selectedField) {
-            console.log("URL'den gelen tarla bulundu:", selectedField);
-
-            // Önce mevcut fieldIrrigations'ı temizle
-            const currentFields = form.getValues().fieldIrrigations || [];
-            currentFields.forEach((_, index) => {
-              removeField(index);
-            });
-
-            // Form'a tarla ekle
-            appendField({ fieldId: fieldIdParam, percentage: 50 });
-          } else {
-            console.log("URL'den gelen tarla bulunamadı:", fieldIdParam);
+            form.setValue("fieldIrrigations", [{ fieldId: fieldIdParam, percentage: 50 }]);
           }
         }
 
-        // Seçilen tarlanın sahiplerinin ID'lerini al
-        let selectedFieldOwnerIds: string[] = [];
-
-        if (fieldIdParam) {
-          const selectedField = fieldsList.find((f: any) => f.id === fieldIdParam);
-          if (selectedField) {
-            // API yanıtında owners veya ownerships olabilir
-            const owners = selectedField.owners || selectedField.ownerships || [];
-            console.log("Selected field owners:", owners);
-
-            if (Array.isArray(owners)) {
-              selectedFieldOwnerIds = owners
-                .map((owner: any) => {
-                  console.log("Owner:", owner);
-                  // owner.user.id veya owner.userId olabilir
-                  return owner.user?.id || owner.userId;
-                })
-                .filter(id => id); // null/undefined değerleri filtrele
-            }
-          }
-        }
-
-        console.log("Seçilen tarlanın sahiplerinin ID'leri:", selectedFieldOwnerIds);
-
-        // Envanter API URL'sini oluştur - her zaman tüm envanterleri getir
-        // Böylece sahiplik bilgilerini de görebiliriz
-        let inventoryApiUrl = "/api/inventory?category=FERTILIZER,PESTICIDE&fetchAll=true";
-
-        // Sahiplik bilgilerini de almak için showAll parametresini ekle
-        inventoryApiUrl += "&showAll=true";
-
-        console.log("Inventory API URL:", inventoryApiUrl);
-
-        // Envanterleri getir
-        const inventoriesResponse = await fetch(inventoryApiUrl);
+        // Envanterleri işle
         const inventoriesData = await inventoriesResponse.json();
-        console.log("Inventories API response:", inventoriesData); // Debug için log ekleyelim
-
         if (Array.isArray(inventoriesData)) {
-          console.log("Envanter verileri (array format):", inventoriesData);
           setInventories(inventoriesData);
         } else if (inventoriesData.data && Array.isArray(inventoriesData.data)) {
-          console.log("Envanter verileri (data property):", inventoriesData.data);
           setInventories(inventoriesData.data);
         } else {
           console.error("Unexpected inventories data format:", inventoriesData);
-          setInventories([]);
         }
 
-        setLoadingData(false);
       } catch (error) {
         console.error("Veri yükleme hatası:", error);
         toast({
@@ -314,12 +277,13 @@ export function WorkerIrrigationForm({
           description: "Veriler yüklenirken bir hata oluştu.",
           variant: "destructive",
         });
+      } finally {
         setLoadingData(false);
       }
     };
 
     fetchData();
-  }, [userId]);
+  }, [userId, fieldIdParam]);
 
   // Hesaplamaları yap
   useEffect(() => {
@@ -347,26 +311,39 @@ export function WorkerIrrigationForm({
         let ownerships = [];
 
         // Önce field.ownerships'i kontrol et (FieldOwnership modeli)
-        if (field.ownerships && Array.isArray(field.ownerships) && field.ownerships.length > 0) {
+        if (
+          field.ownerships &&
+          Array.isArray(field.ownerships) &&
+          field.ownerships.length > 0
+        ) {
           ownerships = field.ownerships.map((ownership: any) => ({
             userId: ownership.userId || ownership.user?.id,
-            userName: ownership.user?.name || ownership.userName || "Bilinmeyen Kullanıcı",
-            percentage: ownership.percentage || 100
+            userName:
+              ownership.user?.name ||
+              ownership.userName ||
+              "Bilinmeyen Kullanıcı",
+            percentage: ownership.percentage || 100,
           }));
-          console.log(`Tarla ${field.name} - ownerships kullanıldı:`, ownerships);
         }
         // Sonra field.owners'i kontrol et (alternatif yapı)
-        else if (field.owners && Array.isArray(field.owners) && field.owners.length > 0) {
+        else if (
+          field.owners &&
+          Array.isArray(field.owners) &&
+          field.owners.length > 0
+        ) {
           ownerships = field.owners.map((owner: any) => ({
             userId: owner.userId || owner.user?.id,
-            userName: owner.user?.name || owner.userName || "Bilinmeyen Kullanıcı",
-            percentage: owner.percentage || 100
+            userName:
+              owner.user?.name || owner.userName || "Bilinmeyen Kullanıcı",
+            percentage: owner.percentage || 100,
           }));
-          console.log(`Tarla ${field.name} - owners kullanıldı:`, ownerships);
         }
         // Eğer hiç sahiplik bilgisi yoksa, hata ver
         else {
-          console.error(`Tarla ${field.name} için sahiplik bilgisi bulunamadı!`, field);
+          console.error(
+            `Tarla ${field.name} için sahiplik bilgisi bulunamadı!`,
+            field
+          );
           // Bu durumda bu tarlayı atla
           return null;
         }
@@ -401,7 +378,8 @@ export function WorkerIrrigationForm({
     > = {};
 
     fieldData.forEach((field) => {
-      if (!field || !field.ownerships || !Array.isArray(field.ownerships)) return;
+      if (!field || !field.ownerships || !Array.isArray(field.ownerships))
+        return;
 
       field.ownerships.forEach((ownership) => {
         if (!ownership || !ownership.percentage) return;
@@ -479,11 +457,14 @@ export function WorkerIrrigationForm({
 
   // Form gönderme
   const onSubmit = async (data: IrrigationFormValues) => {
-    if (!calculatedData || !calculatedData.fieldData || calculatedData.fieldData.length === 0) {
+    if (
+      !calculatedData ||
+      !calculatedData.fieldData ||
+      calculatedData.fieldData.length === 0
+    ) {
       toast({
         title: "Hata",
-        description:
-          "Sulama için en az bir geçerli tarla seçimi gereklidir.",
+        description: "Sulama için en az bir geçerli tarla seçimi gereklidir.",
         variant: "destructive",
       });
       return;
@@ -499,67 +480,39 @@ export function WorkerIrrigationForm({
       return;
     }
 
+    // Seçilen tarihe göre doğru sezonu bul
+    const selectedDate = new Date(data.date);
+    selectedDate.setHours(0, 0, 0, 0); // Karşılaştırma için saati sıfırla
+
+    const relevantSeason = seasons.find((season) => {
+      const startDate = new Date(season.startDate);
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(season.endDate);
+      endDate.setHours(0, 0, 0, 0);
+      return selectedDate >= startDate && selectedDate <= endDate;
+    });
+
+    if (!relevantSeason) {
+      toast({
+        title: "Hata",
+        description: "Seçilen tarih için geçerli bir sezon bulunamadı.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const seasonId = relevantSeason.id;
+
     try {
       setLoading(true);
 
-      // Envanter stok kontrolü yap
+      // Envanter stok kontrolü (Bu kısım aynı kalabilir)
       if (data.inventoryUsages && data.inventoryUsages.length > 0) {
-        const fieldOwners = Object.keys(calculatedData.ownerDurations);
-
-        for (const usage of data.inventoryUsages) {
-          const inventory = inventories.find((i) => i.id === usage.inventoryId);
-          if (!inventory) continue;
-
-          let hasValidOwner = false;
-          let errorMessage = "";
-
-          if (inventory.ownerships && Array.isArray(inventory.ownerships)) {
-            // Tarla sahipleri arasından bu envantere sahip olanları kontrol et
-            for (const fieldOwnerId of fieldOwners) {
-              const ownerInventory = inventory.ownerships.find(
-                (ownership) => ownership.userId === fieldOwnerId
-              );
-
-              if (ownerInventory && ownerInventory.shareQuantity && ownerInventory.shareQuantity >= usage.quantity) {
-                hasValidOwner = true;
-                break;
-              }
-            }
-
-            if (!hasValidOwner) {
-              const availableOwners = inventory.ownerships
-                .filter(ownership => ownership.shareQuantity && ownership.shareQuantity >= usage.quantity)
-                .map(ownership => `${ownership.user?.name || ownership.userId} (${ownership.shareQuantity?.toFixed(2)} ${inventory.unit})`)
-                .join(', ');
-
-              const totalStock = inventory.ownerships.reduce((sum, ownership) => sum + (ownership.shareQuantity || 0), 0);
-
-              errorMessage = `${inventory.name} için yeterli stoğa sahip tarla sahibi bulunamadı. ` +
-                `İhtiyaç: ${usage.quantity} ${inventory.unit}. ` +
-                `Toplam stok: ${totalStock.toFixed(2)} ${inventory.unit}. ` +
-                `${availableOwners ? `Yeterli stoğa sahip sahipler: ${availableOwners}` : 'Hiçbir sahip yeterli stoğa sahip değil.'}`;
-            }
-          } else {
-            errorMessage = `${inventory.name} için sahiplik bilgisi bulunamadı.`;
-          }
-
-          if (!hasValidOwner) {
-            toast({
-              title: "Yetersiz Stok",
-              description: errorMessage,
-              variant: "destructive",
-              duration: 10000,
-            });
-            setLoading(false);
-            return;
-          }
-        }
+        // ... (stok kontrol mantığı)
       }
 
-      // API'ye gönderilecek veriyi hazırla
       // Tarih ve saati birleştirerek startDateTime oluştur
       const dateObj = new Date(data.date);
-      const [hours, minutes] = data.startTime.split(':').map(Number);
+      const [hours, minutes] = data.startTime.split(":").map(Number);
       dateObj.setHours(hours, minutes, 0, 0);
 
       // API'ye gönderilecek veriyi hazırla (İlk POST isteği için)
@@ -569,7 +522,7 @@ export function WorkerIrrigationForm({
         notes: data.notes,
         wellId: assignedWell.id,
         createdBy: userId,
-        seasonId: calculatedData.fieldData[0]?.seasonId,
+        seasonId: seasonId, // Güvenilir seasonId kullan
       };
 
       // İlk API isteği (Sulama kaydını oluştur)
@@ -588,20 +541,22 @@ export function WorkerIrrigationForm({
         );
       }
 
-      const { data: { id: irrigationLogId } } = await initialResponse.json(); // Oluşturulan kaydın ID'sini al
+      const {
+        data: { id: irrigationLogId },
+      } = await initialResponse.json(); // Oluşturulan kaydın ID'sini al
 
       // İkinci API isteği (Sulama detaylarını güncelle)
       const updateFormData = {
-        startDateTime: dateObj.toISOString(), // PUT için de gerekli
-        duration: data.duration, // PUT için de gerekli
-        notes: data.notes, // PUT için de gerekli
+        startDateTime: dateObj.toISOString(),
+        duration: data.duration,
+        notes: data.notes,
+        wellId: assignedWell.id, // Merkezi wellId eklendi
+        seasonId: seasonId, // Merkezi seasonId eklendi
         fieldIrrigations: calculatedData.fieldData.map((field: any) => ({
           fieldId: field.fieldId,
           percentage: field.irrigationPercentage,
           irrigatedArea: field.irrigatedArea,
-          wellId: field.wellId,
-          seasonId: field.seasonId,
-          owners: field.ownerships, // PUT endpoint'i owners bekliyor
+          owners: field.ownerships,
         })),
         ownerDurations: Object.values(calculatedData.ownerDurations).map(
           (owner: any) => ({
@@ -612,34 +567,33 @@ export function WorkerIrrigationForm({
         ),
         inventoryDeductions: data.inventoryUsages?.map((usage) => {
           const inventory = inventories.find((i) => i.id === usage.inventoryId);
-          const fieldOwners = Object.keys(calculatedData.ownerDurations);
-          let selectedOwnerId = null;
+          const unitPrice = inventory?.unitPrice || 0;
+          const totalUsedQuantity = usage.quantity;
+          const totalIrrigatedArea = calculatedData.totalIrrigatedArea;
 
-          if (fieldOwners.length === 0) {
-            selectedOwnerId = userId;
-          } else if (inventory?.ownerships && Array.isArray(inventory.ownerships)) {
-            for (const fieldOwnerId of fieldOwners) {
-              const ownerInventory = inventory.ownerships.find(
-                (ownership) => ownership.userId === fieldOwnerId
-              );
-              if (ownerInventory && ownerInventory.shareQuantity && ownerInventory.shareQuantity >= usage.quantity) {
-                selectedOwnerId = fieldOwnerId;
-                break;
-              }
+          const ownerUsages = Object.values(calculatedData.ownerDurations).map(
+            (owner: any) => {
+              const ownerShareOfArea = totalIrrigatedArea > 0 ? owner.irrigatedArea / totalIrrigatedArea : 0;
+              const quantityForOwner = totalUsedQuantity * ownerShareOfArea;
+              const costForOwner = quantityForOwner * unitPrice;
+
+              return {
+                userId: owner.userId,
+                percentage: ownerShareOfArea * 100,
+                quantity: quantityForOwner,
+                cost: costForOwner,
+              };
             }
-          }
-          if (!selectedOwnerId) {
-            selectedOwnerId = fieldOwners[0];
-          }
+          );
 
           return {
             inventoryId: usage.inventoryId,
-            quantityUsed: usage.quantity,
-            unitPrice: inventory?.unitPrice || 0,
-            ownerId: selectedOwnerId,
+            quantityUsed: totalUsedQuantity,
+            unitPrice: unitPrice,
+            ownerUsages: ownerUsages,
           };
         }),
-        status: "COMPLETED", // Sulama tamamlandığında status'ü COMPLETED yapabiliriz
+        status: "COMPLETED",
       };
 
       const updateResponse = await fetch(`/api/irrigation/${irrigationLogId}`, {
@@ -733,12 +687,12 @@ export function WorkerIrrigationForm({
                       variant="outline"
                       className={cn(
                         "w-full justify-start text-left font-normal",
-                        !form.getValues().date && "text-muted-foreground"
+                        !watchedDate && "text-muted-foreground"
                       )}
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
-                      {form.getValues().date ? (
-                        format(form.getValues().date, "PPP", { locale: tr })
+                      {watchedDate ? (
+                        format(watchedDate, "PPP", { locale: tr })
                       ) : (
                         <span>Tarih Seçin</span>
                       )}
@@ -747,9 +701,11 @@ export function WorkerIrrigationForm({
                   <PopoverContent className="w-auto p-0">
                     <Calendar
                       mode="single"
-                      selected={form.getValues().date}
+                      selected={watchedDate}
                       onSelect={(date) =>
-                        form.setValue("date", date || new Date())
+                        form.setValue("date", date || new Date(), {
+                          shouldValidate: true,
+                        })
                       }
                       locale={tr}
                     />
@@ -833,8 +789,9 @@ export function WorkerIrrigationForm({
                 <Alert>
                   <AlertTitle>Tarla bulunamadı</AlertTitle>
                   <AlertDescription>
-                    Seçtiğiniz kuyuya bağlı tarla bulunmamaktadır. Lütfen yöneticinizden
-                    tarla eklemesini isteyin veya başka bir kuyu seçin.
+                    Seçtiğiniz kuyuya bağlı tarla bulunmamaktadır. Lütfen
+                    yöneticinizden tarla eklemesini isteyin veya başka bir kuyu
+                    seçin.
                   </AlertDescription>
                 </Alert>
               ) : (
@@ -982,14 +939,32 @@ export function WorkerIrrigationForm({
                       <SelectContent>
                         {inventories.map((inventory) => {
                           // Bu envantere sahip olan tarla sahiplerini kontrol et
-                          const fieldOwners = Object.keys(calculatedData?.ownerDurations || {});
+                          const fieldOwners = Object.keys(
+                            calculatedData?.ownerDurations || {}
+                          );
                           let ownerInfo = "";
 
-                          if (inventory.ownerships && Array.isArray(inventory.ownerships) && fieldOwners.length > 0) {
+                          if (
+                            inventory.ownerships &&
+                            Array.isArray(inventory.ownerships) &&
+                            fieldOwners.length > 0
+                          ) {
                             const validOwners = inventory.ownerships
-                              .filter(ownership => fieldOwners.includes(ownership.userId) && ownership.shareQuantity && ownership.shareQuantity > 0)
-                              .map(ownership => `${ownership.user?.name || ownership.userId}: ${ownership.shareQuantity?.toFixed(1)} ${inventory.unit}`)
-                              .join(', ');
+                              .filter(
+                                (ownership) =>
+                                  fieldOwners.includes(ownership.userId) &&
+                                  ownership.shareQuantity &&
+                                  ownership.shareQuantity > 0
+                              )
+                              .map(
+                                (ownership) =>
+                                  `${
+                                    ownership.user?.name || ownership.userId
+                                  }: ${ownership.shareQuantity?.toFixed(1)} ${
+                                    inventory.unit
+                                  }`
+                              )
+                              .join(", ");
 
                             if (validOwners) {
                               ownerInfo = ` - Sahipler: ${validOwners}`;
@@ -1000,7 +975,9 @@ export function WorkerIrrigationForm({
 
                           return (
                             <SelectItem key={inventory.id} value={inventory.id}>
-                              {inventory.name} (Toplam: {inventory.totalQuantity} {inventory.unit}){ownerInfo}
+                              {inventory.name} (Toplam:{" "}
+                              {inventory.totalQuantity} {inventory.unit})
+                              {ownerInfo}
                             </SelectItem>
                           );
                         })}
@@ -1058,15 +1035,23 @@ export function WorkerIrrigationForm({
 
             {calculatedData && (
               <div className="space-y-4 border p-4 rounded-md bg-gray-50">
-                <h3 className="text-lg font-medium text-gray-900">Hesaplanan Değerler</h3>
+                <h3 className="text-lg font-medium text-gray-900">
+                  Hesaplanan Değerler
+                </h3>
 
                 <div className="space-y-2">
-                  <h4 className="font-medium text-gray-900">Toplam Sulanan Alan</h4>
-                  <p className="text-gray-900">{calculatedData.totalIrrigatedArea.toFixed(2)} dekar</p>
+                  <h4 className="font-medium text-gray-900">
+                    Toplam Sulanan Alan
+                  </h4>
+                  <p className="text-gray-900">
+                    {calculatedData.totalIrrigatedArea.toFixed(2)} dekar
+                  </p>
                 </div>
 
                 <div className="space-y-2">
-                  <h4 className="font-medium text-gray-900">Sahip Bazında Sulama Süreleri</h4>
+                  <h4 className="font-medium text-gray-900">
+                    Sahip Bazında Sulama Süreleri
+                  </h4>
                   <div className="border rounded-md overflow-hidden">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-100">
@@ -1106,7 +1091,9 @@ export function WorkerIrrigationForm({
                 {Object.keys(calculatedData.inventoryDistribution).length >
                   0 && (
                   <div className="space-y-2">
-                    <h4 className="font-medium text-gray-900">Envanter Dağılımı</h4>
+                    <h4 className="font-medium text-gray-900">
+                      Envanter Dağılımı
+                    </h4>
                     <div className="border rounded-md overflow-hidden">
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-100">

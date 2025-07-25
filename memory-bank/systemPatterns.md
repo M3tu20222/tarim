@@ -35,6 +35,7 @@ graph TD
 *   **Katmanlı Mimari**: Uygulama, sunum (UI), iş mantığı (API rotaları, servisler) ve veri erişim (Prisma) katmanlarına ayrılmıştır.
 *   **Repository/Service Pattern**: Veritabanı etkileşimleri için `lib/prisma.ts` üzerinden merkezi bir Prisma istemcisi kullanılması ve iş mantığının servis katmanlarında ayrıştırılması.
 *   **Wizard Form Pattern**: Karmaşık ve çok adımlı veri giriş süreçleri için kullanıcı deneyimini iyileştiren ve backend yükünü dağıtan bir yaklaşım. **Sulama kaydı oluşturma süreci bu kalıba uygun olarak yeniden yapılandırılmıştır.**
+*   **API Veri Dönüşümü (Data Transformation Layer)**: API rotaları, ön yüzden gelen veri yapılarını (genellikle form gönderimleri için optimize edilmiştir) veritabanı şemasının (Prisma) beklediği katı ve ilişkisel yapıya dönüştürmekten sorumludur. Bu, ön yüz mantığını basitleştirir ve arka uçta veri bütünlüğünü sağlar. `PUT /api/irrigation/[irrigationId]` endpoint'i bu kalıbın önemini gösteren iyi bir örnektir.
 
 ## 4. Bileşen İlişkileri
 *   **`app/`**: Ana uygulama rotalarını ve sayfalarını barındırır. `app/dashboard` gibi alt dizinler, belirli kullanıcı rolleri veya ana bölümler için düzenlenmiştir.
@@ -45,9 +46,7 @@ graph TD
 
 ## 5. Kritik Uygulama Yolları
 *   **Kimlik Doğrulama Akışı**: Kullanıcı girişi -> NextAuth.js ile kimlik doğrulama -> JWT oluşturma -> Oturum yönetimi.
-*   **Sulama Kaydı Oluşturma Akışı (Çok Adımlı Wizard)**:
-    1.  **Adım 0 (Temel Bilgiler)**: İstemci bileşeni (form) -> `POST /api/irrigation` (initiate) -> `IrrigationLog` taslağı oluşturulur, `irrigationLogId` döner.
-    2.  **Adım 1 (Tarla Bilgileri)**: İstemci bileşeni (form) -> `PUT /api/irrigation/{irrigationLogId}/details` (field details update) -> `IrrigationFieldUsage` kayıtları oluşturulur, tarlaların dekarsal bazda sulanma bilgileri işlenir.
-    3.  **Adım 2 (Envanter Kullanımları)**: İstemci bileşeni (form) -> `PUT /api/irrigation/{irrigationLogId}/details` (inventory update) -> `IrrigationInventoryUsage` ve `IrrigationInventoryOwnerUsage` kayıtları oluşturulur, envanter düşüşleri sahiplik oranlarına göre yapılır, yetersiz stok durumunda borçlar oluşturulur.
-    4.  **Adım 3 (Sonlandırma)**: İstemci bileşeni (form) -> `POST /api/irrigation/{irrigationLogId}/finalize` (finalize) -> `IrrigationOwnerSummary` kayıtları oluşturulur, genel maliyet dağıtımı gibi son işlemler tetiklenir (potansiyel olarak asenkron), `IrrigationLog` durumu `COMPLETED` olarak güncellenir.
+*   **Sulama Kaydı Oluşturma/Güncelleme Akışı**:
+    *   **A. Başlatma (Tüm Roller)**: Form -> `POST /api/irrigation` -> `IrrigationLog` kaydı `status: "DRAFT"` olarak oluşturulur, `irrigationLogId` döner.
+    *   **B. Güncelleme ve Tamamlama (Tüm Roller)**: Form -> `PUT /api/irrigation/{irrigationLogId}` -> Tüm sulama detayları (tarlalar, envanter, sahip süreleri vb.) ve `status: "COMPLETED"` tek bir istekte gönderilir. API, bu veriyi Prisma'nın beklediği atomik transaction yapısına dönüştürerek kaydı günceller ve tamamlar. Bu işlem, eski ilişkili kayıtları silip yenilerini oluşturmayı içerir ve `prisma.$transaction` ile veri bütünlüğü garanti altına alınır.
 *   **Raporlama Akışı**: Kullanıcı isteği (rapor türü) -> API rotası (GET /api/reports) -> Veritabanından veri çekme -> Veri işleme -> İstemciye rapor verisi gönderme.

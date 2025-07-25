@@ -193,7 +193,8 @@ export async function POST(
       return { id: irrigationId, status: "COMPLETED" };
     },
     {
-      timeout: 20000,
+      maxWait: 30000, // Optional: sets the max time to wait for a connection from the pool
+      timeout: 30000, // sets the max time the transaction can run
     });
 
     return NextResponse.json({ data: result });

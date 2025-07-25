@@ -19,11 +19,18 @@ Bu belge, Tarım Yönetim Sistemi projesinin mevcut durumunu, tamamlanan işleri
     *   İlişkili modeller arasında `onDelete: Cascade` kuralları doğru bir şekilde uygulandı (`prisma/schema.prisma`).
     *   `POST /api/irrigation` endpoint'i, dekarsal bazda sulama alanı, sahip bazında envanter düşüşleri ve yetersiz stok durumunda borç oluşturma mantığını içerecek şekilde tamamen yeniden yazıldı. İşlemler atomik olarak `prisma.$transaction` içinde gerçekleştirildi.
     *   Frontend'deki `components/irrigation/irrigation-form.tsx` bileşeni, `actualIrrigatedArea` girişi ve yeni backend mantığına uygun veri gönderme yeteneği ile güncellendi.
+*   **Worker Sulama Formu Hatası Giderimi**:
+    *   `worker-irrigation-form.tsx`'in kullandığı `PUT /api/irrigation/{id}` endpoint'indeki `ReferenceError: data is not defined` hatası giderildi.
+    *   Bu hata, `worker` tarafından oluşturulan sulama kayıtlarının `DRAFT` olarak kalmasına neden oluyordu. Değişkenin doğru tanımlanmasıyla `PUT` isteğinin başarıyla tamamlanması ve kaydın durumunun `COMPLETED` olarak güncellenmesi sağlandı.
+*   **Sulama Kaydı Güncelleme Hatası Çözümü**:
+    *   `PUT /api/irrigation/[irrigationId]` endpoint'inde, `IrrigationFieldUsage` oluşturulurken eksik alan (`ownershipPercentage`) nedeniyle oluşan `PrismaClientValidationError` hatası giderildi.
+    *   API'deki veri dönüştürme mantığı, ön yüzden gelen veriyi Prisma'nın beklediği doğru şemaya eşleyecek şekilde düzeltildi.
+    *   Bu düzeltme, hem güncelleme işleminin çökmesini engelledi hem de bu çökmenin neden olduğu, sulama listesinde tarla isimlerinin görünmemesi gibi veri bütünlüğü sorunlarını ortadan kaldırdı.
 
 ## 2. Kalan İşler
 *   **Modül Geliştirme**:
     *   Envanter Yönetimi: CRUD operasyonlarının tamamlanması, raporlama özellikleri.
-    *   Sulama Yönetimi: Sulama programı oluşturma, takibi, sensör entegrasyonu (gelecek aşama). **Sulama kayıtları için DELETE ve PUT API endpoint'lerinin geliştirilmesi.** Genel maliyetlerin (örn. elektrik) sahip bazında dağıtımı.
+    *   Sulama Yönetimi: Sulama programı oluşturma, takibi, sensör entegrasyonu (gelecek aşama). Genel maliyetlerin (örn. elektrik) sahip bazında dağıtımı.
     *   Süreç Yönetimi: Süreç tanımlama, görev atama, ilerleme takibi, süreç tamamlama.
     *   Finansal Takip: Gelir/gider, borç/alacak, faturalandırma modüllerinin geliştirilmesi.
     *   Kullanıcı Yönetimi: Rol tabanlı erişim kontrolünün detaylandırılması, kullanıcı profili yönetimi.
@@ -40,9 +47,11 @@ Proje, temel altyapı ve bazı ana modüllerin başlangıç seviyesinde gelişti
 ## 4. Bilinen Sorunlar
 *   Önceki `Process` kaydetme işlemindeki `504 Gateway Timeout` ve `P2034` (kilitlenme/çakışma) hataları, API'nin çok adımlı hale getirilmesi ve transaction optimizasyonları ile giderilmeye çalışılmıştır. Bu değişikliklerin Vercel ortamında stabil çalıştığı doğrulanmalıdır.
 *   Performans darboğazları, büyük veri setleri ile çalışmaya başlandığında veya eşzamanlı istekler arttığında hala ortaya çıkabilir. Asenkron kuyruk sistemleri gibi daha ileri optimizasyonlar gerekebilir.
+*   **Worker sulama kaydının taslak olarak kalması sorunu çözüldü.**
+*   **Sulama kaydı güncelleme hatası ve buna bağlı görüntüleme sorunu çözüldü.**
 
 ## 5. Proje Kararlarının Gelişimi
 *   Başlangıçta monolitik bir yapı tercih edildi, ancak gelecekte mikroservis mimarisine geçiş potansiyeli değerlendirilebilir.
-*   State yönetimi için başlangıçta React Context API yeterli görülse de, uygulamanın karmaşıklığı arttıkça Zustand gibi daha kapsamlı bir çözüm düşünülebilir.
+*   State yönetimi için başlangıçta React Context API yeterli görülse de, uygulamanın karmaşıklığı arttıkça Zustand gibi daha kapsamlı bir çözüm d��şünülebilir.
 *   Veri getirme stratejileri (SWR/React Query) henüz tam olarak belirlenmedi, ihtiyaçlara göre karar verilecektir.
 *   **Çok Adımlı Form ve API Yaklaşımı**: Karmaşık işlemler için çok adımlı form ve buna uygun parçalı API endpoint'leri kullanma kararı, hem kullanıcı deneyimini iyileştirmek hem de backend üzerindeki yükü azaltmak amacıyla alınmıştır. Bu yaklaşım, gelecekteki benzer karmaşık modüller için bir referans noktası olacaktır.
