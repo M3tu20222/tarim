@@ -50,9 +50,12 @@ model User {
   notificationPreferences NotificationPreference?
 
   // Yeni eklenen sulama ilişkileri
-  irrigationOwnerUsages IrrigationOwnerUsage[]
+  irrigationOwnerUsages          IrrigationOwnerUsage[]
   irrigationInventoryOwnerUsages IrrigationInventoryOwnerUsage[]
-  irrigationOwnerSummaries IrrigationOwnerSummary[] // Yeni ilişki eklendi
+  irrigationOwnerSummaries       IrrigationOwnerSummary[] // Yeni ilişki eklendi
+
+  // YENİ: Kuyu faturası dağıtımları (karşı ilişki)
+  wellBillDistributions WellBillDistribution[]
 }
 
 // YENİ: Sezon Modeli
@@ -122,6 +125,9 @@ model Field {
 
   // Yeni eklenen sulama ilişkileri
   irrigationFieldUsages IrrigationFieldUsage[]
+
+  // YENİ: Kuyu faturası dağıtımları (karşı ilişki)
+  wellBillDistributions WellBillDistribution[]
 }
 
 // Tarla Sahipliği Modeli
@@ -205,9 +211,9 @@ model Well {
   notifications Notification[] @relation("WellNotifications")
 
   // Yeni eklenen sulama ilişkileri
-  irrigationLogs IrrigationLog[]
+  irrigationLogs     IrrigationLog[]
   wellBillingPeriods WellBillingPeriod[]
-  workerAssignments WorkerWellAssignment[] // Kuyuya atanan işçiler
+  workerAssignments  WorkerWellAssignment[] // Kuyuya atanan işçiler
 }
 
 // Ürün modeli
@@ -284,7 +290,7 @@ model Inventory {
   category      InventoryCategory
   totalQuantity Float
   unit          Unit              @default(KG) // String yerine Unit enum kullanacağız
-  totalStock    Float?            @default(0)  // Yeni eklenen toplam stok alanı
+  totalStock    Float?            @default(0) // Yeni eklenen toplam stok alanı
   purchaseDate  DateTime?
   expiryDate    DateTime?
   status        InventoryStatus   @default(AVAILABLE)
@@ -319,23 +325,23 @@ model InventoryOwnership {
 
 // Alış Modeli
 model Purchase {
-  id                String          @id @default(auto()) @map("_id") @db.ObjectId
-  product           String
-  category          ProductCategory @default(FERTILIZER) // YENİ: Ürün kategorisi
-  quantity          Float
-  unit              Unit            @default(KG) // Birim alanını ekleyelim
-  unitPrice         Float
-  totalCost         Float
-  paymentMethod     PaymentMethod
+  id                     String          @id @default(auto()) @map("_id") @db.ObjectId
+  product                String
+  category               ProductCategory @default(FERTILIZER) // YENİ: Ürün kategorisi
+  quantity               Float
+  unit                   Unit            @default(KG) // Birim alanını ekleyelim
+  unitPrice              Float
+  totalCost              Float
+  paymentMethod          PaymentMethod
   creditorPaymentDueDate DateTime? // YENİ: Alacaklının son ödeme tarihi
-  dueDate           DateTime? // Ödeme vadesi (ör: 3 ay sonra)
-  description       String?
-  createdAt         DateTime        @default(now())
-  isTemplate        Boolean         @default(false) // YENİ: Şablon mu?
-  templateName      String? // YENİ: Şablon adı
-  approvalStatus    ApprovalStatus  @default(PENDING) // YENİ: Onay durumu
-  approvalRequired  Boolean         @default(true) // YENİ: Onay gerekli mi?
-  approvalThreshold Float           @default(1000) // YENİ: Onay eşiği (TL)
+  dueDate                DateTime? // Ödeme vadesi (ör: 3 ay sonra)
+  description            String?
+  createdAt              DateTime        @default(now())
+  isTemplate             Boolean         @default(false) // YENİ: Şablon mu?
+  templateName           String? // YENİ: Şablon adı
+  approvalStatus         ApprovalStatus  @default(PENDING) // YENİ: Onay durumu
+  approvalRequired       Boolean         @default(true) // YENİ: Onay gerekli mi?
+  approvalThreshold      Float           @default(1000) // YENİ: Onay eşiği (TL)
 
   // YENİ: Sezon ilişkisi
   season   Season? @relation(fields: [seasonId], references: [id])
@@ -404,14 +410,14 @@ model PaymentHistory {
   createdAt     DateTime      @default(now())
 
   // İlişkiler
-  debt          Debt?               @relation(fields: [debtId], references: [id])
-  debtId        String?             @db.ObjectId
+  debt          Debt?                @relation(fields: [debtId], references: [id])
+  debtId        String?              @db.ObjectId
   contributor   PurchaseContributor? @relation(fields: [contributorId], references: [id]) // İlişkiyi de isteğe bağlı yapalım
-  contributorId String?             @db.ObjectId // Zorunlu alanı isteğe bağlı yapalım (?)
-  payer         User                @relation("PaymentsMade", fields: [payerId], references: [id])
-  payerId       String              @db.ObjectId
-  receiver      User                @relation("PaymentsReceived", fields: [receiverId], references: [id])
-  receiverId    String              @db.ObjectId
+  contributorId String?              @db.ObjectId // Zorunlu alanı isteğe bağlı yapalım (?)
+  payer         User                 @relation("PaymentsMade", fields: [payerId], references: [id])
+  payerId       String               @db.ObjectId
+  receiver      User                 @relation("PaymentsReceived", fields: [receiverId], references: [id])
+  receiverId    String               @db.ObjectId
 
   // YENİ: Bildirimler
   notifications Notification[] @relation("PaymentNotifications")
@@ -548,18 +554,18 @@ model Process {
 
 // Bildirimler - Güncellendi
 model Notification {
-  id          String             @id @default(auto()) @map("_id") @db.ObjectId
+  id          String               @id @default(auto()) @map("_id") @db.ObjectId
   title       String
   message     String
   type        NotificationType
   priority    NotificationPriority @default(NORMAL) // YENİ: Bildirim önceliği
-  isRead      Boolean            @default(false)
-  isArchived  Boolean            @default(false) // YENİ: Arşivlenmiş mi?
-  link        String?            // YENİ: Bildirime tıklandığında yönlendirilecek URL
-  expiresAt   DateTime?          // YENİ: Bildirim geçerlilik süresi
-  targetRoles Role[]             // YENİ: Hedef roller
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  isRead      Boolean              @default(false)
+  isArchived  Boolean              @default(false) // YENİ: Arşivlenmiş mi?
+  link        String? // YENİ: Bildirime tıklandığında yönlendirilecek URL
+  expiresAt   DateTime? // YENİ: Bildirim geçerlilik süresi
+  targetRoles Role[] // YENİ: Hedef roller
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 
   // İlişkiler
   receiver   User    @relation("NotificationsReceived", fields: [receiverId], references: [id])
@@ -572,55 +578,55 @@ model Notification {
   processId String?  @db.ObjectId
 
   // YENİ: Diğer ilişkiler
-  debt                Debt?                @relation("DebtNotifications", fields: [debtId], references: [id])
-  debtId              String?              @db.ObjectId
-  purchase            Purchase?            @relation("PurchaseNotifications", fields: [purchaseId], references: [id])
-  purchaseId          String?              @db.ObjectId
-  inventory           Inventory?           @relation("InventoryNotifications", fields: [inventoryId], references: [id])
-  inventoryId         String?              @db.ObjectId
-  irrigation          IrrigationLog?       @relation("IrrigationNotifications", fields: [irrigationId], references: [id])
-  irrigationId        String?              @db.ObjectId
-  field               Field?               @relation("FieldNotifications", fields: [fieldId], references: [id])
-  fieldId             String?              @db.ObjectId
-  season              Season?              @relation("SeasonNotifications", fields: [seasonId], references: [id])
-  seasonId            String?              @db.ObjectId
-  crop                Crop?                @relation("CropNotifications", fields: [cropId], references: [id])
-  cropId              String?              @db.ObjectId
-  well                Well?                @relation("WellNotifications", fields: [wellId], references: [id])
-  wellId              String?              @db.ObjectId
-  processingLog       ProcessingLog?       @relation("ProcessingLogNotifications", fields: [processingLogId], references: [id])
-  processingLogId     String?              @db.ObjectId
-  invoice             Invoice?             @relation("InvoiceNotifications", fields: [invoiceId], references: [id])
-  invoiceId           String?              @db.ObjectId
-  inventoryUsage      InventoryUsage?      @relation("UsageNotifications", fields: [inventoryUsageId], references: [id])
-  inventoryUsageId    String?              @db.ObjectId
-  transaction         InventoryTransaction? @relation("TransactionNotifications", fields: [transactionId], references: [id])
-  transactionId       String?              @db.ObjectId
-  payment             PaymentHistory?      @relation("PaymentNotifications", fields: [paymentId], references: [id])
-  paymentId           String?              @db.ObjectId
-  contributor         PurchaseContributor? @relation("ContributorNotifications", fields: [contributorId], references: [id])
-  contributorId       String?              @db.ObjectId
-  approval            PurchaseApproval?    @relation("ApprovalNotifications", fields: [approvalId], references: [id])
-  approvalId          String?              @db.ObjectId
+  debt             Debt?                 @relation("DebtNotifications", fields: [debtId], references: [id])
+  debtId           String?               @db.ObjectId
+  purchase         Purchase?             @relation("PurchaseNotifications", fields: [purchaseId], references: [id])
+  purchaseId       String?               @db.ObjectId
+  inventory        Inventory?            @relation("InventoryNotifications", fields: [inventoryId], references: [id])
+  inventoryId      String?               @db.ObjectId
+  irrigation       IrrigationLog?        @relation("IrrigationNotifications", fields: [irrigationId], references: [id])
+  irrigationId     String?               @db.ObjectId
+  field            Field?                @relation("FieldNotifications", fields: [fieldId], references: [id])
+  fieldId          String?               @db.ObjectId
+  season           Season?               @relation("SeasonNotifications", fields: [seasonId], references: [id])
+  seasonId         String?               @db.ObjectId
+  crop             Crop?                 @relation("CropNotifications", fields: [cropId], references: [id])
+  cropId           String?               @db.ObjectId
+  well             Well?                 @relation("WellNotifications", fields: [wellId], references: [id])
+  wellId           String?               @db.ObjectId
+  processingLog    ProcessingLog?        @relation("ProcessingLogNotifications", fields: [processingLogId], references: [id])
+  processingLogId  String?               @db.ObjectId
+  invoice          Invoice?              @relation("InvoiceNotifications", fields: [invoiceId], references: [id])
+  invoiceId        String?               @db.ObjectId
+  inventoryUsage   InventoryUsage?       @relation("UsageNotifications", fields: [inventoryUsageId], references: [id])
+  inventoryUsageId String?               @db.ObjectId
+  transaction      InventoryTransaction? @relation("TransactionNotifications", fields: [transactionId], references: [id])
+  transactionId    String?               @db.ObjectId
+  payment          PaymentHistory?       @relation("PaymentNotifications", fields: [paymentId], references: [id])
+  paymentId        String?               @db.ObjectId
+  contributor      PurchaseContributor?  @relation("ContributorNotifications", fields: [contributorId], references: [id])
+  contributorId    String?               @db.ObjectId
+  approval         PurchaseApproval?     @relation("ApprovalNotifications", fields: [approvalId], references: [id])
+  approvalId       String?               @db.ObjectId
 
   // Eksik ilişkiler eklendi
-  equipment           Equipment?           @relation("EquipmentNotifications", fields: [equipmentId], references: [id])
-  equipmentId         String?              @db.ObjectId
-  equipmentUsage      EquipmentUsage?      @relation("EquipmentUsageNotifications", fields: [equipmentUsageId], references: [id])
-  equipmentUsageId    String?              @db.ObjectId
-  processCost         ProcessCost?         @relation("ProcessCostNotifications", fields: [processCostId], references: [id])
-  processCostId       String?              @db.ObjectId
-  fieldExpense        FieldExpense?        @relation("ExpenseNotifications", fields: [fieldExpenseId], references: [id])
-  fieldExpenseId      String?              @db.ObjectId
-  ownerExpense        FieldOwnerExpense?   @relation("OwnerExpenseNotifications", fields: [ownerExpenseId], references: [id])
-  ownerExpenseId      String?              @db.ObjectId
+  equipment        Equipment?         @relation("EquipmentNotifications", fields: [equipmentId], references: [id])
+  equipmentId      String?            @db.ObjectId
+  equipmentUsage   EquipmentUsage?    @relation("EquipmentUsageNotifications", fields: [equipmentUsageId], references: [id])
+  equipmentUsageId String?            @db.ObjectId
+  processCost      ProcessCost?       @relation("ProcessCostNotifications", fields: [processCostId], references: [id])
+  processCostId    String?            @db.ObjectId
+  fieldExpense     FieldExpense?      @relation("ExpenseNotifications", fields: [fieldExpenseId], references: [id])
+  fieldExpenseId   String?            @db.ObjectId
+  ownerExpense     FieldOwnerExpense? @relation("OwnerExpenseNotifications", fields: [ownerExpenseId], references: [id])
+  ownerExpenseId   String?            @db.ObjectId
 }
 
 // YENİ: Bildirim Tercihleri Modeli
 model NotificationPreference {
   id                      String   @id @default(auto()) @map("_id") @db.ObjectId
   user                    User     @relation(fields: [userId], references: [id])
-  userId                  String   @db.ObjectId @unique
+  userId                  String   @unique @db.ObjectId
   emailNotifications      Boolean  @default(true)
   pushNotifications       Boolean  @default(true)
   inAppNotifications      Boolean  @default(true)
@@ -770,125 +776,149 @@ model FieldOwnerExpense {
 
 // Sulama Kaydı Modeli
 model IrrigationLog {
-  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
   startDateTime DateTime
-  duration      Float       // Dakika cinsinden
-  wellId        String      @db.ObjectId
-  well          Well        @relation(fields: [wellId], references: [id])
+  duration      Float // Dakika cinsinden
+  wellId        String   @db.ObjectId
+  well          Well     @relation(fields: [wellId], references: [id])
   notes         String?
-  status        String      @default("COMPLETED") // PLANNED, COMPLETED, CANCELLED
-  createdBy     String      @db.ObjectId
-  user          User        @relation(fields: [createdBy], references: [id])
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  seasonId      String?     @db.ObjectId
-  season        Season?     @relation(fields: [seasonId], references: [id])
+  status        String   @default("COMPLETED") // PLANNED, COMPLETED, CANCELLED
+  createdBy     String   @db.ObjectId
+  user          User     @relation(fields: [createdBy], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  seasonId      String?  @db.ObjectId
+  season        Season?  @relation(fields: [seasonId], references: [id])
 
   // İlişkiler
-  fieldUsages   IrrigationFieldUsage[]
+  fieldUsages     IrrigationFieldUsage[]
   inventoryUsages IrrigationInventoryUsage[]
-  billingUsages WellBillingIrrigationUsage[]
-  ownerSummaries IrrigationOwnerSummary[] // Yeni ilişki eklendi
-  notifications Notification[] @relation("IrrigationNotifications")
+  billingUsages   WellBillingIrrigationUsage[]
+  ownerSummaries  IrrigationOwnerSummary[] // Yeni ilişki eklendi
+  notifications   Notification[]               @relation("IrrigationNotifications")
 }
 
 // Sulama Tarla Kullanımı Modeli
 model IrrigationFieldUsage {
-  id              String      @id @default(auto()) @map("_id") @db.ObjectId
-  irrigationLogId String      @db.ObjectId
-  irrigationLog   IrrigationLog @relation(fields: [irrigationLogId], references: [id], onDelete: Cascade)
-  fieldId         String      @db.ObjectId
-  field           Field       @relation(fields: [fieldId], references: [id])
-  percentage      Float       // Sulama yüzdesi
-  actualIrrigatedArea Float?  // Gerçek sulanan alan (dekar)
-  createdAt       DateTime    @default(now())
+  id                  String        @id @default(auto()) @map("_id") @db.ObjectId
+  irrigationLogId     String        @db.ObjectId
+  irrigationLog       IrrigationLog @relation(fields: [irrigationLogId], references: [id], onDelete: Cascade)
+  fieldId             String        @db.ObjectId
+  field               Field         @relation(fields: [fieldId], references: [id])
+  percentage          Float // Sulama yüzdesi
+  actualIrrigatedArea Float? // Gerçek sulanan alan (dekar)
+  createdAt           DateTime      @default(now())
 
   // İlişkiler
-  ownerUsages     IrrigationOwnerUsage[]
+  ownerUsages IrrigationOwnerUsage[]
 }
 
 // Sulama Sahip Kullanımı Modeli
 model IrrigationOwnerUsage {
-  id                    String      @id @default(auto()) @map("_id") @db.ObjectId
-  irrigationFieldUsageId String      @db.ObjectId
-  irrigationFieldUsage  IrrigationFieldUsage @relation(fields: [irrigationFieldUsageId], references: [id])
-  ownerId               String      @db.ObjectId
-  owner                 User        @relation(fields: [ownerId], references: [id])
-  ownershipPercentage   Float       // Sahiplik yüzdesi
-  usagePercentage       Float       // Kullanım yüzdesi
-  createdAt             DateTime    @default(now())
+  id                     String               @id @default(auto()) @map("_id") @db.ObjectId
+  irrigationFieldUsageId String               @db.ObjectId
+  irrigationFieldUsage   IrrigationFieldUsage @relation(fields: [irrigationFieldUsageId], references: [id])
+  ownerId                String               @db.ObjectId
+  owner                  User                 @relation(fields: [ownerId], references: [id])
+  ownershipPercentage    Float // Sahiplik yüzdesi
+  usagePercentage        Float // Kullanım yüzdesi
+  createdAt              DateTime             @default(now())
 }
 
 // YENİ: Sulama Sahip Özeti Modeli
 model IrrigationOwnerSummary {
-  id                      String        @id @default(auto()) @map("_id") @db.ObjectId
-  irrigationLogId         String        @db.ObjectId
-  irrigationLog           IrrigationLog @relation(fields: [irrigationLogId], references: [id], onDelete: Cascade)
-  ownerId                 String        @db.ObjectId
-  owner                   User          @relation(fields: [ownerId], references: [id])
-  totalIrrigatedArea      Float         // Bu sahip için bu sulamada toplam sulanan alan (dekar)
-  totalAllocatedDuration  Float         // Bu sahip için bu sulamada ayrılan toplam süre (dakika)
-  createdAt               DateTime      @default(now())
+  id                     String        @id @default(auto()) @map("_id") @db.ObjectId
+  irrigationLogId        String        @db.ObjectId
+  irrigationLog          IrrigationLog @relation(fields: [irrigationLogId], references: [id], onDelete: Cascade)
+  ownerId                String        @db.ObjectId
+  owner                  User          @relation(fields: [ownerId], references: [id])
+  totalIrrigatedArea     Float // Bu sahip için bu sulamada toplam sulanan alan (dekar)
+  totalAllocatedDuration Float // Bu sahip için bu sulamada ayrılan toplam süre (dakika)
+  createdAt              DateTime      @default(now())
 
   @@unique([irrigationLogId, ownerId]) // Bir sulama kaydında her sahip için tek özet olmalı
 }
 
 // Sulama Envanter Kullanımı Modeli
 model IrrigationInventoryUsage {
-  id              String      @id @default(auto()) @map("_id") @db.ObjectId
-  irrigationLogId String      @db.ObjectId
+  id              String        @id @default(auto()) @map("_id") @db.ObjectId
+  irrigationLogId String        @db.ObjectId
   irrigationLog   IrrigationLog @relation(fields: [irrigationLogId], references: [id], onDelete: Cascade)
-  inventoryId     String      @db.ObjectId
-  inventory       Inventory   @relation(fields: [inventoryId], references: [id])
-  quantity        Float       // Miktar
-  unitPrice       Float       // Birim fiyat
-  totalCost       Float       // Toplam maliyet
-  createdAt       DateTime    @default(now())
+  inventoryId     String        @db.ObjectId
+  inventory       Inventory     @relation(fields: [inventoryId], references: [id])
+  quantity        Float // Miktar
+  unitPrice       Float // Birim fiyat
+  totalCost       Float // Toplam maliyet
+  createdAt       DateTime      @default(now())
 
   // İlişkiler
-  ownerUsages     IrrigationInventoryOwnerUsage[]
+  ownerUsages IrrigationInventoryOwnerUsage[]
 }
 
 // Sulama Envanter Sahip Kullanımı Modeli
 model IrrigationInventoryOwnerUsage {
-  id                        String      @id @default(auto()) @map("_id") @db.ObjectId
-  irrigationInventoryUsageId String      @db.ObjectId
-  irrigationInventoryUsage  IrrigationInventoryUsage @relation(fields: [irrigationInventoryUsageId], references: [id])
-  ownerId                   String      @db.ObjectId
-  owner                     User        @relation(fields: [ownerId], references: [id])
-  percentage                Float       // Kullanım yüzdesi
-  quantity                  Float       // Miktar
-  cost                      Float       // Maliyet
-  createdAt                 DateTime    @default(now())
+  id                         String                   @id @default(auto()) @map("_id") @db.ObjectId
+  irrigationInventoryUsageId String                   @db.ObjectId
+  irrigationInventoryUsage   IrrigationInventoryUsage @relation(fields: [irrigationInventoryUsageId], references: [id])
+  ownerId                    String                   @db.ObjectId
+  owner                      User                     @relation(fields: [ownerId], references: [id])
+  percentage                 Float // Kullanım yüzdesi
+  quantity                   Float // Miktar
+  cost                       Float // Maliyet
+  createdAt                  DateTime                 @default(now())
 }
 
 // Kuyu Fatura Dönemi Modeli
 model WellBillingPeriod {
-  id            String      @id @default(auto()) @map("_id") @db.ObjectId
-  wellId        String      @db.ObjectId
-  well          Well        @relation(fields: [wellId], references: [id])
-  startDate     DateTime
-  endDate       DateTime
-  totalAmount   Float       // Toplam fatura tutarı
-  totalUsage    Float?      // Toplam kullanım (kWh)
-  status        String      @default("PENDING") // PENDING, PAID
-  createdAt     DateTime    @default(now())
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  wellId      String   @db.ObjectId
+  well        Well     @relation(fields: [wellId], references: [id])
+  startDate   DateTime
+  endDate     DateTime
+  totalAmount Float // Toplam fatura tutarı
+  totalUsage  Float? // Toplam kullanım (kWh)
+  status      String   @default("PENDING") // PENDING, DISTRIBUTED, PAID
+  createdAt   DateTime @default(now())
 
   // İlişkiler
   irrigationUsages WellBillingIrrigationUsage[]
+  distributions    WellBillDistribution[]
 }
 
 // Kuyu Fatura Sulama Kullanımı Modeli
 model WellBillingIrrigationUsage {
-  id                  String      @id @default(auto()) @map("_id") @db.ObjectId
-  wellBillingPeriodId String      @db.ObjectId
+  id                  String            @id @default(auto()) @map("_id") @db.ObjectId
+  wellBillingPeriodId String            @db.ObjectId
   wellBillingPeriod   WellBillingPeriod @relation(fields: [wellBillingPeriodId], references: [id])
-  irrigationLogId     String      @db.ObjectId
-  irrigationLog       IrrigationLog @relation(fields: [irrigationLogId], references: [id], onDelete: Cascade)
-  duration            Float       // Süre
-  percentage          Float       // Fatura dönemindeki yüzdesi
-  amount              Float       // Tutar
-  createdAt           DateTime    @default(now())
+  irrigationLogId     String            @db.ObjectId
+  irrigationLog       IrrigationLog     @relation(fields: [irrigationLogId], references: [id], onDelete: Cascade)
+  duration            Float // Süre
+  percentage          Float // Fatura dönemindeki yüzdesi
+  amount              Float // Tutar
+  createdAt           DateTime          @default(now())
+
+  @@index([wellBillingPeriodId])
+  @@index([irrigationLogId])
+}
+
+model WellBillDistribution {
+  id                  String            @id @default(auto()) @map("_id") @db.ObjectId
+  wellBillingPeriodId String            @db.ObjectId
+  wellBillingPeriod   WellBillingPeriod @relation(fields: [wellBillingPeriodId], references: [id])
+  fieldId             String            @db.ObjectId
+  field               Field             @relation(fields: [fieldId], references: [id])
+  ownerId             String            @db.ObjectId
+  owner               User              @relation(fields: [ownerId], references: [id])
+  basisDuration       Float // Dakika bazlı temel
+  basisArea           Float? // Opsiyonel - alan bazlı kullanılırsa
+  basisWeight         Float // Hesaplamada kullanılan normalize ağırlık (örn: duration ya da area)
+  sharePercentage     Float // Bu owner’ın toplamdan aldığı yüzde
+  amount              Float // TL tutar
+  createdAt           DateTime          @default(now())
+
+  @@index([wellBillingPeriodId, ownerId])
+  @@index([fieldId])
+  @@index([ownerId])
 }
 
 // --------------------------------------------------

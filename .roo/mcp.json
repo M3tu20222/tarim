@@ -1,0 +1,10 @@
+{
+  "mcp.servers": {
+    "tarim_mcp": {
+      "command": "python",
+      "args": ["E:/Web_site/mart/tarim-yonetim-sistemi/mcp-servers/my-custom-mcp/server.py"],
+      "type": "stdio",
+      "timeout": 60
+    }
+  }
+}

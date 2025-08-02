@@ -59,14 +59,22 @@ export async function PUT(
       );
     }
 
-    // Ortaklık Yüzdesi Doğrulaması
+    // Ortaklık Yüzdesi Doğrulaması (GÜNCELLENMİŞ)
     const totalPercentage = partners.reduce(
       (sum: number, partner: any) => sum + (Number(partner.sharePercentage) || 0),
       0
     );
-    if (Math.abs(totalPercentage - 100) > 0.01) {
+
+    // Toplamı en yakın iki ondalık basamağa yuvarla
+    const roundedTotal = Math.round(totalPercentage * 100) / 100;
+
+    // Kontrolü yuvarlanmış değere göre yap ve toleransı artır
+    if (Math.abs(roundedTotal - 100) > 0.02) { // 99.98 ve 100.02 gibi değerler artık kabul edilecek
+      console.error(
+        `Validation Error: Total percentage (${roundedTotal}) is not 100%. Original: ${totalPercentage}`
+      );
       return NextResponse.json(
-        { error: "Ortaklık yüzdelerinin toplamı %100 olmalıdır." },
+        { error: `Ortaklık yüzdelerinin toplamı (${roundedTotal}) %100 olmalıdır.` },
         { status: 400 }
       );
     }
@@ -134,22 +142,44 @@ export async function PUT(
         },
       });
 
-      // 4. Yeni Katılımcıları Oluştur
+      // 4. Yeni Katılımcıları Oluştur (GÜNCELLENMİŞ)
+
+      const calculatedContributions: { userId: string; contribution: number }[] = [];
+      let totalCalculatedCost = 0;
+
+      // Önce tüm payları hesapla
+      for (const partner of partners) {
+          const contribution = Number((totalCost * (partner.sharePercentage / 100)).toFixed(2));
+          calculatedContributions.push({ userId: partner.userId, contribution });
+          totalCalculatedCost += contribution;
+      }
+
+      // "Kayıp kuruş" farkını bul
+      const roundingDifference = Number((totalCost - totalCalculatedCost).toFixed(2));
+
+      // Fark varsa, ilk katılımcının payına ekle
+      if (roundingDifference !== 0 && calculatedContributions.length > 0) {
+          console.log(`Fark bulundu: ${roundingDifference}. İlk katılımcıya ekleniyor.`);
+          calculatedContributions[0].contribution += roundingDifference;
+      }
+
       const contributorPromises = partners.map((partner: any) => {
-        const contribution = totalCost * (partner.sharePercentage / 100);
-        return tx.purchaseContributor.create({
-          data: {
-            purchaseId: updatedPurchase.id,
-            userId: partner.userId,
-            sharePercentage: partner.sharePercentage,
-            contribution: contribution,
-            expectedContribution: contribution,
-            hasPaid: partner.hasPaid ?? false,
-            paymentDate: partner.hasPaid ? new Date() : undefined,
-            isCreditor: partner.isCreditor ?? false,
-            remainingAmount: partner.hasPaid ? 0 : contribution,
-          },
-        });
+          // Önceden hesaplanmış ve düzeltilmiş payı bul
+          const finalContribution = calculatedContributions.find(c => c.userId === partner.userId)!.contribution;
+          
+          return tx.purchaseContributor.create({
+            data: {
+              purchaseId: updatedPurchase.id,
+              userId: partner.userId,
+              sharePercentage: partner.sharePercentage,
+              contribution: finalContribution, // Düzeltilmiş katkı payı
+              expectedContribution: finalContribution,
+              hasPaid: partner.hasPaid ?? false,
+              paymentDate: partner.hasPaid ? new Date() : undefined,
+              isCreditor: partner.isCreditor ?? false,
+              remainingAmount: partner.hasPaid ? 0 : finalContribution,
+            },
+          });
       });
       const createdContributors = await Promise.all(contributorPromises);
       console.log(`Purchase ${updatedPurchase.id} update: Created ${createdContributors.length} new contributors.`);

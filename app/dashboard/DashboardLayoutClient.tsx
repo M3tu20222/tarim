@@ -5,7 +5,6 @@ import type React from "react";
 import { Inter } from "next/font/google";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { MobileNav } from "@/components/mobile-nav";
 import { useMobile } from "@/hooks/use-mobile";
 import { AuthProvider } from "@/components/auth-provider";
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar"; // SidebarTrigger ve useSidebar import et
@@ -32,7 +31,6 @@ export default function DashboardLayoutClient({
           {/* Masaüstünde sidebar kapalıyken görünür olacak hamburger menü düğmesi */}
           {!isMobile && <DesktopSidebarToggle />}
           <div className="flex min-h-screen flex-col">
-            <MobileNav />
             <main className="flex-1">{children}</main>
           </div>
         </SidebarProvider>

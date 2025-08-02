@@ -1,0 +1,8 @@
+{
+  "mcp.servers": {
+    "tarim_mcp": {
+      "command": "python",
+      "args": ["${workspaceFolder}/mcp_server.py"]
+    }
+  }
+}

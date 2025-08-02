@@ -386,9 +386,6 @@ export function NewPurchaseForm() {
                       mode="single"
                       selected={field.value}
                       onSelect={field.onChange}
-                      disabled={(date) =>
-                        date > new Date() || date < new Date("1900-01-01")
-                      }
                       initialFocus
                     />
                   </PopoverContent>
@@ -747,30 +744,30 @@ export function NewPurchaseForm() {
                           <FormLabel>Vade Tarihi</FormLabel>
                           <Popover>
                             <PopoverTrigger asChild>
-                              <Button
-                                variant={"outline"}
-                                className={`w-full pl-3 text-left font-normal ${
-                                  !field.value ? "text-muted-foreground" : ""
-                                }`}
-                              >
-                                {field.value ? (
-                                  format(field.value, "PPP", { locale: tr }) // locale={tr} geri eklendi
-                                ) : (
-                                  <span>Tarih seçin</span>
-                                )}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                              </Button>
+                              <FormControl>
+                                <Button
+                                  variant={"outline"}
+                                  className={`w-full pl-3 text-left font-normal ${
+                                    !field.value ? "text-muted-foreground" : ""
+                                  }`}
+                                >
+                                  {field.value ? (
+                                    format(field.value, "PPP", { locale: tr }) 
+                                  ) : (
+                                    <span>Tarih seçin</span>
+                                  )}
+                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                </Button>
+                              </FormControl>
                             </PopoverTrigger>
                             <PopoverContent className="w-auto p-0">
-                              <Calendar
-                                mode="single"
-                                // selected={field.value} // selected prop'u geçici olarak kaldırıldı
-                                onSelect={field.onChange}
-                                disabled={(date) =>
-                                  date < startOfDay(new Date())
-                                }
-                              />
-                            </PopoverContent>
+                            <Calendar
+                              mode="single"
+                              selected={field.value}
+                              onSelect={field.onChange}
+                              initialFocus
+                            />
+                          </PopoverContent>
                           </Popover>
                           <FormMessage />
                         </FormItem>

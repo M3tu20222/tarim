@@ -66,6 +66,7 @@ export function MainSidebar() {
             <Link
               key={link.href}
               href={link.href}
+              onClick={() => isMobile && setIsOpen(false)}
               className={cn(
                 "flex items-center px-3 py-2 text-sm rounded-md transition-colors",
                 isActive

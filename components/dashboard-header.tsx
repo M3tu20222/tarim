@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { MobileNav } from "@/components/mobile-nav"
 import { BellIcon, MoonIcon, SunIcon, SearchIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -32,7 +32,7 @@ export function DashboardHeader({ title }: DashboardHeaderProps) {
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-purple-500/30 bg-background/80 px-4 backdrop-blur-sm">
       <div className="flex flex-1 items-center gap-2">
-        <SidebarTrigger />
+        <MobileNav />
         <h1 className="text-xl font-bold neon-text-purple">{getHeaderTitle()}</h1>
       </div>
 
@@ -82,4 +82,3 @@ export function DashboardHeader({ title }: DashboardHeaderProps) {
     </header>
   )
 }
-
