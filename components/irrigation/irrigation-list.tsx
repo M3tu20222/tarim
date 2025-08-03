@@ -5,7 +5,15 @@ import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
-import { Edit, Trash2, Eye, Filter, Calendar, Clock, StickyNote } from "lucide-react";
+import {
+  Edit,
+  Trash2,
+  Eye,
+  Filter,
+  Calendar,
+  Clock,
+  StickyNote,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -49,7 +57,12 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // API'den gelen veri tipleri
 interface IrrigationOwnerUsage {
@@ -88,7 +101,10 @@ interface ApiResponse {
 }
 
 // Veri çekme fonksiyonu
-const fetchIrrigationLogs = async (filters: any, page: number): Promise<ApiResponse> => {
+const fetchIrrigationLogs = async (
+  filters: any,
+  page: number
+): Promise<ApiResponse> => {
   const params = new URLSearchParams();
   params.append("page", page.toString());
   params.append("limit", "10");
@@ -97,7 +113,8 @@ const fetchIrrigationLogs = async (filters: any, page: number): Promise<ApiRespo
   if (filters.fieldId) params.append("fieldId", filters.fieldId);
   if (filters.seasonId) params.append("seasonId", filters.seasonId);
   if (filters.status) params.append("status", filters.status);
-  if (filters.startDate) params.append("startDate", filters.startDate.toISOString());
+  if (filters.startDate)
+    params.append("startDate", filters.startDate.toISOString());
   if (filters.endDate) params.append("endDate", filters.endDate.toISOString());
   if (filters.createdBy) params.append("createdBy", filters.createdBy);
 
@@ -128,44 +145,88 @@ export function IrrigationList() {
   const [viewItem, setViewItem] = useState<IrrigationLog | null>(null);
 
   // Veri sorguları
-  const { data: wellsData = [] } = useQuery({ queryKey: ['wells'], queryFn: () => fetch('/api/wells').then(res => res.json()).then(data => data.data || []) });
-  const { data: fieldsData = [] } = useQuery({ queryKey: ['fields'], queryFn: () => fetch('/api/fields').then(res => res.json()).then(data => data.data || []) });
-  const { data: seasonsData = [] } = useQuery({ queryKey: ['seasons'], queryFn: () => fetch('/api/seasons').then(res => res.json()).then(data => data.data || []) });
-  const { data: workersData = [] } = useQuery({ queryKey: ['workers'], queryFn: () => fetch('/api/users?role=WORKER').then(res => res.json()).then(data => data.data || []) });
+  const { data: wellsData = [] } = useQuery({
+    queryKey: ["wells"],
+    queryFn: () =>
+      fetch("/api/wells")
+        .then((res) => res.json())
+        .then((data) => data.data || []),
+  });
+  const { data: fieldsData = [] } = useQuery({
+    queryKey: ["fields"],
+    queryFn: () =>
+      fetch("/api/fields")
+        .then((res) => res.json())
+        .then((data) => data.data || []),
+  });
+  const { data: seasonsData = [] } = useQuery({
+    queryKey: ["seasons"],
+    queryFn: () =>
+      fetch("/api/seasons")
+        .then((res) => res.json())
+        .then((data) => data.data || []),
+  });
+  const { data: workersData = [] } = useQuery({
+    queryKey: ["workers"],
+    queryFn: () =>
+      fetch("/api/users?role=WORKER")
+        .then((res) => res.json())
+        .then((data) => data.data || []),
+  });
 
   const { data, isLoading, isError, error } = useQuery<ApiResponse, Error>({
-    queryKey: ['irrigationLogs', filters, page],
+    queryKey: ["irrigationLogs", filters, page],
     queryFn: () => fetchIrrigationLogs(filters, page),
     placeholderData: (previousData) => previousData,
   });
 
   // Silme işlemi
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => fetch(`/api/irrigation/${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) =>
+      fetch(`/api/irrigation/${id}`, { method: "DELETE" }),
     onSuccess: () => {
-      toast({ title: "Başarılı", description: "Sulama kaydı başarıyla silindi." });
-      queryClient.invalidateQueries({ queryKey: ['irrigationLogs'] });
+      toast({
+        title: "Başarılı",
+        description: "Sulama kaydı başarıyla silindi.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["irrigationLogs"] });
     },
     onError: () => {
-      toast({ title: "Hata", description: "Sulama kaydı silinirken bir hata oluştu.", variant: "destructive" });
+      toast({
+        title: "Hata",
+        description: "Sulama kaydı silinirken bir hata oluştu.",
+        variant: "destructive",
+      });
     },
     onSettled: () => {
       setDeleteDialogOpen(false);
       setItemToDelete(null);
-    }
+    },
   });
 
   const clearFilters = () => {
-    setFilters({ wellId: "", fieldId: "", seasonId: "", status: "", startDate: null, endDate: null, createdBy: "" });
+    setFilters({
+      wellId: "",
+      fieldId: "",
+      seasonId: "",
+      status: "",
+      startDate: null,
+      endDate: null,
+      createdBy: "",
+    });
     setPage(1);
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case "COMPLETED": return <Badge variant="success">Tamamlandı</Badge>;
-      case "PLANNED": return <Badge variant="warning">Planlandı</Badge>;
-      case "CANCELLED": return <Badge variant="destructive">İptal Edildi</Badge>;
-      default: return <Badge>{status}</Badge>;
+      case "COMPLETED":
+        return <Badge variant="success">Tamamlandı</Badge>;
+      case "PLANNED":
+        return <Badge variant="warning">Planlandı</Badge>;
+      case "CANCELLED":
+        return <Badge variant="destructive">İptal Edildi</Badge>;
+      default:
+        return <Badge>{status}</Badge>;
     }
   };
 
@@ -183,45 +244,100 @@ export function IrrigationList() {
         <Card>
           <CardHeader>
             <CardTitle>Filtreler</CardTitle>
-            <CardDescription>Sulama kayıtlarını filtrelemek için aşağıdaki seçenekleri kullanın.</CardDescription>
+            <CardDescription>
+              Sulama kayıtlarını filtrelemek için aşağıdaki seçenekleri
+              kullanın.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {/* Filter Controls */}
               <div className="space-y-2">
                 <Label htmlFor="wellId">Kuyu</Label>
-                <Select value={filters.wellId} onValueChange={(value) => setFilters({ ...filters, wellId: value === 'all' ? '' : value })} >
-                  <SelectTrigger><SelectValue placeholder="Tüm Kuyular" /></SelectTrigger>
+                <Select
+                  value={filters.wellId}
+                  onValueChange={(value) =>
+                    setFilters({
+                      ...filters,
+                      wellId: value === "all" ? "" : value,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Tüm Kuyular" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Tüm Kuyular</SelectItem>
-                    {wellsData.map((well: any) => <SelectItem key={well.id} value={well.id}>{well.name}</SelectItem>)}
+                    {wellsData.map((well: any) => (
+                      <SelectItem key={well.id} value={well.id}>
+                        {well.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="fieldId">Tarla</Label>
-                <Select value={filters.fieldId} onValueChange={(value) => setFilters({ ...filters, fieldId: value === 'all' ? '' : value })} >
-                  <SelectTrigger><SelectValue placeholder="Tüm Tarlalar" /></SelectTrigger>
+                <Select
+                  value={filters.fieldId}
+                  onValueChange={(value) =>
+                    setFilters({
+                      ...filters,
+                      fieldId: value === "all" ? "" : value,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Tüm Tarlalar" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Tüm Tarlalar</SelectItem>
-                    {fieldsData.map((field: any) => <SelectItem key={field.id} value={field.id}>{field.name}</SelectItem>)}
+                    {fieldsData.map((field: any) => (
+                      <SelectItem key={field.id} value={field.id}>
+                        {field.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="seasonId">Sezon</Label>
-                <Select value={filters.seasonId} onValueChange={(value) => setFilters({ ...filters, seasonId: value === 'all' ? '' : value })} >
-                  <SelectTrigger><SelectValue placeholder="Tüm Sezonlar" /></SelectTrigger>
+                <Select
+                  value={filters.seasonId}
+                  onValueChange={(value) =>
+                    setFilters({
+                      ...filters,
+                      seasonId: value === "all" ? "" : value,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Tüm Sezonlar" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Tüm Sezonlar</SelectItem>
-                    {seasonsData.map((season: any) => <SelectItem key={season.id} value={season.id}>{season.name}</SelectItem>)}
+                    {seasonsData.map((season: any) => (
+                      <SelectItem key={season.id} value={season.id}>
+                        {season.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="status">Durum</Label>
-                <Select value={filters.status} onValueChange={(value) => setFilters({ ...filters, status: value === 'all' ? '' : value })} >
-                  <SelectTrigger><SelectValue placeholder="Tüm Durumlar" /></SelectTrigger>
+                <Select
+                  value={filters.status}
+                  onValueChange={(value) =>
+                    setFilters({
+                      ...filters,
+                      status: value === "all" ? "" : value,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Tüm Durumlar" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Tüm Durumlar</SelectItem>
                     <SelectItem value="COMPLETED">Tamamlandı</SelectItem>
@@ -234,13 +350,31 @@ export function IrrigationList() {
                 <Label>Başlangıç Tarihi</Label>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !filters.startDate && "text-muted-foreground")} >
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !filters.startDate && "text-muted-foreground"
+                      )}
+                    >
                       <Calendar className="mr-2 h-4 w-4" />
-                      {filters.startDate ? format(filters.startDate, "PPP", { locale: tr }) : <span>Tarih Seçin</span>}
+                      {filters.startDate ? (
+                        format(filters.startDate, "PPP", { locale: tr })
+                      ) : (
+                        <span>Tarih Seçin</span>
+                      )}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0">
-                    <CalendarComponent mode="single" selected={filters.startDate || undefined} onSelect={(date) => setFilters({ ...filters, startDate: date || null })} initialFocus locale={tr} />
+                    <CalendarComponent
+                      mode="single"
+                      selected={filters.startDate || undefined}
+                      onSelect={(date) =>
+                        setFilters({ ...filters, startDate: date || null })
+                      }
+                      initialFocus
+                      locale={tr}
+                    />
                   </PopoverContent>
                 </Popover>
               </div>
@@ -248,30 +382,64 @@ export function IrrigationList() {
                 <Label>Bitiş Tarihi</Label>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !filters.endDate && "text-muted-foreground")} >
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !filters.endDate && "text-muted-foreground"
+                      )}
+                    >
                       <Calendar className="mr-2 h-4 w-4" />
-                      {filters.endDate ? format(filters.endDate, "PPP", { locale: tr }) : <span>Tarih Seçin</span>}
+                      {filters.endDate ? (
+                        format(filters.endDate, "PPP", { locale: tr })
+                      ) : (
+                        <span>Tarih Seçin</span>
+                      )}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0">
-                    <CalendarComponent mode="single" selected={filters.endDate || undefined} onSelect={(date) => setFilters({ ...filters, endDate: date || null })} initialFocus locale={tr} />
+                    <CalendarComponent
+                      mode="single"
+                      selected={filters.endDate || undefined}
+                      onSelect={(date) =>
+                        setFilters({ ...filters, endDate: date || null })
+                      }
+                      initialFocus
+                      locale={tr}
+                    />
                   </PopoverContent>
                 </Popover>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="createdBy">İşçi</Label>
-                <Select value={filters.createdBy} onValueChange={(value) => setFilters({ ...filters, createdBy: value === 'all' ? '' : value })} >
-                  <SelectTrigger><SelectValue placeholder="Tüm İşçiler" /></SelectTrigger>
+                <Select
+                  value={filters.createdBy}
+                  onValueChange={(value) =>
+                    setFilters({
+                      ...filters,
+                      createdBy: value === "all" ? "" : value,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Tüm İşçiler" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Tüm İşçiler</SelectItem>
-                    {workersData.map((worker: any) => <SelectItem key={worker.id} value={worker.id}>{worker.name}</SelectItem>)}
+                    {workersData.map((worker: any) => (
+                      <SelectItem key={worker.id} value={worker.id}>
+                        {worker.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
           </CardContent>
           <CardFooter className="flex justify-end">
-            <Button variant="outline" onClick={clearFilters}>Filtreleri Temizle</Button>
+            <Button variant="outline" onClick={clearFilters}>
+              Filtreleri Temizle
+            </Button>
           </CardFooter>
         </Card>
 
@@ -280,18 +448,28 @@ export function IrrigationList() {
             <div className="flex justify-between items-center">
               <div>
                 <CardTitle>Sulama Kayıtları</CardTitle>
-                <CardDescription>Toplam {totalRecords} kayıt bulundu. Sayfa {page}/{totalPages}</CardDescription>
+                <CardDescription>
+                  Toplam {totalRecords} kayıt bulundu. Sayfa {page}/{totalPages}
+                </CardDescription>
               </div>
-              <Button onClick={() => router.push("/dashboard/owner/irrigation/new")}>Yeni Sulama Kaydı</Button>
+              <Button
+                onClick={() => router.push("/dashboard/owner/irrigation/new")}
+              >
+                Yeni Sulama Kaydı
+              </Button>
             </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div className="flex justify-center items-center h-40"><p>Yükleniyor...</p></div>
+              <div className="flex justify-center items-center h-40">
+                <p>Yükleniyor...</p>
+              </div>
             ) : irrigationLogs.length === 0 ? (
               <div className="flex flex-col justify-center items-center h-40">
                 <p className="text-muted-foreground">Kayıt bulunamadı.</p>
-                <Button variant="link" onClick={clearFilters}>Filtreleri temizle</Button>
+                <Button variant="link" onClick={clearFilters}>
+                  Filtreleri temizle
+                </Button>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -314,9 +492,15 @@ export function IrrigationList() {
                         <TableCell>
                           <div className="flex items-center">
                             <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
-                            {format(new Date(log.startDateTime), "dd MMM yyyy", { locale: tr })}
+                            {format(
+                              new Date(log.startDateTime),
+                              "dd MMM yyyy",
+                              { locale: tr }
+                            )}
                             <Clock className="ml-4 mr-2 h-4 w-4 text-muted-foreground" />
-                            {format(new Date(log.startDateTime), "HH:mm", { locale: tr })}
+                            {format(new Date(log.startDateTime), "HH:mm", {
+                              locale: tr,
+                            })}
                           </div>
                         </TableCell>
                         <TableCell>{log.well?.name || "-"}</TableCell>
@@ -324,17 +508,20 @@ export function IrrigationList() {
                           {(() => {
                             const maxDurationInMinutes = 20 * 60; // 20 hours
                             const duration = log.duration;
-                            const percentage = Math.min((duration / maxDurationInMinutes) * 100, 100);
+                            const percentage = Math.min(
+                              (duration / maxDurationInMinutes) * 100,
+                              100
+                            );
                             const durationInHours = duration / 60;
                             const durationText = `${Math.floor(duration / 60)}s ${duration % 60}dk`;
 
-                            let bgColorClass = '';
+                            let bgColorClass = "";
                             if (durationInHours < 4) {
-                              bgColorClass = 'bg-green-500';
+                              bgColorClass = "bg-green-500";
                             } else if (durationInHours <= 10) {
-                              bgColorClass = 'bg-yellow-500';
+                              bgColorClass = "bg-yellow-500";
                             } else {
-                              bgColorClass = 'bg-red-500';
+                              bgColorClass = "bg-red-500";
                             }
 
                             return (
@@ -361,11 +548,21 @@ export function IrrigationList() {
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            {log.fieldUsages?.map((usage: { id: string; field: { name: string }; percentage: number }) => (
-                              <Badge key={usage.id} variant="outline" className="border-yellow-500 text-[rgb(3,207,252)]">
-                                {usage.field?.name} (%{usage.percentage})
-                              </Badge>
-                            ))}
+                            {log.fieldUsages?.map(
+                              (usage: {
+                                id: string;
+                                field: { name: string };
+                                percentage: number;
+                              }) => (
+                                <Badge
+                                  key={usage.id}
+                                  variant="outline"
+                                  className="border-yellow-500 text-[rgb(3,207,252)]"
+                                >
+                                  {usage.field?.name} (%{usage.percentage})
+                                </Badge>
+                              )
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>{log.user?.name || "-"}</TableCell>
@@ -394,8 +591,28 @@ export function IrrigationList() {
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => router.push(`/dashboard/owner/irrigation/${log.id}/edit`)}><Edit className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="icon" className="text-red-500" onClick={() => { setItemToDelete(log.id); setDeleteDialogOpen(true); }}><Trash2 className="h-4 w-4" /></Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() =>
+                                router.push(
+                                  `/dashboard/owner/irrigation/${log.id}/edit`
+                                )
+                              }
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-red-500"
+                              onClick={() => {
+                                setItemToDelete(log.id);
+                                setDeleteDialogOpen(true);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -406,11 +623,36 @@ export function IrrigationList() {
             )}
             {totalPages > 1 && (
               <div className="flex justify-center mt-4 space-x-2">
-                <Button variant="outline" size="sm" onClick={() => setPage((prev) => Math.max(prev - 1, 1))} disabled={page === 1}>Önceki</Button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
-                  <Button key={pageNum} variant={pageNum === page ? "default" : "outline"} size="sm" onClick={() => setPage(pageNum)}>{pageNum}</Button>
-                ))}
-                <Button variant="outline" size="sm" onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))} disabled={page === totalPages}>Sonraki</Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={page === 1}
+                >
+                  Önceki
+                </Button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                  (pageNum) => (
+                    <Button
+                      key={pageNum}
+                      variant={pageNum === page ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setPage(pageNum)}
+                    >
+                      {pageNum}
+                    </Button>
+                  )
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setPage((prev) => Math.min(prev + 1, totalPages))
+                  }
+                  disabled={page === totalPages}
+                >
+                  Sonraki
+                </Button>
               </div>
             )}
           </CardContent>
@@ -418,47 +660,72 @@ export function IrrigationList() {
 
         {/* Görüntüleme (göz) diyaloğu - /dashboard/owner/reports sayfasıyla aynı stil */}
         <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
-          <DialogContent className="sm:max-w-2xl">
+          <DialogContent className="w-[95vw] max-w-2xl max-h-[85vh] p-4 sm:p-6 left-[60%] translate-x-[-60%] top-[50%] -translate-y-1/2">
             <DialogHeader>
               <DialogTitle>Sulama Kaydı Detayı</DialogTitle>
               <DialogDescription>
                 Seçili sulama kaydına ait özet bilgiler.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2 -mr-2">
               {viewItem ? (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Tarih ve Saat</Label>
+                      <Label className="text-xs text-muted-foreground">
+                        Tarih ve Saat
+                      </Label>
                       <div className="flex items-center text-sm">
                         <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
-                        {format(new Date(viewItem.startDateTime), "dd MMM yyyy", { locale: tr })}
+                        {format(
+                          new Date(viewItem.startDateTime),
+                          "dd MMM yyyy",
+                          { locale: tr }
+                        )}
                         <Clock className="ml-4 mr-2 h-4 w-4 text-muted-foreground" />
-                        {format(new Date(viewItem.startDateTime), "HH:mm", { locale: tr })}
+                        {format(new Date(viewItem.startDateTime), "HH:mm", {
+                          locale: tr,
+                        })}
                       </div>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Kuyu</Label>
-                      <div className="text-sm">{viewItem.well?.name || "-"}</div>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Süre</Label>
+                      <Label className="text-xs text-muted-foreground">
+                        Kuyu
+                      </Label>
                       <div className="text-sm">
-                        {Math.floor(viewItem.duration / 60)}s {viewItem.duration % 60}dk
+                        {viewItem.well?.name || "-"}
                       </div>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">İşçi</Label>
-                      <div className="text-sm">{viewItem.user?.name || "-"}</div>
+                      <Label className="text-xs text-muted-foreground">
+                        Süre
+                      </Label>
+                      <div className="text-sm">
+                        {Math.floor(viewItem.duration / 60)}s{" "}
+                        {viewItem.duration % 60}dk
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">
+                        İşçi
+                      </Label>
+                      <div className="text-sm">
+                        {viewItem.user?.name || "-"}
+                      </div>
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Tarlalar</Label>
+                    <Label className="text-xs text-muted-foreground">
+                      Tarlalar
+                    </Label>
                     <div className="flex flex-wrap gap-1">
                       {viewItem.fieldUsages?.map((usage) => (
-                        <Badge key={usage.id} variant="outline" className="border-yellow-500 text-[rgb(3,207,252)]">
+                        <Badge
+                          key={usage.id}
+                          variant="outline"
+                          className="border-yellow-500 text-[rgb(3,207,252)]"
+                        >
                           {usage.field?.name} (%{usage.percentage})
                         </Badge>
                       ))}
@@ -466,96 +733,178 @@ export function IrrigationList() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Durum</Label>
+                    <Label className="text-xs text-muted-foreground">
+                      Durum
+                    </Label>
                     <div>{getStatusBadge(viewItem.status)}</div>
                   </div>
 
                   {/* Envanter Kullanımı Özeti */}
-                  {Array.isArray(viewItem.inventoryUsages) && viewItem.inventoryUsages.length > 0 && (
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Envanter Kullanımı</Label>
-                      <div className="rounded-md border">
-                        <div className="grid grid-cols-4 text-xs font-medium text-muted-foreground border-b px-3 py-2">
-                          <div>Envanter</div>
-                          <div className="text-right">Miktar</div>
-                          <div className="text-right">Birim Fiyat</div>
-                          <div className="text-right">Toplam Maliyet</div>
-                        </div>
-                        <div className="divide-y">
-                          {viewItem.inventoryUsages.map((iu) => {
-                            const totalCost = iu.unitCost != null ? iu.quantity * iu.unitCost : null;
-                            return (
-                              <div key={iu.id} className="grid grid-cols-4 items-center px-3 py-2 text-sm">
-                                <div className="truncate">{iu.inventory?.name}</div>
-                                <div className="text-right">{Number(iu.quantity).toFixed(2)} {iu.inventory?.unit}</div>
-                                <div className="text-right">{iu.unitCost != null ? `${iu.unitCost.toFixed(2)} TL` : "-"}</div>
-                                <div className="text-right">{totalCost != null ? `${totalCost.toFixed(2)} TL` : "-"}</div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Sahip Bazlı Envanter Kullanımı */}
-                  {Array.isArray(viewItem.inventoryUsages) && viewItem.inventoryUsages.some(iu => Array.isArray(iu.ownerUsages) && iu.ownerUsages.length > 0) && (
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Sahip Bazlı Envanter Kullanımı</Label>
-                      <div className="space-y-3">
-                        {(() => {
-                          // ownerId bazlı grupla
-                          const ownerMap = new Map<string, { ownerName: string; ownerEmail?: string | null; items: { name: string; quantity: number; unit: string; cost?: number | null }[] }>();
-                          viewItem.inventoryUsages!.forEach(iu => {
-                            (iu.ownerUsages || []).forEach(ou => {
-                              const key = ou.owner.id;
-                              const entry = ownerMap.get(key) || { ownerName: ou.owner.name, ownerEmail: ou.owner.email, items: [] };
-                              entry.items.push({
-                                name: iu.inventory.name,
-                                quantity: ou.quantity,
-                                unit: iu.inventory.unit,
-                                cost: ou.cost ?? (iu.unitCost != null ? ou.quantity * iu.unitCost : null)
-                              });
-                              ownerMap.set(key, entry);
-                            });
-                          });
-                          const owners = Array.from(ownerMap.entries());
-                          return owners.map(([ownerId, data]) => {
-                            const totalCost = data.items.reduce((sum, it) => sum + (it.cost || 0), 0);
-                            return (
-                              <div key={ownerId} className="rounded-md border">
-                                <div className="px-3 py-2 border-b">
-                                  <div className="text-sm font-medium">{data.ownerName}{data.ownerEmail ? ` (${data.ownerEmail})` : ""}</div>
-                                </div>
-                                <div className="grid grid-cols-3 text-xs font-medium text-muted-foreground border-b px-3 py-2">
-                                  <div>Envanter</div>
-                                  <div className="text-right">Miktar</div>
-                                  <div className="text-right">Maliyet</div>
-                                </div>
-                                <div className="divide-y">
-                                  {data.items.map((it, idx) => (
-                                    <div key={idx} className="grid grid-cols-3 items-center px-3 py-2 text-sm">
-                                      <div className="truncate">{it.name}</div>
-                                      <div className="text-right">{Number(it.quantity).toFixed(2)} {it.unit}</div>
-                                      <div className="text-right">{it.cost != null ? `${it.cost.toFixed(2)} TL` : "-"}</div>
-                                    </div>
-                                  ))}
-                                  <div className="grid grid-cols-3 items-center px-3 py-2 text-sm font-medium">
-                                    <div className="text-right col-span-2">Toplam</div>
-                                    <div className="text-right">{totalCost > 0 ? `${totalCost.toFixed(2)} TL` : "-"}</div>
+                  {Array.isArray(viewItem.inventoryUsages) &&
+                    viewItem.inventoryUsages.length > 0 && (
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground">
+                          Envanter Kullanımı
+                        </Label>
+                        <div className="rounded-md border">
+                          <div className="grid grid-cols-4 text-xs font-medium text-muted-foreground border-b px-3 py-2">
+                            <div>Envanter</div>
+                            <div className="text-right">Miktar</div>
+                            <div className="text-right">Birim Fiyat</div>
+                            <div className="text-right">Toplam Maliyet</div>
+                          </div>
+                          <div className="divide-y">
+                            {viewItem.inventoryUsages.map((iu) => {
+                              const totalCost =
+                                iu.unitCost != null
+                                  ? iu.quantity * iu.unitCost
+                                  : null;
+                              return (
+                                <div
+                                  key={iu.id}
+                                  className="grid grid-cols-4 items-center px-3 py-2 text-sm"
+                                >
+                                  <div className="truncate">
+                                    {iu.inventory?.name}
+                                  </div>
+                                  <div className="text-right">
+                                    {Number(iu.quantity).toFixed(2)}{" "}
+                                    {iu.inventory?.unit}
+                                  </div>
+                                  <div className="text-right">
+                                    {iu.unitCost != null
+                                      ? `${iu.unitCost.toFixed(2)} TL`
+                                      : "-"}
+                                  </div>
+                                  <div className="text-right">
+                                    {totalCost != null
+                                      ? `${totalCost.toFixed(2)} TL`
+                                      : "-"}
                                   </div>
                                 </div>
-                              </div>
-                            );
-                          });
-                        })()}
+                              );
+                            })}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+
+                  {/* Sahip Bazlı Envanter Kullanımı */}
+                  {Array.isArray(viewItem.inventoryUsages) &&
+                    viewItem.inventoryUsages.some(
+                      (iu) =>
+                        Array.isArray(iu.ownerUsages) &&
+                        iu.ownerUsages.length > 0
+                    ) && (
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground">
+                          Sahip Bazlı Envanter Kullanımı
+                        </Label>
+                        <div className="space-y-3">
+                          {(() => {
+                            // ownerId bazlı grupla
+                            const ownerMap = new Map<
+                              string,
+                              {
+                                ownerName: string;
+                                ownerEmail?: string | null;
+                                items: {
+                                  name: string;
+                                  quantity: number;
+                                  unit: string;
+                                  cost?: number | null;
+                                }[];
+                              }
+                            >();
+                            viewItem.inventoryUsages!.forEach((iu) => {
+                              (iu.ownerUsages || []).forEach((ou) => {
+                                const key = ou.owner.id;
+                                const entry = ownerMap.get(key) || {
+                                  ownerName: ou.owner.name,
+                                  ownerEmail: ou.owner.email,
+                                  items: [],
+                                };
+                                entry.items.push({
+                                  name: iu.inventory.name,
+                                  quantity: ou.quantity,
+                                  unit: iu.inventory.unit,
+                                  cost:
+                                    ou.cost ??
+                                    (iu.unitCost != null
+                                      ? ou.quantity * iu.unitCost
+                                      : null),
+                                });
+                                ownerMap.set(key, entry);
+                              });
+                            });
+                            const owners = Array.from(ownerMap.entries());
+                            return owners.map(([ownerId, data]) => {
+                              const totalCost = data.items.reduce(
+                                (sum, it) => sum + (it.cost || 0),
+                                0
+                              );
+                              return (
+                                <div
+                                  key={ownerId}
+                                  className="rounded-md border"
+                                >
+                                  <div className="px-3 py-2 border-b">
+                                    <div className="text-sm font-medium">
+                                      {data.ownerName}
+                                      {data.ownerEmail
+                                        ? ` (${data.ownerEmail})`
+                                        : ""}
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-3 text-xs font-medium text-muted-foreground border-b px-3 py-2">
+                                    <div>Envanter</div>
+                                    <div className="text-right">Miktar</div>
+                                    <div className="text-right">Maliyet</div>
+                                  </div>
+                                  <div className="divide-y">
+                                    {data.items.map((it, idx) => (
+                                      <div
+                                        key={idx}
+                                        className="grid grid-cols-3 items-center px-3 py-2 text-sm"
+                                      >
+                                        <div className="truncate">
+                                          {it.name}
+                                        </div>
+                                        <div className="text-right">
+                                          {Number(it.quantity).toFixed(2)}{" "}
+                                          {it.unit}
+                                        </div>
+                                        <div className="text-right">
+                                          {it.cost != null
+                                            ? `${it.cost.toFixed(2)} TL`
+                                            : "-"}
+                                        </div>
+                                      </div>
+                                    ))}
+                                    <div className="grid grid-cols-3 items-center px-3 py-2 text-sm font-medium">
+                                      <div className="text-right col-span-2">
+                                        Toplam
+                                      </div>
+                                      <div className="text-right">
+                                        {totalCost > 0
+                                          ? `${totalCost.toFixed(2)} TL`
+                                          : "-"}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </div>
+                    )}
 
                   {viewItem.notes && (
                     <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Not</Label>
+                      <Label className="text-xs text-muted-foreground">
+                        Not
+                      </Label>
                       <div className="flex items-start gap-2 text-sm">
                         <StickyNote className="h-4 w-4 text-muted-foreground mt-0.5" />
                         <p className="whitespace-pre-wrap">{viewItem.notes}</p>
@@ -564,23 +913,47 @@ export function IrrigationList() {
                   )}
                 </>
               ) : (
-                <div className="text-sm text-muted-foreground">Kayıt yükleniyor...</div>
+                <div className="text-sm text-muted-foreground">
+                  Kayıt yükleniyor...
+                </div>
               )}
             </div>
             <DialogFooter className="sm:justify-between">
-              <div className="text-xs text-muted-foreground">Detayları görüntüleme penceresi</div>
+              <div className="text-xs text-muted-foreground">
+                Detayları görüntüleme penceresi
+              </div>
               <div className="flex gap-2">
                 {viewItem && (
                   <>
-                    <Button variant="outline" onClick={() => { setViewDialogOpen(false); router.push(`/dashboard/owner/irrigation/${viewItem.id}`); }}>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setViewDialogOpen(false);
+                        router.push(
+                          `/dashboard/owner/irrigation/${viewItem.id}`
+                        );
+                      }}
+                    >
                       Tam Sayfada Aç
                     </Button>
-                    <Button onClick={() => { setViewDialogOpen(false); router.push(`/dashboard/owner/irrigation/${viewItem.id}/edit`); }}>
+                    <Button
+                      onClick={() => {
+                        setViewDialogOpen(false);
+                        router.push(
+                          `/dashboard/owner/irrigation/${viewItem.id}/edit`
+                        );
+                      }}
+                    >
                       Düzenle
                     </Button>
                   </>
                 )}
-                <Button variant="secondary" onClick={() => setViewDialogOpen(false)}>Kapat</Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => setViewDialogOpen(false)}
+                >
+                  Kapat
+                </Button>
               </div>
             </DialogFooter>
           </DialogContent>
@@ -591,11 +964,30 @@ export function IrrigationList() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Sulama Kaydını Sil</DialogTitle>
-              <DialogDescription>Bu sulama kaydını silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.</DialogDescription>
+              <DialogDescription>
+                Bu sulama kaydını silmek istediğinizden emin misiniz? Bu işlem
+                geri alınamaz.
+              </DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button variant="outline" onClick={() => { setDeleteDialogOpen(false); setItemToDelete(null); }}>İptal</Button>
-              <Button variant="destructive" onClick={() => itemToDelete && deleteMutation.mutate(itemToDelete)} disabled={deleteMutation.isPending}>{deleteMutation.isPending ? "Siliniyor..." : "Sil"}</Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setDeleteDialogOpen(false);
+                  setItemToDelete(null);
+                }}
+              >
+                İptal
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() =>
+                  itemToDelete && deleteMutation.mutate(itemToDelete)
+                }
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending ? "Siliniyor..." : "Sil"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

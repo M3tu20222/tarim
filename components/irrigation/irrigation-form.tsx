@@ -100,15 +100,25 @@ const Step1Schema = z.object({
     }),
 });
 
-// Adım 2: Envanter Kullanımları Şeması (Yeni Grup Mantığı)
+/**
+ * Adım 2: Envanter Kullanımları Şeması
+ * GÜNCEL: owner bazında çoklu stok seçimi ve miktar desteği (fulfillments)
+ * allocations: ownerId -> [{ inventoryId, amount }]
+ */
 const Step2Schema = z.object({
   inventoryGroups: z
     .array(
       z.object({
         inventoryTypeId: z.string({ required_error: "Envanter türü seçilmelidir." }),
         totalQuantity: z.coerce.number().min(0.01, { message: "Miktar en az 0.01 olmalıdır." }),
-        // Her bir sahip için seçilen spesifik envanter ID'sini tutacak alan
-        allocations: z.record(z.string()) // ownerId -> inventoryId
+        allocations: z.record(
+          z.array(
+            z.object({
+              inventoryId: z.string({ required_error: "Stok seçilmelidir." }),
+              amount: z.coerce.number().min(0.01, { message: "Miktar en az 0.01 olmalıdır." }),
+            })
+          ).min(1, { message: "En az bir stok seçilmelidir." })
+        ) // ownerId -> [{inventoryId, amount}]
       })
     )
     .optional(),
@@ -163,6 +173,7 @@ interface Inventory {
     shareQuantity: number;
   }[];
 }
+type OwnerAllocationItem = { inventoryId: string; amount: number };
 
 interface InvolvedOwner {
   id: string;
@@ -530,75 +541,79 @@ const response = await fetch(`/api/irrigation/${irrigationLogId}/details`, {
         const { inventoryGroups } = form.getValues();
         const { displayOwnerDurations } = calculatedData;
         let formHasStockError = false;
-        const inventoryDeductionsForApi: {
-          inventoryId: string;
-          quantityUsed: number;
-          unitPrice: number;
-          ownerId: string;
-        }[] = [];
 
-        inventoryGroups?.forEach(group => {
+        type Deduction = { inventoryId: string; quantityUsed: number; unitPrice: number; ownerId: string };
+        const inventoryDeductionsForApi: Deduction[] = [];
+
+        // Sahip paylarını önce hesaplayalım (yuvarlama ile)
+        const ownersForDistribution = Object.values(displayOwnerDurations).filter(o => o.irrigatedArea > 0);
+        const totalArea = ownersForDistribution.reduce((s, o) => s + o.irrigatedArea, 0);
+
+        inventoryGroups?.forEach((group) => {
           if (formHasStockError) return;
 
-          const totalQuantity = Number(group.totalQuantity);
-          if (isNaN(totalQuantity) || totalQuantity <= 0) {
-            // Skip if quantity is not a valid positive number
-            return;
-          }
+          const groupTotal = Number(group.totalQuantity);
+          if (isNaN(groupTotal) || groupTotal <= 0) return;
 
-          const involvedOwnersForDistribution = Object.values(displayOwnerDurations).filter(owner => owner.irrigatedArea > 0);
-          const relevantTotalIrrigatedArea = involvedOwnersForDistribution.reduce((sum, o) => sum + o.irrigatedArea, 0);
+          // Owner'a düşen hedef miktarı
+          const ownerTargetMap: Record<string, number> = {};
+          let sumDistributed = 0;
+          ownersForDistribution.forEach((owner, i) => {
+            const share = totalArea > 0 ? groupTotal * (owner.irrigatedArea / totalArea) : 0;
+            const finalShare = i === ownersForDistribution.length - 1 ? round(groupTotal - sumDistributed) : round(share);
+            sumDistributed += finalShare;
+            ownerTargetMap[owner.userId] = finalShare;
+          });
 
-          if (relevantTotalIrrigatedArea <= 0) return;
+          // owner allocations: ownerId -> [{inventoryId, amount}]
+          const allocationsRecord = group.allocations || {};
+          for (const owner of ownersForDistribution) {
+            const target = round(ownerTargetMap[owner.userId] || 0);
+            if (target <= 0) continue;
 
-          let sumOfDistributedQuantities = 0;
-          for (let i = 0; i < involvedOwnersForDistribution.length; i++) {
-            const owner = involvedOwnersForDistribution[i];
-            const ownerSharePercent = owner.irrigatedArea / relevantTotalIrrigatedArea;
-            let quantityShare = totalQuantity * ownerSharePercent;
+            const items: OwnerAllocationItem[] = (allocationsRecord[owner.userId] as OwnerAllocationItem[]) || [];
+            const sumItems = round(items.reduce((s, it) => s + (Number(it.amount) || 0), 0));
 
-            if (i === involvedOwnersForDistribution.length - 1) {
-              quantityShare = round(totalQuantity - sumOfDistributedQuantities);
-            }
-            
-            const roundedQuantityShare = round(quantityShare);
-            if (roundedQuantityShare <= 0) continue;
-            sumOfDistributedQuantities += roundedQuantityShare;
-
-            const specificInventoryId = group.allocations[owner.userId];
-            if (!specificInventoryId) {
-              toast({ title: "Hata", description: `${owner.userName} için bir envanter stoğu seçilmemiş.`, variant: "destructive" });
-              formHasStockError = true;
-              return;
-            }
-
-            const inventoryItem = inventories.find(inv => inv.id === specificInventoryId);
-            if (!inventoryItem) {
-              toast({ title: "Hata", description: `Envanter detayı bulunamadı: ID ${specificInventoryId}.`, variant: "destructive" });
-              formHasStockError = true;
-              return;
-            }
-            
-            const ownerStock = inventoryItem.ownerships?.find(own => own.userId === owner.userId);
-            if (!ownerStock || ownerStock.shareQuantity < roundedQuantityShare) {
+            // Doğrulama: toplam eşit olmalı
+            if (sumItems !== target) {
               toast({
-                title: "Yetersiz Stok",
-                description: `${owner.userName} için ${inventoryItem.name} stoğu yetersiz. (Gereken: ${roundedQuantityShare}, Mevcut: ${ownerStock?.shareQuantity || 0})`,
+                title: "Dağıtım Hatası",
+                description: `${owner.userName} için girilen stok miktarları (${sumItems}) hedef miktarla (${target}) eşleşmiyor.`,
                 variant: "destructive",
               });
               formHasStockError = true;
-              return;
+              break;
             }
 
-            const unitPrice = inventoryItem.unitPrice ?? 0;
+            // Her item için stok ve fiyat kontrolü ile deduction'a ekle
+            for (const it of items) {
+              const inv = inventories.find(v => v.id === it.inventoryId);
+              if (!inv) {
+                toast({ title: "Hata", description: `Envanter bulunamadı: ${it.inventoryId}`, variant: "destructive" });
+                formHasStockError = true;
+                break;
+              }
+              const ownerShare = inv.ownerships?.find(o => o.userId === owner.userId)?.shareQuantity ?? 0;
+              if (ownerShare < it.amount) {
+                toast({
+                  title: "Yetersiz Stok",
+                  description: `${owner.userName} için ${inv.name} stoğu yetersiz. (Gereken: ${it.amount}, Mevcut: ${ownerShare})`,
+                  variant: "destructive",
+                });
+                formHasStockError = true;
+                break;
+              }
 
-            // Add deduction for each owner's usage from their specific stock
-            inventoryDeductionsForApi.push({
-              inventoryId: specificInventoryId,
-              quantityUsed: roundedQuantityShare,
-              unitPrice: unitPrice,
-              ownerId: owner.userId,
-            });
+              const unitPrice = inv.unitPrice ?? 0;
+              inventoryDeductionsForApi.push({
+                inventoryId: it.inventoryId,
+                quantityUsed: round(it.amount),
+                unitPrice: unitPrice,
+                ownerId: owner.userId,
+              });
+            }
+
+            if (formHasStockError) break;
           }
         });
 
@@ -607,15 +622,14 @@ const response = await fetch(`/api/irrigation/${irrigationLogId}/details`, {
           return;
         }
 
-        formData = {
-          inventoryDeductions: inventoryDeductionsForApi,
-        };
+        const formData = { inventoryDeductions: inventoryDeductionsForApi };
 
         setLoadingSubmit(true);
         try {
           const response = await fetch(`/api/irrigation/${irrigationLogId}/details`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify(formData),
           });
 
@@ -739,14 +753,20 @@ const response = await fetch(`/api/irrigation/${irrigationLogId}/details`, {
             const roundedQuantityShare = round(quantityShare);
             sumOfDistributedQuantities += roundedQuantityShare;
 
-            const specificInventoryId = group.allocations[owner.userId];
-            const inventoryItem = inventories.find(inv => inv.id === specificInventoryId);
+            // NOT: Finalize önizlemesi için tek stok seçimi varsa onun birim fiyatını kullan
+            const allocPrev = Array.isArray(group.allocations?.[owner.userId]) ? (group.allocations?.[owner.userId] as OwnerAllocationItem[]) : [];
+            const previewInventoryIdPrev = allocPrev.length === 1 ? allocPrev[0].inventoryId : undefined;
+            const inventoryItem = previewInventoryIdPrev ? inventories.find(inv => inv.id === previewInventoryIdPrev) : undefined;
             const unitPrice = inventoryItem?.unitPrice ?? 0;
             const cost = round(roundedQuantityShare * unitPrice);
             
             currentTypeUsage.totalCostThisType += cost;
+            // NOT: Finalize önizlemesinde allocations artık dizi. Burada sadece önizleme için,
+            // eğer owner için tek stok seçimi varsa onu kullan; yoksa maliyeti 0 kabul et.
+            const allocList = Array.isArray(group.allocations?.[owner.userId]) ? (group.allocations?.[owner.userId] as OwnerAllocationItem[]) : [];
+            const previewInventoryId2 = allocList.length === 1 ? allocList[0].inventoryId : undefined;
             currentTypeUsage.contributingStocks.push({
-              inventoryId: specificInventoryId,
+              inventoryId: previewInventoryId2 || "N/A",
               ownerId: owner.userId,
               quantity: roundedQuantityShare,
               unitPrice: unitPrice,
@@ -820,6 +840,17 @@ const response = await fetch(`/api/irrigation/${irrigationLogId}/finalize`, {
       totalQuantity: 0,
       allocations: {},
     });
+  };
+
+  // Yardımcı: owner için mevcut payı hesapla (önizlemeye göre)
+  const getOwnerShareForGroup = (ownerId: string, groupTotal: number) => {
+    const { displayOwnerDurations } = calculatedData;
+    const owners = Object.values(displayOwnerDurations).filter(o => o.irrigatedArea > 0);
+    const totalArea = owners.reduce((s, o) => s + o.irrigatedArea, 0);
+    if (groupTotal <= 0 || totalArea <= 0) return 0;
+    const owner = owners.find(o => o.userId === ownerId);
+    if (!owner) return 0;
+    return round((owner.irrigatedArea / totalArea) * groupTotal);
   };
 
   const currentValues = form.watch();
@@ -1161,36 +1192,192 @@ const response = await fetch(`/api/irrigation/${irrigationLogId}/finalize`, {
                         <h4 className="text-md font-medium mb-2">Otomatik Dağıtım ve Stok Seçimi</h4>
                         <div className="border rounded-md overflow-hidden">
                           <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
+                            <thead className="bg-transparent">
                               <tr>
                                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sahip</th>
                                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Düşülecek Miktar</th>
                                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kullanılacak Stok</th>
                               </tr>
                             </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
+                            <tbody className="bg-transparent divide-y divide-gray-200">
                               {distribution.map(dist => {
                                 const owner = involvedOwners.find(o => o.name === dist.ownerName);
                                 if (!owner) return null;
-                                const ownerInventories = inventories.filter(inv => inv.name === inventoryType?.name && inv.ownerships?.some(o => o.userId === owner.id));
+
+                                // Bu owner için uygun stoklar:
+                                // Kural: Eğer owner bu gruptaki stokta ortak DEĞİLSE, bu owner'a AİT (ownerships içinde owner.id olan)
+                                // ve ADI inventoryType.name OLMAYAN (yani farklı ÜRE stokları vb.) stokları göster.
+                                // Eğer ortaksa, mevcut davranış: sadece aynı adı taşıyan stoklardan seçim yap.
+                                const isOwnerInSelectedType = inventories.some(inv => inv.name === inventoryType?.name && inv.ownerships?.some(o => o.userId === owner.id));
+
+                                let ownerInventories: Inventory[] = [];
+                                if (!isOwnerInSelectedType) {
+                                  // 3. kişi gruptaki stoğa ortak değil → onun diğer uygun stoklarını (aynı kategori ve sahibi kendisi olan, isim fark etmeksizin TERCIHEN farklı adlar) göster
+                                  ownerInventories = inventories.filter(inv =>
+                                    (inv.category === inventoryType?.category) &&
+                                    inv.ownerships?.some(o => o.userId === owner.id) &&
+                                    inv.totalQuantity > 0 &&
+                                    // Grubun adıyla aynı ismi ELEMINE ET (Üre B_M_1'i hariç tut)
+                                    inv.name !== inventoryType?.name
+                                  );
+                                  // Eğer hiçbir sonuç çıkmazsa, fallback olarak owner'ın aynı kategori tüm stoklarını göster
+                                  if (ownerInventories.length === 0) {
+                                    ownerInventories = inventories.filter(inv =>
+                                      (inv.category === inventoryType?.category) &&
+                                      inv.ownerships?.some(o => o.userId === owner.id) &&
+                                      inv.totalQuantity > 0
+                                    );
+                                  }
+                                } else {
+                                  // Ortak ise mevcut tipteki stokları göster
+                                  ownerInventories = inventories.filter(inv =>
+                                    inv.name === inventoryType?.name &&
+                                    inv.ownerships?.some(o => o.userId === owner.id) &&
+                                    inv.totalQuantity > 0
+                                  );
+                                }
+
+                                // Form state'ten bu owner için mevcut allocation listesi
+                                // Mevcut allocations her zaman dizi olmayabilir; güvenli normalize et
+                                const rawAlloc = form.getValues(`inventoryGroups.${index}.allocations.${owner.id}`) as unknown;
+                                const currentAllocations: OwnerAllocationItem[] = Array.isArray(rawAlloc)
+                                  ? rawAlloc as OwnerAllocationItem[]
+                                  : [];
+
+                                const ownerRequiredAmount = dist.quantityShare; // Bu kişiye düşen toplam miktar
+                                const currentTotalAllocated = round(currentAllocations.reduce((s, a) => s + (Number(a.amount) || 0), 0));
+                                const remaining = round(ownerRequiredAmount - currentTotalAllocated);
+
+                                const addAllocationRow = () => {
+                                  const path = `inventoryGroups.${index}.allocations.${owner.id}` as const;
+                                  const initialArr: OwnerAllocationItem[] = Array.isArray(form.getValues(path))
+                                    ? (form.getValues(path) as OwnerAllocationItem[])
+                                    : [];
+                                  // Varsayılan ilk seçenek: uygun stoklardan ilki
+                                  const defaultInvId = ownerInventories[0]?.id || "";
+                                  const newItem: OwnerAllocationItem = { inventoryId: defaultInvId, amount: remaining > 0 ? remaining : 0.01 };
+                                  form.setValue(path, [...initialArr, newItem], { shouldValidate: true, shouldDirty: true });
+                                };
+
+                                const updateAllocation = (rowIdx: number, key: "inventoryId" | "amount", value: string) => {
+                                  const path = `inventoryGroups.${index}.allocations.${owner.id}` as const;
+                                  const existing = form.getValues(path) as unknown;
+                                  const arr: OwnerAllocationItem[] = Array.isArray(existing) ? [...(existing as OwnerAllocationItem[])] : [];
+                                  if (!arr[rowIdx]) return;
+                                  if (key === "inventoryId") {
+                                    arr[rowIdx].inventoryId = value;
+                                  } else {
+                                    const num = parseFloat(value);
+                                    arr[rowIdx].amount = isNaN(num) ? 0 : num;
+                                  }
+                                  form.setValue(path, arr, { shouldValidate: true, shouldDirty: true });
+                                };
+
+                                const removeAllocation = (rowIdx: number) => {
+                                  const path = `inventoryGroups.${index}.allocations.${owner.id}` as const;
+                                  const existing = form.getValues(path) as unknown;
+                                  const arr: OwnerAllocationItem[] = Array.isArray(existing) ? [...(existing as OwnerAllocationItem[])] : [];
+                                  if (rowIdx < 0 || rowIdx >= arr.length) return;
+                                  arr.splice(rowIdx, 1);
+                                  form.setValue(path, arr, { shouldValidate: true, shouldDirty: true });
+                                };
+
+                                // Uyarı: owner bu grup stokta ortak değilse, kendi stoklarını seçmesi gerekecek
+                                const isOwnerInGroup = ownerInventories.length > 0;
+
                                 return (
                                   <tr key={owner.id}>
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{dist.ownerName}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{dist.quantityShare.toFixed(2)} {inventoryType?.unit}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-green-500 dark:text-green-400">
+                                      <div className="flex items-center gap-2">
+                                        <span>{dist.ownerName}</span>
+                                        {!isOwnerInGroup && (
+                                          <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-300">
+                                            Bu kişi bu stokta ortak değil. Kendi stoklarını seçin.
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                                      {ownerRequiredAmount.toFixed(2)} {inventoryType?.unit}
+                                      {currentTotalAllocated !== ownerRequiredAmount && (
+                                        <div className="text-xs mt-1">
+                                          <span className={currentTotalAllocated > ownerRequiredAmount ? "text-red-600" : "text-amber-600"}>
+                                            Dağıtılan: {currentTotalAllocated.toFixed(2)} • Kalan: {Math.max(0, remaining).toFixed(2)}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </td>
                                     <td className="px-4 py-2 whitespace-nowrap text-sm">
-                                      <Select
-                                        onValueChange={(value) => form.setValue(`inventoryGroups.${index}.allocations.${owner.id}`, value)}
-                                        defaultValue={group.allocations[owner.id]}
-                                      >
-                                        <SelectTrigger><SelectValue placeholder="Stok Seçin" /></SelectTrigger>
-                                        <SelectContent>
-                                          {ownerInventories.map(inv => (
-                                            <SelectItem key={inv.id} value={inv.id}>
-                                              {inv.name} (Mevcut: {inv.ownerships?.find(o => o.userId === owner.id)?.shareQuantity.toFixed(2)})
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
+                                      <div className="space-y-2">
+                                        {currentAllocations.length === 0 && (
+                                          <Button type="button" variant="outline" size="sm" onClick={addAllocationRow} className="btn-cyberpunk">
+                                            + Stok Ekle
+                                          </Button>
+                                        )}
+                                        {/* Otomatik dağıtım: Tek stok varsa miktarı otomatik doldur ve input'u gizle */}
+                                        {currentAllocations.map((row, rowIdx) => {
+                                          const selectedInv = inventories.find(inv => inv.id === row.inventoryId);
+                                          const ownerShare = selectedInv?.ownerships?.find(o => o.userId === owner.id)?.shareQuantity ?? 0;
+
+                                          const isSingleRow = currentAllocations.length === 1;
+                                          const autoAmount = isSingleRow ? ownerRequiredAmount : (row.amount ?? 0);
+                                          if (isSingleRow && row.amount !== autoAmount) {
+                                            // Tek satırsa otomatik olarak hedef miktarı set et
+                                            updateAllocation(rowIdx, "amount", String(autoAmount));
+                                          }
+
+                                          return (
+                                            <div key={`${owner.id}-${rowIdx}`} className="flex items-center gap-2">
+                                              <Select
+                                                onValueChange={(value) => updateAllocation(rowIdx, "inventoryId", value)}
+                                                defaultValue={row.inventoryId}
+                                              >
+                                                <SelectTrigger className="w-72"><SelectValue placeholder="Stok Seçin" /></SelectTrigger>
+                                                <SelectContent>
+                                                  {ownerInventories.map(inv => (
+                                                    <SelectItem key={inv.id} value={inv.id}>
+                                                      {inv.name} (Mevcut: {inv.ownerships?.find(o => o.userId === owner.id)?.shareQuantity.toFixed(2)})
+                                                    </SelectItem>
+                                                  ))}
+                                                </SelectContent>
+                                              </Select>
+
+                                              {/* Tek satırda miktar input'unu gizle, çoklu satırda göster */}
+                                              {isSingleRow ? (
+                                                <span className="text-sm text-muted-foreground">
+                                                  {ownerRequiredAmount.toFixed(2)} {inventoryType?.unit}
+                                                </span>
+                                              ) : (
+                                                <Input
+                                                  type="number"
+                                                  step="0.01"
+                                                  className="w-28"
+                                                  value={row.amount ?? 0}
+                                                  onChange={(e) => updateAllocation(rowIdx, "amount", e.target.value)}
+                                                />
+                                              )}
+
+                                              <span className={`text-xs ${autoAmount > ownerShare ? "text-red-600" : "text-muted-foreground"}`}>
+                                                Stok: {ownerShare.toFixed(2)}
+                                              </span>
+
+                                              {/* Tek satırda sil butonu gösterme; çokluysa göster */}
+                                              {!isSingleRow && (
+                                                <Button type="button" variant="ghost" size="icon" onClick={() => removeAllocation(rowIdx)} className="text-red-500">
+                                                  <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                        {currentAllocations.length > 0 && (
+                                          <div className="flex items-center gap-2">
+                                            <Button type="button" variant="outline" size="sm" onClick={addAllocationRow} className="btn-cyberpunk">
+                                              + Stok Ekle
+                                            </Button>
+                                          </div>
+                                        )}
+                                      </div>
                                     </td>
                                   </tr>
                                 )
@@ -1216,7 +1403,8 @@ const response = await fetch(`/api/irrigation/${irrigationLogId}/finalize`, {
                     </div>
                     <div className="space-y-2">
                       <h4 className="font-medium">Sahip Bazında Sulama Süreleri</h4>
-                      <div className="border rounded-md overflow-hidden">
+                        {/* Dark tema uyumu: arka planı transparan, sadece sınırları koru */}
+                        <div className="rounded-md overflow-hidden border border-border bg-transparent">
                         <table className="min-w-full divide-y divide-gray-200">
                           <thead className="bg-gray-100">
                             <tr>
@@ -1229,8 +1417,8 @@ const response = await fetch(`/api/irrigation/${irrigationLogId}/finalize`, {
                             {Object.values(displayOwnerDurations).map((owner) => (
                               <tr key={owner.userId}>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{owner.userName}</td>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{round(owner.irrigatedArea).toFixed(2)}</td>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{round(owner.duration).toFixed(2)}</td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm text-foreground">{round(owner.irrigatedArea).toFixed(2)}</td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm text-foreground">{round(owner.duration).toFixed(2)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -1247,20 +1435,20 @@ const response = await fetch(`/api/irrigation/${irrigationLogId}/finalize`, {
                   {displayInventoryDistribution.length > 0 ? (
                     displayInventoryDistribution.map((inventoryGroup, groupIndex) => (
                       <div key={groupIndex} className="border rounded-md overflow-hidden mb-4">
-                        <div className="bg-gray-100 px-4 py-2">
+                        <div className="bg-transparent px-4 py-2">
                           <span className="font-semibold">{inventoryGroup.inventoryName}</span> - Toplam Kullanılan: {inventoryGroup.totalUsed.toFixed(2)} {inventoryGroup.unit}
                         </div>
                         <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
+                            <thead className="bg-transparent">
                             <tr>
                               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sahip</th>
                               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hesaplanan Pay ({inventoryGroup.unit})</th>
                             </tr>
                           </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
+                            <tbody className="bg-transparent divide-y divide-gray-200">
                             {inventoryGroup.distribution.map((dist, distIndex) => (
                               <tr key={distIndex}>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{dist.ownerName}</td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm text-green-500 dark:text-green-400">{dist.ownerName}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{dist.quantityShare.toFixed(2)}</td>
                               </tr>
                             ))}
