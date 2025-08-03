@@ -258,10 +258,10 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
   const watchedFieldIrrigations = useWatch({ control: form.control, name: "fieldIrrigations" });
 
   useEffect(() => {
-    const fetchFields = async () => {
-      setLoadingFields(true);
-      try {
-        const fieldsRes = await fetch("/api/fields?includeOwnerships=true&fetchAll=true");
+const fetchFields = async () => {
+  setLoadingFields(true);
+  try {
+    const fieldsRes = await fetch("/api/fields?includeOwnerships=true&fetchAll=true", { credentials: "include" });
         if (!fieldsRes.ok) throw new Error('Tarlalar yüklenemedi');
         const fieldsData = await fieldsRes.json();
         setFields(fieldsData.data || []);
@@ -274,10 +274,10 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
     };
     fetchFields();
 
-    const fetchWells = async () => {
-      setLoadingWells(true);
-      try {
-        const wellsRes = await fetch("/api/wells");
+const fetchWells = async () => {
+  setLoadingWells(true);
+  try {
+    const wellsRes = await fetch("/api/wells", { credentials: "include" });
         if (!wellsRes.ok) throw new Error('Kuyular yüklenemedi');
         const wellsData = await wellsRes.json();
         setWells(wellsData.data || []);
@@ -290,11 +290,11 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
     };
     fetchWells();
 
-    const fetchSeasons = async () => { // Yeni sezonları çekme fonksiyonu
-      setLoadingSeasons(true);
-      try {
-        const url = isEditMode ? "/api/seasons?fetchAll=true" : "/api/seasons";
-        const seasonsRes = await fetch(url);
+const fetchSeasons = async () => { // Yeni sezonları çekme fonksiyonu
+  setLoadingSeasons(true);
+  try {
+    const url = isEditMode ? "/api/seasons?fetchAll=true" : "/api/seasons";
+    const seasonsRes = await fetch(url, { credentials: "include" });
         if (!seasonsRes.ok) throw new Error('Sezonlar yüklenemedi');
         const seasonsData = await seasonsRes.json();
         setSeasons(seasonsData.data || []);
@@ -341,7 +341,7 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
 
       try {
         const ownerIdsParam = selectedOwnerIds.join(',');
-        const inventoriesRes = await fetch(`/api/inventory?category=FERTILIZER,PESTICIDE&includeOwnershipDetails=true&userIds=${ownerIdsParam}`);
+        const inventoriesRes = await fetch(`/api/inventory?category=FERTILIZER,PESTICIDE&includeOwnershipDetails=true&userIds=${ownerIdsParam}`, { credentials: "include" });
 
         if (inventoriesRes.ok) {
           const inventoriesData = await inventoriesRes.json();
@@ -383,11 +383,12 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
 
         setLoadingSubmit(true);
         try {
-          const response = await fetch("/api/irrigation", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(formData),
-          });
+const response = await fetch("/api/irrigation", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  credentials: "include",
+  body: JSON.stringify(formData),
+});
 
           if (!response.ok) {
             const errorData = await response.json();
@@ -503,11 +504,12 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
 
         setLoadingSubmit(true);
         try {
-          const response = await fetch(`/api/irrigation/${irrigationLogId}/details`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(formData),
-          });
+const response = await fetch(`/api/irrigation/${irrigationLogId}/details`, {
+  method: "PUT",
+  headers: { "Content-Type": "application/json" },
+  credentials: "include",
+  body: JSON.stringify(formData),
+});
 
           if (!response.ok) {
             const errorData = await response.json();
@@ -781,11 +783,12 @@ export function IrrigationForm({ initialData, irrigationLogId: propIrrigationLog
         costAllocations: costAllocationBreakdownForApi,
       };
 
-      const response = await fetch(`/api/irrigation/${irrigationLogId}/finalize`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
+const response = await fetch(`/api/irrigation/${irrigationLogId}/finalize`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  credentials: "include",
+  body: JSON.stringify(formData),
+});
 
       if (!response.ok) {
         const errorData = await response.json();

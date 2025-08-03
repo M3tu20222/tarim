@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// Route-level ISR (300 sn): Sezonlar nadiren değişir
+export const revalidate = 300;
+
 // Tüm sezonları getir
 export async function GET(request: Request) {
   try {
@@ -25,21 +28,24 @@ export async function GET(request: Request) {
       filter.isActive = true;
     }
 
-    // Sezonları getir
+    // Sezonları getir (projection: yanıtı küçült)
     const seasons = await prisma.season.findMany({
       where: filter,
-      include: {
+      select: {
+        id: true,
+        name: true,
+        startDate: true,
+        endDate: true,
+        isActive: true,
+        // creator minimal
         creator: {
           select: {
             id: true,
             name: true,
-            email: true,
           },
         },
       },
-      orderBy: {
-        startDate: "desc",
-      },
+      orderBy: { startDate: "desc" },
     });
 
     return NextResponse.json({ data: seasons });

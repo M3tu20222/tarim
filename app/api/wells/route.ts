@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// Route-level ISR (300 sn): Kuyular nispeten sık değişmez, DB yükünü azalt
+export const revalidate = 300;
+
 // Tüm kuyuları getir
 export async function GET(request: Request) {
   try {
@@ -33,13 +36,16 @@ export async function GET(request: Request) {
       };
     }
 
-    // Kuyuları getir
+    // Kuyuları getir (projection: yanıtı küçült)
     const wells = await prisma.well.findMany({
       where: filter,
-      // Güncellendi: fieldWells ve içindeki field dahil ediliyor
-      include: {
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        // İlişkiler: sadece gereken alanlar
         fieldWells: {
-          include: {
+          select: {
             field: {
               select: {
                 id: true,
@@ -48,10 +54,8 @@ export async function GET(request: Request) {
             },
           },
         },
-      }, // Fazladan kapanış parantezi kaldırıldı
-      orderBy: {
-        createdAt: "desc",
       },
+      orderBy: { createdAt: "desc" },
     });
 
     return NextResponse.json({ data: wells });

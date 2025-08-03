@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { InventoryCategory, InventoryStatus, Unit } from "@prisma/client"; // Import the actual enum
+import { getServerSideSession } from "@/lib/session";
+
+// Envanter listesi nadiren değişir; DB yükünü azaltmak için ISR
+export const revalidate = 900;
 
 // Tüm envanter öğelerini getir
 export async function GET(request: Request) {
   try {
-    const userId = request.headers.get("x-user-id");
-    const userRole = request.headers.get("x-user-role");
+    const session = await getServerSideSession();
+    if (!session || !session.id) {
+      return NextResponse.json({ error: "Yetkisiz erişim" }, { status: 401 });
+    }
+    const userId = session.id;
+    const userRole = session.role;
 
     if (!userId || !userRole) {
       return NextResponse.json(
@@ -83,28 +91,44 @@ export async function GET(request: Request) {
     // Envanter öğelerini getir
     const inventory = await prisma.inventory.findMany({
       where: filter,
-      include: {
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        totalQuantity: true,
+        unit: true,
+        status: true,
+        purchaseDate: true,
+        expiryDate: true,
+        costPrice: true,
+        updatedAt: true,
+        // Sahiplik: minimal projection
         ownerships: {
-          include: {
+          select: {
+            userId: true,
+            shareQuantity: true,
             user: {
               select: {
                 id: true,
                 name: true,
-                email: true,
               },
             },
           },
         },
+        // Son 3 işlem özet
         inventoryTransactions: {
-          take: 5,
-          orderBy: {
-            date: "desc",
+          take: 3,
+          orderBy: { date: "desc" },
+          select: {
+            id: true,
+            type: true,
+            quantity: true,
+            date: true,
+            userId: true,
           },
         },
       },
-      orderBy: {
-        updatedAt: "desc",
-      },
+      orderBy: { updatedAt: "desc" },
     });
 
     // Map costPrice to unitPrice for frontend compatibility
@@ -129,8 +153,12 @@ export async function GET(request: Request) {
 // Yeni envanter öğesi oluştur
 export async function POST(request: Request) {
   try {
-    const userId = request.headers.get("x-user-id");
-    const userRole = request.headers.get("x-user-role");
+    const session = await getServerSideSession();
+    if (!session || !session.id) {
+      return NextResponse.json({ error: "Yetkisiz erişim" }, { status: 401 });
+    }
+    const userId = session.id;
+    const userRole = session.role;
 
     if (!userId || !userRole) {
       return NextResponse.json(

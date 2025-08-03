@@ -4,6 +4,9 @@ import type { NextRequest } from "next/server";
 import { getServerSideSession } from "@/lib/session";
 import { Prisma } from "@prisma/client";
 
+// Route-level ISR (120 sn): sabit referans veriler için DB yükünü azaltır
+export const revalidate = 120;
+
 // includeOwnerships durumuna bağlı olarak dinamik tip tanımı
 type FieldWithRelations = Prisma.FieldGetPayload<{
   include: {
@@ -83,35 +86,53 @@ export async function GET(request: NextRequest) {
     // Toplam kayıt sayısını al
     const totalCount = await prisma.field.count({ where });
 
-    // Tarlaları getir
-    const fields: FieldWithRelations[] = await prisma.field.findMany({
+    // Tarlaları getir (projection: yanıtı küçült)
+    const fields = await prisma.field.findMany({
       where,
-      include: {
-        season: true,
-        fieldWells: {
-          include: {
-            well: true,
-          },
-        },
+      select: {
+        id: true,
+        name: true,
+        size: true,
+        seasonId: true,
+        // İsteğe bağlı sahiplik bilgileri (yalnızca gereken alanlar)
         ...(includeOwnerships
           ? {
               owners: {
-                include: {
+                select: {
+                  userId: true,
+                  percentage: true,
                   user: {
                     select: {
                       id: true,
                       name: true,
-                      email: true,
                     },
                   },
                 },
               },
             }
-          : { owners: false }),
+          : {}),
+        // Kuyu bilgisi: yalnızca id ve name
+        fieldWells: {
+          select: {
+            well: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+        // Sezon bilgisi minimal
+        season: {
+          select: {
+            id: true,
+            name: true,
+            startDate: true,
+            endDate: true,
+          },
+        },
       },
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: { createdAt: "desc" },
       skip,
       take: limit,
     });
@@ -119,8 +140,11 @@ export async function GET(request: NextRequest) {
     // Prisma'dan gelen 'fields' dizisi doğrudan kullanılacak.
     // formattedFields map işlemi kaldırıldı.
 
+    // Revalidate/TTL: App Router'da route-level revalidate önerilir
+    // Bu dosyanın tepesine `export const revalidate = 120` ekleyebiliriz.
+    // Response init içinde 'next' tipi bulunmadığı için burada standart JSON döndürüyoruz.
     return NextResponse.json({
-      data: fields, // Doğrudan 'fields' dizisini kullan
+      data: fields,
       meta: {
         total: totalCount,
         page,

@@ -52,6 +52,21 @@ import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // API'den gelen veri tipleri
+interface IrrigationOwnerUsage {
+  id: string;
+  owner: { id: string; name: string; email?: string | null };
+  quantity: number; // owner kullanımı miktarı
+  cost?: number | null; // opsiyonel maliyet
+}
+
+interface IrrigationInventoryUsage {
+  id: string;
+  inventory: { id: string; name: string; unit: string };
+  quantity: number; // kullanım miktarı
+  unitCost?: number | null; // birim maliyet (varsa)
+  ownerUsages?: IrrigationOwnerUsage[];
+}
+
 interface IrrigationLog {
   id: string;
   startDateTime: string;
@@ -61,6 +76,7 @@ interface IrrigationLog {
   user: { name: string };
   status: string;
   notes?: string;
+  inventoryUsages?: IrrigationInventoryUsage[]; // API include ediyor
 }
 
 interface ApiResponse {
@@ -108,6 +124,8 @@ export function IrrigationList() {
   const [page, setPage] = useState(1);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [viewItem, setViewItem] = useState<IrrigationLog | null>(null);
 
   // Veri sorguları
   const { data: wellsData = [] } = useQuery({ queryKey: ['wells'], queryFn: () => fetch('/api/wells').then(res => res.json()).then(data => data.data || []) });
@@ -366,7 +384,16 @@ export function IrrigationList() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end space-x-2">
-                            <Button variant="ghost" size="icon" onClick={() => router.push(`/dashboard/owner/irrigation/${log.id}`)}><Eye className="h-4 w-4" /></Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setViewItem(log);
+                                setViewDialogOpen(true);
+                              }}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
                             <Button variant="ghost" size="icon" onClick={() => router.push(`/dashboard/owner/irrigation/${log.id}/edit`)}><Edit className="h-4 w-4" /></Button>
                             <Button variant="ghost" size="icon" className="text-red-500" onClick={() => { setItemToDelete(log.id); setDeleteDialogOpen(true); }}><Trash2 className="h-4 w-4" /></Button>
                           </div>
@@ -389,6 +416,177 @@ export function IrrigationList() {
           </CardContent>
         </Card>
 
+        {/* Görüntüleme (göz) diyaloğu - /dashboard/owner/reports sayfasıyla aynı stil */}
+        <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+          <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Sulama Kaydı Detayı</DialogTitle>
+              <DialogDescription>
+                Seçili sulama kaydına ait özet bilgiler.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {viewItem ? (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Tarih ve Saat</Label>
+                      <div className="flex items-center text-sm">
+                        <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
+                        {format(new Date(viewItem.startDateTime), "dd MMM yyyy", { locale: tr })}
+                        <Clock className="ml-4 mr-2 h-4 w-4 text-muted-foreground" />
+                        {format(new Date(viewItem.startDateTime), "HH:mm", { locale: tr })}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Kuyu</Label>
+                      <div className="text-sm">{viewItem.well?.name || "-"}</div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Süre</Label>
+                      <div className="text-sm">
+                        {Math.floor(viewItem.duration / 60)}s {viewItem.duration % 60}dk
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">İşçi</Label>
+                      <div className="text-sm">{viewItem.user?.name || "-"}</div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Tarlalar</Label>
+                    <div className="flex flex-wrap gap-1">
+                      {viewItem.fieldUsages?.map((usage) => (
+                        <Badge key={usage.id} variant="outline" className="border-yellow-500 text-[rgb(3,207,252)]">
+                          {usage.field?.name} (%{usage.percentage})
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Durum</Label>
+                    <div>{getStatusBadge(viewItem.status)}</div>
+                  </div>
+
+                  {/* Envanter Kullanımı Özeti */}
+                  {Array.isArray(viewItem.inventoryUsages) && viewItem.inventoryUsages.length > 0 && (
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Envanter Kullanımı</Label>
+                      <div className="rounded-md border">
+                        <div className="grid grid-cols-4 text-xs font-medium text-muted-foreground border-b px-3 py-2">
+                          <div>Envanter</div>
+                          <div className="text-right">Miktar</div>
+                          <div className="text-right">Birim Fiyat</div>
+                          <div className="text-right">Toplam Maliyet</div>
+                        </div>
+                        <div className="divide-y">
+                          {viewItem.inventoryUsages.map((iu) => {
+                            const totalCost = iu.unitCost != null ? iu.quantity * iu.unitCost : null;
+                            return (
+                              <div key={iu.id} className="grid grid-cols-4 items-center px-3 py-2 text-sm">
+                                <div className="truncate">{iu.inventory?.name}</div>
+                                <div className="text-right">{Number(iu.quantity).toFixed(2)} {iu.inventory?.unit}</div>
+                                <div className="text-right">{iu.unitCost != null ? `${iu.unitCost.toFixed(2)} TL` : "-"}</div>
+                                <div className="text-right">{totalCost != null ? `${totalCost.toFixed(2)} TL` : "-"}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sahip Bazlı Envanter Kullanımı */}
+                  {Array.isArray(viewItem.inventoryUsages) && viewItem.inventoryUsages.some(iu => Array.isArray(iu.ownerUsages) && iu.ownerUsages.length > 0) && (
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Sahip Bazlı Envanter Kullanımı</Label>
+                      <div className="space-y-3">
+                        {(() => {
+                          // ownerId bazlı grupla
+                          const ownerMap = new Map<string, { ownerName: string; ownerEmail?: string | null; items: { name: string; quantity: number; unit: string; cost?: number | null }[] }>();
+                          viewItem.inventoryUsages!.forEach(iu => {
+                            (iu.ownerUsages || []).forEach(ou => {
+                              const key = ou.owner.id;
+                              const entry = ownerMap.get(key) || { ownerName: ou.owner.name, ownerEmail: ou.owner.email, items: [] };
+                              entry.items.push({
+                                name: iu.inventory.name,
+                                quantity: ou.quantity,
+                                unit: iu.inventory.unit,
+                                cost: ou.cost ?? (iu.unitCost != null ? ou.quantity * iu.unitCost : null)
+                              });
+                              ownerMap.set(key, entry);
+                            });
+                          });
+                          const owners = Array.from(ownerMap.entries());
+                          return owners.map(([ownerId, data]) => {
+                            const totalCost = data.items.reduce((sum, it) => sum + (it.cost || 0), 0);
+                            return (
+                              <div key={ownerId} className="rounded-md border">
+                                <div className="px-3 py-2 border-b">
+                                  <div className="text-sm font-medium">{data.ownerName}{data.ownerEmail ? ` (${data.ownerEmail})` : ""}</div>
+                                </div>
+                                <div className="grid grid-cols-3 text-xs font-medium text-muted-foreground border-b px-3 py-2">
+                                  <div>Envanter</div>
+                                  <div className="text-right">Miktar</div>
+                                  <div className="text-right">Maliyet</div>
+                                </div>
+                                <div className="divide-y">
+                                  {data.items.map((it, idx) => (
+                                    <div key={idx} className="grid grid-cols-3 items-center px-3 py-2 text-sm">
+                                      <div className="truncate">{it.name}</div>
+                                      <div className="text-right">{Number(it.quantity).toFixed(2)} {it.unit}</div>
+                                      <div className="text-right">{it.cost != null ? `${it.cost.toFixed(2)} TL` : "-"}</div>
+                                    </div>
+                                  ))}
+                                  <div className="grid grid-cols-3 items-center px-3 py-2 text-sm font-medium">
+                                    <div className="text-right col-span-2">Toplam</div>
+                                    <div className="text-right">{totalCost > 0 ? `${totalCost.toFixed(2)} TL` : "-"}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
+                  {viewItem.notes && (
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Not</Label>
+                      <div className="flex items-start gap-2 text-sm">
+                        <StickyNote className="h-4 w-4 text-muted-foreground mt-0.5" />
+                        <p className="whitespace-pre-wrap">{viewItem.notes}</p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-sm text-muted-foreground">Kayıt yükleniyor...</div>
+              )}
+            </div>
+            <DialogFooter className="sm:justify-between">
+              <div className="text-xs text-muted-foreground">Detayları görüntüleme penceresi</div>
+              <div className="flex gap-2">
+                {viewItem && (
+                  <>
+                    <Button variant="outline" onClick={() => { setViewDialogOpen(false); router.push(`/dashboard/owner/irrigation/${viewItem.id}`); }}>
+                      Tam Sayfada Aç
+                    </Button>
+                    <Button onClick={() => { setViewDialogOpen(false); router.push(`/dashboard/owner/irrigation/${viewItem.id}/edit`); }}>
+                      Düzenle
+                    </Button>
+                  </>
+                )}
+                <Button variant="secondary" onClick={() => setViewDialogOpen(false)}>Kapat</Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Silme diyaloğu */}
         <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
           <DialogContent>
             <DialogHeader>

@@ -6,6 +6,10 @@ import type {
   Unit,
   TransactionType,
 } from "@prisma/client";
+import { getServerSideSession } from "@/lib/session";
+
+// Envanter detayları seyrek değişir; route-level ISR ile cache
+export const revalidate = 900;
 
 // Belirli bir envanter öğesini getir
 export async function GET(
@@ -13,8 +17,12 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const userId = request.headers.get("x-user-id");
-    const userRole = request.headers.get("x-user-role");
+    const session = await getServerSideSession();
+    if (!session || !session.id) {
+      return NextResponse.json({ error: "Yetkisiz erişim" }, { status: 401 });
+    }
+    const userId = session.id;
+    const userRole = session.role;
 
     if (!userId || !userRole) {
       return NextResponse.json(
@@ -24,34 +32,39 @@ export async function GET(
     }
 
     // params nesnesini await ile beklet
-    const awaitedParams = await params;
-    const inventoryId = awaitedParams.id;
+    const inventoryId = params.id;
 
     const inventory = await prisma.inventory.findUnique({
       where: { id: inventoryId },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        totalQuantity: true,
+        unit: true,
+        status: true,
+        purchaseDate: true,
+        expiryDate: true,
+        costPrice: true,
+        notes: true,
+        updatedAt: true,
         ownerships: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
+          select: {
+            id: true,
+            userId: true,
+            shareQuantity: true,
+            user: { select: { id: true, name: true, email: true } },
           },
         },
         inventoryTransactions: {
-          orderBy: {
-            date: "desc",
-          },
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
+          orderBy: { date: "desc" },
+          select: {
+            id: true,
+            type: true,
+            quantity: true,
+            date: true,
+            notes: true,
+            user: { select: { id: true, name: true } },
           },
         },
       },
@@ -80,8 +93,12 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const userId = request.headers.get("x-user-id");
-    const userRole = request.headers.get("x-user-role");
+    const session = await getServerSideSession();
+    if (!session || !session.id) {
+      return NextResponse.json({ error: "Yetkisiz erişim" }, { status: 401 });
+    }
+    const userId = session.id;
+    const userRole = session.role;
 
     if (!userId || !userRole) {
       return NextResponse.json(
@@ -99,8 +116,7 @@ export async function PUT(
     }
 
     // params nesnesini await ile beklet
-    const awaitedParams = await params;
-    const inventoryId = awaitedParams.id;
+    const inventoryId = params.id;
 
     const {
       name,
@@ -124,9 +140,7 @@ export async function PUT(
     // Mevcut envanteri kontrol et
     const existingInventory = await prisma.inventory.findUnique({
       where: { id: inventoryId },
-      include: {
-        ownerships: true,
-      },
+      include: { ownerships: true },
     });
 
     if (!existingInventory) {
@@ -199,15 +213,12 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const userId = request.headers.get("x-user-id");
-    const userRole = request.headers.get("x-user-role");
-
-    if (!userId || !userRole) {
-      return NextResponse.json(
-        { error: "Kullanıcı ID'si veya rolü eksik" },
-        { status: 401 }
-      );
+    const session = await getServerSideSession();
+    if (!session || !session.id) {
+      return NextResponse.json({ error: "Yetkisiz erişim" }, { status: 401 });
     }
+    const userId = session.id;
+    const userRole = session.role;
 
     // Sadece admin ve sahip kullanıcılar envanter silebilir
     if (userRole !== "ADMIN" && userRole !== "OWNER") {
@@ -217,9 +228,8 @@ export async function DELETE(
       );
     }
 
-    // params nesnesini await ile beklet
-    const awaitedParams = await params;
-    const inventoryId = awaitedParams.id;
+    // params doğrudan kullan
+    const inventoryId = params.id;
 
     // Mevcut envanteri kontrol et
     const existingInventory = await prisma.inventory.findUnique({
