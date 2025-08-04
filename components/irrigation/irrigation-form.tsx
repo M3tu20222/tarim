@@ -1393,8 +1393,8 @@ const response = await fetch(`/api/irrigation/${irrigationLogId}/finalize`, {
             )}
 
             {currentStep === 3 && (
-              <div className="space-y-4 border p-4 rounded-md bg-gray-50 mt-6">
-                <h3 className="text-lg font-medium">Hesaplanan Değerler (Önizleme)</h3>
+              <div className="space-y-4 border border-purple-500/30 rounded-md bg-background/70 backdrop-blur-sm mt-6">
+                <h3 className="text-lg font-medium neon-text-cyan">Hesaplanan Değerler (Önizleme)</h3>
                 {displayTotalIrrigatedArea > 0 ? (
                   <>
                     <div className="space-y-2">
@@ -1402,21 +1402,20 @@ const response = await fetch(`/api/irrigation/${irrigationLogId}/finalize`, {
                       <p>{displayTotalIrrigatedArea.toFixed(2)} dekar</p>
                     </div>
                     <div className="space-y-2">
-                      <h4 className="font-medium">Sahip Bazında Sulama Süreleri</h4>
-                        {/* Dark tema uyumu: arka planı transparan, sadece sınırları koru */}
-                        <div className="rounded-md overflow-hidden border border-border bg-transparent">
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-100">
+                      <h4 className="font-medium neon-text-pink">Sahip Bazında Sulama Süreleri</h4>
+                      <div className="rounded-md overflow-hidden border border-purple-500/30 bg-background/60 backdrop-blur-sm">
+                        <table className="min-w-full divide-y divide-purple-500/30">
+                          <thead className="bg-muted/50">
                             <tr>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sahip</th>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sulanan Alan (dekar)</th>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Süre (dakika)</th>
+                              <th className="px-4 py-2 text-left text-xs font-bold neon-text-pink uppercase tracking-wider">Sahip</th>
+                              <th className="px-4 py-2 text-left text-xs font-bold neon-text-pink uppercase tracking-wider">Sulanan Alan (dekar)</th>
+                              <th className="px-4 py-2 text-left text-xs font-bold neon-text-pink uppercase tracking-wider">Süre (dakika)</th>
                             </tr>
                           </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
+                          <tbody className="bg-background/40 divide-y divide-purple-500/30">
                             {Object.values(displayOwnerDurations).map((owner) => (
-                              <tr key={owner.userId}>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{owner.userName}</td>
+                              <tr key={owner.userId} className="hover:bg-purple-500/10 transition-colors">
+                                <td className="px-4 py-2 whitespace-nowrap text-sm text-foreground">{owner.userName}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm text-foreground">{round(owner.irrigatedArea).toFixed(2)}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm text-foreground">{round(owner.duration).toFixed(2)}</td>
                               </tr>
@@ -1431,25 +1430,25 @@ const response = await fetch(`/api/irrigation/${irrigationLogId}/finalize`, {
                 )}
 
                 <div className="space-y-2">
-                  <h4 className="font-medium">Hesaplanan Envanter Dağılımı</h4>
+                  <h4 className="font-medium neon-text-pink">Hesaplanan Envanter Dağılımı</h4>
                   {displayInventoryDistribution.length > 0 ? (
                     displayInventoryDistribution.map((inventoryGroup, groupIndex) => (
-                      <div key={groupIndex} className="border rounded-md overflow-hidden mb-4">
-                        <div className="bg-transparent px-4 py-2">
-                          <span className="font-semibold">{inventoryGroup.inventoryName}</span> - Toplam Kullanılan: {inventoryGroup.totalUsed.toFixed(2)} {inventoryGroup.unit}
+                      <div key={groupIndex} className="border border-purple-500/30 rounded-md overflow-hidden mb-4 bg-background/60 backdrop-blur-sm">
+                        <div className="px-4 py-2">
+                          <span className="font-semibold neon-text-cyan">{inventoryGroup.inventoryName}</span> - Toplam Kullanılan: {inventoryGroup.totalUsed.toFixed(2)} {inventoryGroup.unit}
                         </div>
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-transparent">
+                        <table className="min-w-full divide-y divide-purple-500/30">
+                          <thead className="bg-muted/50">
                             <tr>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sahip</th>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hesaplanan Pay ({inventoryGroup.unit})</th>
+                              <th className="px-4 py-2 text-left text-xs font-bold neon-text-pink uppercase tracking-wider">Sahip</th>
+                              <th className="px-4 py-2 text-left text-xs font-bold neon-text-pink uppercase tracking-wider">Hesaplanan Pay ({inventoryGroup.unit})</th>
                             </tr>
                           </thead>
-                            <tbody className="bg-transparent divide-y divide-gray-200">
+                          <tbody className="bg-background/40 divide-y divide-purple-500/30">
                             {inventoryGroup.distribution.map((dist, distIndex) => (
-                              <tr key={distIndex}>
+                              <tr key={distIndex} className="hover:bg-purple-500/10 transition-colors">
                                 <td className="px-4 py-2 whitespace-nowrap text-sm text-green-500 dark:text-green-400">{dist.ownerName}</td>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{dist.quantityShare.toFixed(2)}</td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm text-foreground">{dist.quantityShare.toFixed(2)}</td>
                               </tr>
                             ))}
                           </tbody>

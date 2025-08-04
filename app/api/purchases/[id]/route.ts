@@ -115,10 +115,44 @@ export async function PUT(
        // Bu işlem, transaction başlamadan önce bulunan inventoryIdsToDelete listesini kullanır.
        if (inventoryIdsToDelete.length > 0) {
            console.log(`Purchase ${purchaseId} update: Deleting old inventory data for IDs: ${inventoryIdsToDelete.join(', ')}`);
+           // 0) Sulama envanter kullanım zinciri: IrrigationInventoryOwnerUsage -> IrrigationInventoryUsage -> Inventory
+           // Önce owner usage kayıtlarını, sonra irrigation inventory usage kayıtlarını sil.
+           try {
+             // OwnerUsage -> Usage
+             // @ts-ignore - Prisma Client'ta mevcut
+             await tx.irrigationInventoryOwnerUsage.deleteMany({
+               where: { irrigationInventoryUsage: { inventoryId: { in: inventoryIdsToDelete } } },
+             });
+             // @ts-ignore - Prisma Client'ta mevcut
+             await tx.irrigationInventoryUsage.deleteMany({
+               where: { inventoryId: { in: inventoryIdsToDelete } },
+             });
+             console.log(`Purchase ${purchaseId} update: Deleted irrigation inventory owner usages and usages.`);
+           } catch (e) {
+             const msg = (e as any)?.message ?? String(e);
+             console.warn("Irrigation inventory usage cleanup info:", msg);
+           }
+           // 1) Genel envanter kullanım, işlem ve sahiplik kayıtlarını sil
            await tx.inventoryUsage.deleteMany({ where: { inventoryId: { in: inventoryIdsToDelete } } });
-           await tx.inventoryTransaction.deleteMany({ where: { inventoryId: { in: inventoryIdsToDelete } } }); // purchaseId ile ilişkili olanları da siler
+           await tx.inventoryTransaction.deleteMany({ where: { inventoryId: { in: inventoryIdsToDelete } } });
            await tx.inventoryOwnership.deleteMany({ where: { inventoryId: { in: inventoryIdsToDelete } } });
-           await tx.inventory.deleteMany({ where: { id: { in: inventoryIdsToDelete } } });
+           // 2) En son Inventory kayıtlarını sil (önce toplu, sonra tek tek fallback)
+           try {
+             await tx.inventory.deleteMany({ where: { id: { in: inventoryIdsToDelete } } });
+           } catch (err) {
+             console.warn("Batch inventory deleteMany failed, falling back to per-item delete. Reason:", (err as any)?.message);
+             for (const invId of inventoryIdsToDelete) {
+               // Güvenlik için zinciri tek tek yinele
+               // @ts-ignore
+               await tx.irrigationInventoryOwnerUsage.deleteMany({ where: { irrigationInventoryUsage: { inventoryId: invId } } });
+               // @ts-ignore
+               await tx.irrigationInventoryUsage.deleteMany({ where: { inventoryId: invId } });
+               await tx.inventoryUsage.deleteMany({ where: { inventoryId: invId } });
+               await tx.inventoryTransaction.deleteMany({ where: { inventoryId: invId } });
+               await tx.inventoryOwnership.deleteMany({ where: { inventoryId: invId } });
+               await tx.inventory.delete({ where: { id: invId } });
+             }
+           }
            console.log(`Purchase ${purchaseId} update: Deleted ${inventoryIdsToDelete.length} old inventory records and related data.`);
        }
 

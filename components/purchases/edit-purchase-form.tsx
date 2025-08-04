@@ -105,7 +105,7 @@ export function EditPurchaseForm({ purchase }: { purchase: any }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
   const [totalPercentage, setTotalPercentage] = useState(0);
-  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [seasons, setSeasons] = useState<Season[] | null>(null);
 
   // Format partners data from purchase
   const initialPartners = purchase.contributors.map((contributor: any) => ({
@@ -184,13 +184,23 @@ export function EditPurchaseForm({ purchase }: { purchase: any }) {
 
     const fetchSeasons = async () => {
       try {
-        const response = await fetch("/api/seasons");
+        const response = await fetch("/api/seasons", {
+          headers: {
+            "x-user-id": typeof window !== "undefined" ? (window as any)?.APP_USER_ID ?? "" : "",
+            "x-user-role": typeof window !== "undefined" ? (window as any)?.APP_USER_ROLE ?? "" : "",
+          },
+        });
         if (response.ok) {
           const data = await response.json();
-          setSeasons(data);
+          // API /api/seasons GET: { data: Season[] }
+          const list = Array.isArray(data?.data) ? data.data : [];
+          setSeasons(list);
+        } else {
+          setSeasons([]);
         }
       } catch (error) {
         console.error("Error fetching seasons:", error);
+        setSeasons([]);
       }
     };
 
@@ -488,16 +498,21 @@ export function EditPurchaseForm({ purchase }: { purchase: any }) {
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {seasons.length === 0 ? (
+                    {Array.isArray(seasons) && seasons.length === 0 && (
                       <SelectItem value="no-season" disabled>
                         Sezon bulunamadı
                       </SelectItem>
-                    ) : (
+                    )}
+                    {Array.isArray(seasons) &&
                       seasons.map((season) => (
                         <SelectItem key={season.id} value={season.id}>
                           {season.name} {season.isActive && "(Aktif)"}
                         </SelectItem>
-                      ))
+                      ))}
+                    {!Array.isArray(seasons) && (
+                      <SelectItem value="loading" disabled>
+                        Sezonlar yükleniyor...
+                      </SelectItem>
                     )}
                   </SelectContent>
                 </Select>
@@ -574,7 +589,7 @@ export function EditPurchaseForm({ purchase }: { purchase: any }) {
         />
 
         {/* Partners Section */}
-        <Card>
+        <Card className="border border-purple-500/30 rounded-md bg-background/70 backdrop-blur-sm">
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               <span>Ortaklar</span>
@@ -632,7 +647,7 @@ export function EditPurchaseForm({ purchase }: { purchase: any }) {
             )}
 
             {fields.map((field, index) => (
-              <div key={field.id} className="rounded-md border p-4">
+              <div key={field.id} className="rounded-md border border-purple-500/30 bg-background/60 backdrop-blur-sm p-4">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                   <FormField
                     control={form.control}
