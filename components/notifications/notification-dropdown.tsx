@@ -31,7 +31,7 @@ export function NotificationDropdown() {
     fetchNotificationSummary();
 
     // Periyodik kontrol için timer
-    const intervalId = setInterval(fetchNotificationSummary, 60000); // Her dakika kontrol et
+    const intervalId = setInterval(fetchNotificationSummary, 900000); // Her 15 dakikada bir kontrol et
 
     return () => clearInterval(intervalId);
   }, []);

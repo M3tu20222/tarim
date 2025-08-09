@@ -22,7 +22,7 @@ export function NotificationCounter() {
     fetchCount();
 
     // Düzenli olarak bildirim sayısını güncelle
-    const interval = setInterval(fetchCount, 60000); // Her dakika
+    const interval = setInterval(fetchCount, 900000); // Her 15 dakikada bir
 
     return () => clearInterval(interval);
   }, []);
