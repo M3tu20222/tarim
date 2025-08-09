@@ -2,13 +2,30 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { NotificationList } from "@/components/notifications/notification-list";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { getSession, getServerSideSession } from "@/lib/session"; // getServerSideSession import edildi
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { verifyToken } from "@/lib/jwt";
+
+interface Session {
+  id: string;
+  role: string;
+}
 
 export default async function NotificationsPage() {
-  const session = await getServerSideSession(); // getSession yerine getServerSideSession kullanıldı
+  const cookieStore = await cookies();
+  const token = cookieStore.get("token")?.value;
 
-  console.log("Session object in notifications page:", session); // Session objesini logla
+  if (!token) {
+    redirect("/login");
+  }
+
+  let session: Session | null = null;
+  try {
+    session = await verifyToken(token);
+  } catch (error) {
+    console.error("Token verification failed:", error);
+    redirect("/login");
+  }
 
   if (!session) {
     redirect("/login");
