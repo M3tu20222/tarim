@@ -174,6 +174,14 @@ export function IrrigationList() {
         .then((data) => data.data || []),
   });
 
+  // Seçili kuya göre tarlaları filtrele
+  const filteredFieldsData = fieldsData.filter((field: any) => {
+    if (!filters.wellId) return true;
+    // Prisma şemasına göre Field ve Well arasında FieldWell modeli ile bir ilişki var.
+    // API'den gelen veri yapısı { well: { id: '...' } } şeklinde olduğu için fw.well.id olarak erişiyoruz.
+    return field.fieldWells?.some((fw: any) => fw.well?.id === filters.wellId);
+  });
+
   const { data, isLoading, isError, error } = useQuery<ApiResponse, Error>({
     queryKey: ["irrigationLogs", filters, page],
     queryFn: () => fetchIrrigationLogs(filters, page),
@@ -241,223 +249,218 @@ export function IrrigationList() {
   return (
     <TooltipProvider>
       <div className="space-y-4">
-        <Card>
+        <Card className="card-cyberpunk">
           <CardHeader>
-            <CardTitle>Filtreler</CardTitle>
-            <CardDescription>
+            <CardTitle className="neon-text-cyan">Filtreler</CardTitle>
+            <CardDescription className="text-muted-foreground">
               Sulama kayıtlarını filtrelemek için aşağıdaki seçenekleri
               kullanın.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {/* Filter Controls */}
-              <div className="space-y-2">
-                <Label htmlFor="wellId">Kuyu</Label>
-                <Select
-                  value={filters.wellId}
-                  onValueChange={(value) =>
-                    setFilters({
-                      ...filters,
-                      wellId: value === "all" ? "" : value,
-                    })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tüm Kuyular" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tüm Kuyular</SelectItem>
-                    {wellsData.map((well: any) => (
-                      <SelectItem key={well.id} value={well.id}>
-                        {well.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="fieldId">Tarla</Label>
-                <Select
-                  value={filters.fieldId}
-                  onValueChange={(value) =>
-                    setFilters({
-                      ...filters,
-                      fieldId: value === "all" ? "" : value,
-                    })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tüm Tarlalar" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tüm Tarlalar</SelectItem>
-                    {fieldsData.map((field: any) => (
-                      <SelectItem key={field.id} value={field.id}>
-                        {field.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="seasonId">Sezon</Label>
-                <Select
-                  value={filters.seasonId}
-                  onValueChange={(value) =>
-                    setFilters({
-                      ...filters,
-                      seasonId: value === "all" ? "" : value,
-                    })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tüm Sezonlar" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tüm Sezonlar</SelectItem>
-                    {seasonsData.map((season: any) => (
-                      <SelectItem key={season.id} value={season.id}>
-                        {season.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="status">Durum</Label>
-                <Select
-                  value={filters.status}
-                  onValueChange={(value) =>
-                    setFilters({
-                      ...filters,
-                      status: value === "all" ? "" : value,
-                    })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tüm Durumlar" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tüm Durumlar</SelectItem>
-                    <SelectItem value="COMPLETED">Tamamlandı</SelectItem>
-                    <SelectItem value="PLANNED">Planlandı</SelectItem>
-                    <SelectItem value="CANCELLED">İptal Edildi</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Başlangıç Tarihi</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !filters.startDate && "text-muted-foreground"
-                      )}
-                    >
-                      <Calendar className="mr-2 h-4 w-4" />
-                      {filters.startDate ? (
-                        format(filters.startDate, "PPP", { locale: tr })
-                      ) : (
-                        <span>Tarih Seçin</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                    <CalendarComponent
-                      mode="single"
-                      selected={filters.startDate || undefined}
-                      onSelect={(date) =>
-                        setFilters({ ...filters, startDate: date || null })
-                      }
-                      initialFocus
-                      locale={tr}
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <div className="space-y-2">
-                <Label>Bitiş Tarihi</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !filters.endDate && "text-muted-foreground"
-                      )}
-                    >
-                      <Calendar className="mr-2 h-4 w-4" />
-                      {filters.endDate ? (
-                        format(filters.endDate, "PPP", { locale: tr })
-                      ) : (
-                        <span>Tarih Seçin</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                    <CalendarComponent
-                      mode="single"
-                      selected={filters.endDate || undefined}
-                      onSelect={(date) =>
-                        setFilters({ ...filters, endDate: date || null })
-                      }
-                      initialFocus
-                      locale={tr}
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="createdBy">İşçi</Label>
-                <Select
-                  value={filters.createdBy}
-                  onValueChange={(value) =>
-                    setFilters({
-                      ...filters,
-                      createdBy: value === "all" ? "" : value,
-                    })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tüm İşçiler" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tüm İşçiler</SelectItem>
-                    {workersData.map((worker: any) => (
-                      <SelectItem key={worker.id} value={worker.id}>
-                        {worker.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+          <CardContent className="flex flex-col md:flex-row gap-4 items-end">
+            <div className="flex-1 space-y-2">
+              <Label className="block text-sm font-medium neon-text-pink">Kuyu</Label>
+              <Select
+                value={filters.wellId}
+                onValueChange={(value) =>
+                  setFilters({
+                    ...filters,
+                    wellId: value === "all" ? "" : value,
+                    fieldId: "", // Kuyu filtresi değiştiğinde tarla filtresini sıfırla
+                  })
+                }
+              >
+                <SelectTrigger className="neon-border">
+                  <SelectValue placeholder="Tüm Kuyular" />
+                </SelectTrigger>
+                <SelectContent className="bg-background/80 backdrop-blur-sm border-purple-500/30 max-h-60 overflow-y-auto">
+                  <SelectItem value="all">Tüm Kuyular</SelectItem>
+                  {wellsData.map((well: any) => (
+                    <SelectItem key={well.id} value={well.id} className="hover:bg-purple-500/20">
+                      {well.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1 space-y-2">
+              <Label className="block text-sm font-medium neon-text-pink">Tarla</Label>
+              <Select
+                value={filters.fieldId}
+                onValueChange={(value) =>
+                  setFilters({
+                    ...filters,
+                    fieldId: value === "all" ? "" : value,
+                  })
+                }
+              >
+                <SelectTrigger className="neon-border">
+                  <SelectValue placeholder="Tüm Tarlalar" />
+                </SelectTrigger>
+                <SelectContent className="bg-background/80 backdrop-blur-sm border-purple-500/30 max-h-60 overflow-y-auto">
+                  <SelectItem value="all">Tüm Tarlalar</SelectItem>
+                  {filteredFieldsData.map((field: any) => (
+                    <SelectItem key={field.id} value={field.id} className="hover:bg-purple-500/20">
+                      {field.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1 space-y-2">
+              <Label className="block text-sm font-medium neon-text-pink">Sezon</Label>
+              <Select
+                value={filters.seasonId}
+                onValueChange={(value) =>
+                  setFilters({
+                    ...filters,
+                    seasonId: value === "all" ? "" : value,
+                  })
+                }
+              >
+                <SelectTrigger className="neon-border">
+                  <SelectValue placeholder="Tüm Sezonlar" />
+                </SelectTrigger>
+                <SelectContent className="bg-background/80 backdrop-blur-sm border-purple-500/30 max-h-60 overflow-y-auto">
+                  <SelectItem value="all">Tüm Sezonlar</SelectItem>
+                  {seasonsData.map((season: any) => (
+                    <SelectItem key={season.id} value={season.id} className="hover:bg-purple-500/20">
+                      {season.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1 space-y-2">
+              <Label className="block text-sm font-medium neon-text-pink">Durum</Label>
+              <Select
+                value={filters.status}
+                onValueChange={(value) =>
+                  setFilters({
+                    ...filters,
+                    status: value === "all" ? "" : value,
+                  })
+                }
+              >
+                <SelectTrigger className="neon-border">
+                  <SelectValue placeholder="Tüm Durumlar" />
+                </SelectTrigger>
+                <SelectContent className="bg-background/80 backdrop-blur-sm border-purple-500/30 max-h-60 overflow-y-auto">
+                  <SelectItem value="all">Tüm Durumlar</SelectItem>
+                  <SelectItem value="COMPLETED">Tamamlandı</SelectItem>
+                  <SelectItem value="PLANNED">Planlandı</SelectItem>
+                  <SelectItem value="CANCELLED">İptal Edildi</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1 space-y-2">
+              <Label className="block text-sm font-medium neon-text-pink">Başlangıç Tarihi</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal neon-border",
+                      !filters.startDate && "text-muted-foreground"
+                    )}
+                  >
+                    <Calendar className="mr-2 h-4 w-4" />
+                    {filters.startDate ? (
+                      format(filters.startDate, "PPP", { locale: tr })
+                    ) : (
+                      <span>Tarih Seçin</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0 neon-border">
+                  <CalendarComponent
+                    mode="single"
+                    selected={filters.startDate || undefined}
+                    onSelect={(date) =>
+                      setFilters({ ...filters, startDate: date || null })
+                    }
+                    initialFocus
+                    locale={tr}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="flex-1 space-y-2">
+              <Label className="block text-sm font-medium neon-text-pink">Bitiş Tarihi</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal neon-border",
+                      !filters.endDate && "text-muted-foreground"
+                    )}
+                  >
+                    <Calendar className="mr-2 h-4 w-4" />
+                    {filters.endDate ? (
+                      format(filters.endDate, "PPP", { locale: tr })
+                    ) : (
+                      <span>Tarih Seçin</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0 neon-border">
+                  <CalendarComponent
+                    mode="single"
+                    selected={filters.endDate || undefined}
+                    onSelect={(date) =>
+                      setFilters({ ...filters, endDate: date || null })
+                    }
+                    initialFocus
+                    locale={tr}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="flex-1 space-y-2">
+              <Label className="block text-sm font-medium neon-text-pink">İşçi</Label>
+              <Select
+                value={filters.createdBy}
+                onValueChange={(value) =>
+                  setFilters({
+                    ...filters,
+                    createdBy: value === "all" ? "" : value,
+                  })
+                }
+              >
+                <SelectTrigger className="neon-border">
+                  <SelectValue placeholder="Tüm İşçiler" />
+                </SelectTrigger>
+                <SelectContent className="bg-background/80 backdrop-blur-sm border-purple-500/30 max-h-60 overflow-y-auto">
+                  <SelectItem value="all">Tüm İşçiler</SelectItem>
+                  {workersData.map((worker: any) => (
+                    <SelectItem key={worker.id} value={worker.id} className="hover:bg-purple-500/20">
+                      {worker.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
           <CardFooter className="flex justify-end">
-            <Button variant="outline" onClick={clearFilters}>
+            <Button variant="outline" onClick={clearFilters} className="neon-border">
               Filtreleri Temizle
             </Button>
           </CardFooter>
         </Card>
 
-        <Card>
+        <Card className="card-cyberpunk">
           <CardHeader>
-            <div className="flex justify-between items-center">
-              <div>
-                <CardTitle>Sulama Kayıtları</CardTitle>
-                <CardDescription>
-                  Toplam {totalRecords} kayıt bulundu. Sayfa {page}/{totalPages}
-                </CardDescription>
-              </div>
-              <Button
-                onClick={() => router.push("/dashboard/owner/irrigation/new")}
-              >
-                Yeni Sulama Kaydı
-              </Button>
-            </div>
+            <CardTitle className="neon-text-cyan">Sulama Kayıtları</CardTitle>
+            <CardDescription className="text-muted-foreground">
+              Toplam {totalRecords} kayıt bulundu. Sayfa {page}/{totalPages}
+            </CardDescription>
+            <Button
+              onClick={() => router.push("/dashboard/owner/irrigation/new")}
+              className="btn-cyberpunk"
+            >
+              Yeni Sulama Kaydı
+            </Button>
           </CardHeader>
           <CardContent>
             {isLoading ? (

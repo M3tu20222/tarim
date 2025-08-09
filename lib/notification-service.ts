@@ -204,3 +204,25 @@ export const NotificationService = {
     });
   },
 };
+
+// Bu fonksiyon, zamanlanmış görevler (cron jobs) gibi sunucu tarafı işlemlerinde
+// gönderilmeyi bekleyen bildirimleri işlemek için kullanılır.
+export async function sendNotifications(): Promise<void> {
+  try {
+    // TODO: Veritabanından gönderilmeyi bekleyen bildirimleri al.
+    // Örnek: const pendingNotifications = await prisma.notification.findMany({ where: { sent: false } });
+    
+    // TODO: Her bir bildirimi gönder ve durumunu güncelle.
+    // for (const notification of pendingNotifications) {
+    //   // Gönderme mantığı (örn: email, push notification)
+    //   await prisma.notification.update({
+    //     where: { id: notification.id },
+    //     data: { sent: true, sentAt: new Date() },
+    //   });
+    // }
+
+    console.log("Periodic notification check complete.");
+  } catch (error) {
+    console.error("Error in sendNotifications cron job:", error);
+  }
+}

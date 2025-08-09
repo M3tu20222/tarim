@@ -1,15 +1,13 @@
-import type { Metadata } from "next";
-import { IrrigationList } from "@/components/irrigation/irrigation-list";
+"use client";
 
-export const metadata: Metadata = {
-  title: "Sulama Kayıtları | Tarım Yönetim Sistemi",
-  description: "Tarla sulama kayıtlarını görüntüle ve yönet",
-};
+import { IrrigationList } from "@/components/irrigation/irrigation-list";
 
 export default function IrrigationPage() {
   return (
-    <div className="container mx-auto py-6">
-      <h1 className="text-2xl font-bold mb-6">Sulama Kayıtları</h1>
+    <div className="space-y-8 cyberpunk-grid p-4 md:p-6">
+      <h1 className="text-3xl md:text-4xl font-bold neon-text-purple animate-flicker">
+        Sulama Kayıtları
+      </h1>
       <IrrigationList />
     </div>
   );

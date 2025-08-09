@@ -124,40 +124,40 @@ body {
 
 /* Neon efektleri için yardımcı sınıflar */
 .neon-border {
-  box-shadow: 0 0 5px theme("colors.purple.500"), 0 0 10px theme("colors.purple.500");
+  box-shadow: 0 0 2px theme("colors.purple.500"), 0 0 4px theme("colors.purple.500");
   border: 1px solid theme("colors.purple.500");
 }
 
 .neon-text-purple {
   color: theme("colors.purple.400");
-  text-shadow: 0 0 5px theme("colors.purple.500"), 0 0 10px theme("colors.purple.500");
+  text-shadow: 0 0 2px theme("colors.purple.500"), 0 0 4px theme("colors.purple.500");
 }
 
 .neon-text-cyan {
   color: theme("colors.cyan.400");
-  text-shadow: 0 0 5px theme("colors.cyan.500"), 0 0 10px theme("colors.cyan.500");
+  text-shadow: 0 0 2px theme("colors.cyan.500"), 0 0 4px theme("colors.cyan.500");
 }
 
 .neon-text-pink {
   color: theme("colors.pink.400");
-  text-shadow: 0 0 5px theme("colors.pink.500"), 0 0 10px theme("colors.pink.500");
+  text-shadow: 0 0 2px theme("colors.pink.500"), 0 0 4px theme("colors.pink.500");
 }
 
 .neon-text-green {
   color: theme("colors.green.400");
-  text-shadow: 0 0 5px theme("colors.green.500"), 0 0 10px theme("colors.green.500");
+  text-shadow: 0 0 2px theme("colors.green.500"), 0 0 4px theme("colors.green.500");
 }
 
 .neon-glow {
-  box-shadow: 0 0 5px theme("colors.purple.500"), 0 0 10px theme("colors.purple.500");
+  box-shadow: 0 0 2px theme("colors.purple.500"), 0 0 4px theme("colors.purple.500");
 }
 
 .neon-glow-cyan {
-  box-shadow: 0 0 5px theme("colors.cyan.500"), 0 0 10px theme("colors.cyan.500");
+  box-shadow: 0 0 2px theme("colors.cyan.500"), 0 0 4px theme("colors.cyan.500");
 }
 
 .neon-glow-pink {
-  box-shadow: 0 0 5px theme("colors.pink.500"), 0 0 10px theme("colors.pink.500");
+  box-shadow: 0 0 2px theme("colors.pink.500"), 0 0 4px theme("colors.pink.500");
 }
 
 /* 

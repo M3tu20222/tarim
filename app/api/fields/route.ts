@@ -64,13 +64,9 @@ export async function GET(request: NextRequest) {
 
     // Kullanıcı rolüne göre filtreleme (Sadece fetchAll false ise uygula)
     if (!fetchAll) {
-      if (session.role === "OWNER") {
-        where.owners = {
-          some: {
-            userId: session.id,
-          },
-        };
-      } else if (session.role === "WORKER") {
+      // Geri bildirim üzerine: OWNER rolündeki kullanıcıların sadece kendi tarlalarını değil,
+      // sistemdeki tüm tarlaları görebilmesi için sahiplik filtresi kaldırıldı.
+      if (session.role === "WORKER") {
         // Worker'lar için filtreleme yapma, tüm tarlaları görebilsinler
         // Ancak wellId parametresi varsa, o kuyuya bağlı tarlaları göster
         if (!wellId) {
