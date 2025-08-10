@@ -17,6 +17,8 @@ import {
   Droplet,
   Tractor,
   AreaChart, // Raporlar için yeni ikon
+  Landmark, // Fatura Dönemleri için yeni ikon
+  Receipt, // Yeni ikon eklendi
 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 
@@ -73,6 +75,12 @@ export function DashboardNav() {
       href: "/dashboard/owner/invoices", // Owner rolüne özel path
       icon: <FileText className="h-5 w-5" />,
       roles: ["OWNER"],
+    },
+    {
+      title: "Kuyu Faturaları",
+      href: "/dashboard/owner/billing/periods",
+      icon: <Receipt className="h-5 w-5" />,
+      roles: ["OWNER", "ADMIN"],
     },
     {
       title: "Raporlar",

@@ -3,6 +3,7 @@
 
 generator client {
   provider = "prisma-client-js"
+  output   = "./node_modules/.prisma/client"
 }
 
 datasource db {
@@ -450,32 +451,29 @@ model InventoryTransaction {
 
 // Borç Modeli (Genişletilmiş)
 model Debt {
-  id               String     @id @default(auto()) @map("_id") @db.ObjectId
-  amount           Float
-  dueDate          DateTime
-  status           DebtStatus @default(PENDING)
-  description      String?
-  createdAt        DateTime   @default(now())
-  paymentDate      DateTime?
-  reminderSent     Boolean    @default(false) // YENİ: Hatırlatma gönderildi mi?
-  lastReminderDate DateTime? // YENİ: Son hatırlatma tarihi
-
-  // Borç nedeni (alış, fatura vb.)
-  reason String?
-
-  // İlişkiler
-  creditor       User             @relation("DebtsGiven", fields: [creditorId], references: [id])
-  creditorId     String           @db.ObjectId
-  debtor         User             @relation("DebtsTaken", fields: [debtorId], references: [id])
-  debtorId       String           @db.ObjectId
-  invoice        Invoice?         @relation("DebtInvoice", fields: [invoiceId], references: [id])
-  invoiceId      String?          @db.ObjectId
-  purchase       Purchase?        @relation("PurchaseDebts", fields: [purchaseId], references: [id])
-  purchaseId     String?          @db.ObjectId
-  paymentHistory PaymentHistory[] // YENİ
+  id                   String                @id @default(auto()) @map("_id") @db.ObjectId
+  amount               Float
+  dueDate              DateTime
+  status               DebtStatus            @default(PENDING)
+  description          String?
+  createdAt            DateTime              @default(now())
+  paymentDate          DateTime?
+  reminderSent         Boolean               @default(false)
+  lastReminderDate     DateTime?
+  reason               String?
+  creditor             User                  @relation("DebtsGiven", fields: [creditorId], references: [id])
+  creditorId           String                @db.ObjectId
+  debtor               User                  @relation("DebtsTaken", fields: [debtorId], references: [id])
+  debtorId             String                @db.ObjectId
+  invoice              Invoice?              @relation("DebtInvoice", fields: [invoiceId], references: [id])
+  invoiceId            String?               @db.ObjectId
+  purchase             Purchase?             @relation("PurchaseDebts", fields: [purchaseId], references: [id])
+  purchaseId           String?               @db.ObjectId
+  paymentHistory       PaymentHistory[]
+  wellBillDistributions WellBillDistribution[] // YENİ: Kuyu faturası dağıtım ilişkisi (Bire-çok olarak düzeltildi)
 
   // YENİ: Bildirimler
-  notifications Notification[] @relation("DebtNotifications")
+  notifications        Notification[]        @relation("DebtNotifications")
 }
 
 // Fatura Modeli
@@ -724,27 +722,26 @@ model ProcessCost {
   // İlişkiler
   field         Field               @relation("FieldProcessCosts", fields: [fieldId], references: [id]) // Karşı ilişki eklendi
   fieldId       String              @db.ObjectId // Karşı ilişki için alan eklendi
-  fieldExpenses FieldExpense[] // Tarla giderleri
   ownerExpenses FieldOwnerExpense[] // Tarla sahibi giderleri
 
   // YENİ: Bildirimler
   notifications Notification[] @relation("ProcessCostNotifications")
 }
 
-// YENİ: Tarla Gideri Modeli
+// YENİ: Tarla Gideri Modeli (Genelleştirilmiş)
 model FieldExpense {
-  id            String      @id @default(auto()) @map("_id") @db.ObjectId
-  field         Field       @relation(fields: [fieldId], references: [id])
-  fieldId       String      @db.ObjectId
-  season        Season      @relation(fields: [seasonId], references: [id])
-  seasonId      String      @db.ObjectId
-  processCost   ProcessCost @relation(fields: [processCostId], references: [id])
-  processCostId String      @db.ObjectId
-  totalCost     Float // Toplam maliyet
-  periodStart   DateTime // Dönem başlangıcı
-  periodEnd     DateTime // Dönem sonu
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  field       Field    @relation(fields: [fieldId], references: [id])
+  fieldId     String   @db.ObjectId
+  season      Season   @relation(fields: [seasonId], references: [id])
+  seasonId    String   @db.ObjectId
+  totalCost   Float // Giderin toplam maliyeti
+  description String // "Kuyu Faturası: Haziran 2025" veya "İlaçlama Gideri"
+  expenseDate DateTime // Giderin tarihi
+  sourceType  String // Giderin kaynağı: "PROCESS_COST" veya "WELL_BILL"
+  sourceId    String // Kaynak kaydının ID'si (ProcessCost veya WellBillingPeriod ID'si)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   // YENİ: Bildirimler
   notifications Notification[] @relation("ExpenseNotifications")
@@ -904,7 +901,7 @@ model WellBillingIrrigationUsage {
 model WellBillDistribution {
   id                  String            @id @default(auto()) @map("_id") @db.ObjectId
   wellBillingPeriodId String            @db.ObjectId
-  wellBillingPeriod   WellBillingPeriod @relation(fields: [wellBillingPeriodId], references: [id])
+  wellBillingPeriod   WellBillingPeriod @relation(fields: [wellBillingPeriodId], references: [id], onDelete: Cascade)
   fieldId             String            @db.ObjectId
   field               Field             @relation(fields: [fieldId], references: [id])
   ownerId             String            @db.ObjectId
@@ -915,10 +912,10 @@ model WellBillDistribution {
   sharePercentage     Float // Bu owner’ın toplamdan aldığı yüzde
   amount              Float // TL tutar
   createdAt           DateTime          @default(now())
+  debt                Debt?             @relation(fields: [debtId], references: [id])
+  debtId              String?           @db.ObjectId
 
-  @@index([wellBillingPeriodId, ownerId])
-  @@index([fieldId])
-  @@index([ownerId])
+  @@unique([wellBillingPeriodId, ownerId, fieldId])
 }
 
 // --------------------------------------------------

@@ -101,62 +101,71 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 2. Dönem içindeki sulama kayıtlarını bul (Transaction DIŞINDA)
+    const irrigationLogs = await prisma.irrigationLog.findMany({
+      where: {
+        wellId,
+        startDateTime: {
+          gte: new Date(startDate),
+          lte: new Date(endDate),
+        },
+      },
+    });
+
     // Transaction ile tüm işlemleri gerçekleştir
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. Kuyu fatura dönemini oluştur
-      const wellBillingPeriod = await tx.wellBillingPeriod.create({
-        data: {
-          wellId,
-          startDate: new Date(startDate),
-          endDate: new Date(endDate),
-          totalAmount,
-          totalUsage,
-          status: status || "PENDING",
-        },
-      });
-
-      // 2. Dönem içindeki sulama kayıtlarını bul
-      const irrigationLogs = await tx.irrigationLog.findMany({
-        where: {
-          wellId,
-          startDateTime: {
-            gte: new Date(startDate),
-            lte: new Date(endDate),
-          },
-        },
-      });
-
-      // 3. Toplam süreyi hesapla
-      const totalDuration = irrigationLogs.reduce(
-        (sum, log) => sum + log.duration,
-        0
-      );
-
-      // 4. Her sulama kaydı için fatura kullanımı oluştur
-      for (const log of irrigationLogs) {
-        const percentage =
-          totalDuration > 0 ? (log.duration / totalDuration) * 100 : 0;
-        const amount = (totalAmount * percentage) / 100;
-
-        await tx.wellBillingIrrigationUsage.create({
+    const result = await prisma.$transaction(
+      async (tx) => {
+        // 1. Kuyu fatura dönemini oluştur
+        const wellBillingPeriod = await tx.wellBillingPeriod.create({
           data: {
-            wellBillingPeriodId: wellBillingPeriod.id,
-            irrigationLogId: log.id,
-            duration: log.duration,
-            percentage,
-            amount,
+            wellId,
+            startDate: new Date(startDate),
+            endDate: new Date(endDate),
+            totalAmount,
+            totalUsage: totalUsage || 0, // totalUsage için varsayılan değer
+            status: status || "PENDING",
           },
         });
-      }
 
-      return wellBillingPeriod;
-    });
+        // 3. Toplam süreyi hesapla
+        const totalDuration = irrigationLogs.reduce(
+          (sum, log) => sum + log.duration,
+          0
+        );
+
+        // 4. Her sulama kaydı için fatura kullanımı oluştur (createMany ile)
+        if (totalDuration > 0) {
+          const usageData = irrigationLogs.map((log) => {
+            const percentage = (log.duration / totalDuration) * 100;
+            const amount = (totalAmount * percentage) / 100;
+            return {
+              wellBillingPeriodId: wellBillingPeriod.id,
+              irrigationLogId: log.id,
+              duration: log.duration,
+              percentage,
+              amount,
+            };
+          });
+
+          await tx.wellBillingIrrigationUsage.createMany({
+            data: usageData,
+          });
+        }
+
+        return wellBillingPeriod;
+      },
+      {
+        timeout: 15000, // Zaman aşımını 15 saniyeye çıkar
+      }
+    );
 
     return NextResponse.json({ data: result });
   } catch (error) {
     console.error("Error creating well billing period:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Bilinmeyen bir hata oluştu.";
     return NextResponse.json(
-      { error: "Failed to create well billing period" },
+      { error: `Failed to create well billing period: ${errorMessage}` },
       { status: 500 }
     );
   }

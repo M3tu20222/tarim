@@ -22,6 +22,7 @@ import {
   Computer,
   LogOut,
   Wrench,
+  Receipt, // Yeni ikon eklendi
 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { cn } from "@/lib/utils";
@@ -397,6 +398,17 @@ export function AppSidebar() {
                     </SidebarMenuSubItem>
                   </SidebarMenuSub>
                 )}
+              </SidebarMenuItem>
+              {/* Kuyu Faturaları Menüsü */}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => router.push("/dashboard/owner/billing/periods")}
+                  isActive={isActive("/dashboard/owner/billing/periods")}
+                  tooltip="Kuyu Faturaları"
+                >
+                  <FileText className="h-5 w-5" />
+                  <span>Kuyu Faturaları</span>
+                </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
           )}{" "}

@@ -1,227 +1,131 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import { getServerSideSession } from "@/lib/session"; // Updated import
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { getServerSideSession } from "@/lib/session";
 
-const prisma = new PrismaClient();
-
-// Belirli bir kuyu fatura dönemini getir
-export async function GET(
-  request: NextRequest,
+export async function DELETE(
+  request: Request,
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getServerSideSession(); // Use custom session function
-    if (!session || !session.id) { // Check for session.id instead of session.user
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const session = await getServerSideSession();
+    if (!session?.id || (session.role !== "ADMIN" && session.role !== "OWNER")) {
+      return NextResponse.json({ error: "Yetkisiz erişim." }, { status: 403 });
     }
 
-    const id = params.id;
+    const periodId = params.id;
+    if (!periodId) {
+      return NextResponse.json({ error: "Dönem ID'si gerekli." }, { status: 400 });
+    }
 
-    const wellBillingPeriod = await prisma.wellBillingPeriod.findUnique({
+    // Transaction ile ilişkili tüm verileri sil
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Bu döneme ait dağıtımları bul
+      const distributions = await tx.wellBillDistribution.findMany({
+        where: { wellBillingPeriodId: periodId },
+        select: { debtId: true },
+      });
+
+      // 2. İlişkili borçları sil
+      const debtIds = distributions
+        .map((d) => d.debtId)
+        .filter((id): id is string => id !== null);
+        
+      if (debtIds.length > 0) {
+        await tx.debt.deleteMany({
+          where: { id: { in: debtIds } },
+        });
+      }
+
+      // 3. Dağıtım kayıtlarını sil
+      await tx.wellBillDistribution.deleteMany({
+        where: { wellBillingPeriodId: periodId },
+      });
+
+      // 4. Bu faturadan kaynaklanan tarla giderlerini sil
+      await tx.fieldExpense.deleteMany({
+        where: {
+          sourceType: "WELL_BILL",
+          sourceId: periodId,
+        },
+      });
+      
+      // 5. Fatura kullanım kayıtlarını sil (WellBillingIrrigationUsage)
+      await tx.wellBillingIrrigationUsage.deleteMany({
+        where: { wellBillingPeriodId: periodId },
+      });
+
+      // 6. Son olarak fatura dönemini sil
+      const deletedPeriod = await tx.wellBillingPeriod.delete({
+        where: { id: periodId },
+      });
+
+      return deletedPeriod;
+    });
+
+    return NextResponse.json({ message: "Fatura dönemi ve ilişkili tüm kayıtlar başarıyla silindi.", data: result });
+
+  } catch (error: any) {
+    console.error("Fatura dönemi silinirken hata oluştu:", error);
+    if (error.code === 'P2025') { // Prisma'nın "kayıt bulunamadı" hatası
+        return NextResponse.json({ error: "Silinecek fatura dönemi bulunamadı." }, { status: 404 });
+    }
+    return NextResponse.json({ error: error.message || "Sunucu hatası oluştu." }, { status: 500 });
+  }
+}
+
+export async function GET(
+  request: Request,
+  { params: { id } }: { params: { id: string } }
+) {
+  if (!id) {
+    return NextResponse.json({ error: "Dönem ID'si gerekli." }, { status: 400 });
+  }
+
+  try {
+    const period = await prisma.wellBillingPeriod.findUnique({
       where: { id },
       include: {
         well: true,
-        irrigationUsages: {
+        distributions: {
           include: {
-            irrigationLog: {
-              include: {
-                fieldUsages: {
-                  include: {
-                    field: true,
-                    ownerUsages: {
-                      include: {
-                        owner: {
-                          select: {
-                            id: true,
-                            name: true,
-                            email: true,
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
+            owner: {
+              select: {
+                name: true,
+                email: true,
               },
             },
+            field: {
+              select: {
+                name: true,
+              },
+            },
+            debt: true,
           },
+          orderBy: [
+            {
+              owner: {
+                name: "asc",
+              },
+            },
+            {
+              field: {
+                name: "asc",
+              },
+            },
+          ],
         },
       },
     });
 
-    if (!wellBillingPeriod) {
-      return NextResponse.json(
-        { error: "Well billing period not found" },
-        { status: 404 }
-      );
+    if (!period) {
+      return NextResponse.json({ error: "Dönem bulunamadı." }, { status: 404 });
     }
 
-    // Sahip bazlı maliyet dağılımını hesapla
-    const ownerCosts: Record<
-      string,
-      { ownerId: string; name: string; email: string; amount: number }
-    > = {};
-
-    for (const usage of wellBillingPeriod.irrigationUsages) {
-      for (const fieldUsage of usage.irrigationLog.fieldUsages) {
-        for (const ownerUsage of fieldUsage.ownerUsages) {
-          const ownerPercentage =
-            (ownerUsage.usagePercentage * usage.percentage) / 100;
-          const ownerAmount = (usage.amount * ownerPercentage) / 100;
-
-          if (ownerCosts[ownerUsage.ownerId]) {
-            ownerCosts[ownerUsage.ownerId].amount += ownerAmount;
-          } else {
-            ownerCosts[ownerUsage.ownerId] = {
-              ownerId: ownerUsage.ownerId,
-              name: ownerUsage.owner.name,
-              email: ownerUsage.owner.email,
-              amount: ownerAmount,
-            };
-          }
-        }
-      }
-    }
-
-    // İki ondalık basamağa yuvarla
-    for (const key in ownerCosts) {
-      ownerCosts[key].amount = Math.round(ownerCosts[key].amount * 100) / 100;
-    }
-
-    return NextResponse.json({
-      data: wellBillingPeriod,
-      ownerCosts: Object.values(ownerCosts),
-    });
+    return NextResponse.json(period);
   } catch (error) {
-    console.error("Error fetching well billing period:", error);
+    console.error("Failed to fetch period details:", error);
     return NextResponse.json(
-      { error: "Failed to fetch well billing period" },
-      { status: 500 }
-    );
-  }
-}
-
-// Kuyu fatura dönemini güncelle
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const session = await getServerSideSession(); // Use custom session function
-    if (!session || !session.id) { // Check for session.id instead of session.user
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const id = params.id;
-    const data = await request.json();
-    const { wellId, startDate, endDate, totalAmount, totalUsage, status } =
-      data;
-
-    // Veri doğrulama
-    if (!wellId || !startDate || !endDate || !totalAmount) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      );
-    }
-
-    // Transaction ile tüm işlemleri gerçekleştir
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. Kuyu fatura dönemini güncelle
-      const wellBillingPeriod = await tx.wellBillingPeriod.update({
-        where: { id },
-        data: {
-          wellId,
-          startDate: new Date(startDate),
-          endDate: new Date(endDate),
-          totalAmount,
-          totalUsage,
-          status,
-        },
-      });
-
-      // 2. Mevcut fatura kullanımlarını sil
-      await tx.wellBillingIrrigationUsage.deleteMany({
-        where: { wellBillingPeriodId: id },
-      });
-
-      // 3. Dönem içindeki sulama kayıtlarını bul
-      const irrigationLogs = await tx.irrigationLog.findMany({
-        where: {
-          wellId,
-          startDateTime: {
-            gte: new Date(startDate),
-            lte: new Date(endDate),
-          },
-        },
-      });
-
-      // 4. Toplam süreyi hesapla
-      const totalDuration = irrigationLogs.reduce(
-        (sum, log) => sum + log.duration,
-        0
-      );
-
-      // 5. Her sulama kaydı için fatura kullanımı oluştur
-      for (const log of irrigationLogs) {
-        const percentage =
-          totalDuration > 0 ? (log.duration / totalDuration) * 100 : 0;
-        const amount = (totalAmount * percentage) / 100;
-
-        await tx.wellBillingIrrigationUsage.create({
-          data: {
-            wellBillingPeriodId: wellBillingPeriod.id,
-            irrigationLogId: log.id,
-            duration: log.duration,
-            percentage,
-            amount,
-          },
-        });
-      }
-
-      return wellBillingPeriod;
-    });
-
-    return NextResponse.json({ data: result });
-  } catch (error) {
-    console.error("Error updating well billing period:", error);
-    return NextResponse.json(
-      { error: "Failed to update well billing period" },
-      { status: 500 }
-    );
-  }
-}
-
-// Kuyu fatura dönemini sil
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const session = await getServerSideSession(); // Use custom session function
-    if (!session || !session.id) { // Check for session.id instead of session.user
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const id = params.id;
-
-    // Transaction ile tüm ilişkili kayıtları sil
-    await prisma.$transaction(async (tx) => {
-      // 1. Fatura kullanımlarını sil
-      await tx.wellBillingIrrigationUsage.deleteMany({
-        where: { wellBillingPeriodId: id },
-      });
-
-      // 2. Kuyu fatura dönemini sil
-      await tx.wellBillingPeriod.delete({
-        where: { id },
-      });
-    });
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("Error deleting well billing period:", error);
-    return NextResponse.json(
-      { error: "Failed to delete well billing period" },
+      { error: "Sunucu hatası oluştu." },
       { status: 500 }
     );
   }

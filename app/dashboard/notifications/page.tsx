@@ -1,4 +1,4 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { NotificationList } from "@/components/notifications/notification-list";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
