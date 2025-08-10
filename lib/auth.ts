@@ -36,7 +36,3 @@ export async function getServerSession() {
     return null;
   }
 }
-
-export async function GET() {
-  return NextResponse.json({ message: "API route working" });
-}
