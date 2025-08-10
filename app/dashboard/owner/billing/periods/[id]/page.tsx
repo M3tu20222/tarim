@@ -45,7 +45,7 @@ export default function BillingPeriodDetailPage() {
     const fetchPeriodDetails = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch(`/api/billing/well-periods/${id}`);
+        const response = await fetch(`/api/billing/periods/${id}`);
         if (!response.ok) {
           if (response.status === 404) {
             notFound();
