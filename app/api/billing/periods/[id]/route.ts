@@ -4,9 +4,10 @@ import { prisma } from "@/lib/prisma";
 // Belirli bir fatura dönemini getir
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const userId = request.headers.get("x-user-id");
     const userRole = request.headers.get("x-user-role");
 
@@ -24,8 +25,6 @@ export async function GET(
         { status: 403 }
       );
     }
-
-    const { id } = params;
 
     const period = await prisma.wellBillingPeriod.findUnique({
       where: { id },
@@ -47,7 +46,6 @@ export async function GET(
                 name: true,
               },
             },
-            debt: true, // İlişkili borç bilgilerini dahil et
           },
         },
       },
