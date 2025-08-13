@@ -757,6 +757,7 @@ model WellBillDistribution {
   basisDuration       Float // Bu payın hesaplanmasına temel olan süre (dakika)
   sharePercentage     Float // Toplam faturadaki yüzde payı
   basisArea           Float? // Bu payın hesaplanmasına temel olan alan (opsiyonel)
+  basisWeight         Float? // Hata düzeltmesi için eklendi: Bu payın hesaplanmasına temel olan ağırlık (opsiyonel)
   debt                Debt?             @relation(fields: [debtId], references: [id])
   debtId              String?           @db.ObjectId
   createdAt           DateTime          @default(now())
