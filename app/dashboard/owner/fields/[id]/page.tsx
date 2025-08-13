@@ -76,28 +76,27 @@ export default async function FieldPage({ params }: FieldPageProps) {
         orderBy: {
           date: "desc",
         },
-        include: { // Include worker and other relations for ProcessDetails component
+        include: {
           worker: {
             select: {
               name: true,
             },
           },
-          inventoryUsages: { // Include inventory usages
+          inventoryUsages: {
             include: {
-              inventory: true, // Include inventory details
+              inventory: true,
             },
           },
-          equipmentUsages: { // Include equipment usages
+          equipmentUsages: {
             include: {
-              equipment: true, // Include equipment details
+              equipment: true,
             },
           },
-          processCosts: { // Include process costs
+          processCosts: {
             include: {
-              fieldExpenses: true, // Include field expenses
-              ownerExpenses: { // Include owner expenses
+              ownerExpenses: {
                 include: {
-                  fieldOwnership: { // Include field ownership to get owner name
+                  fieldOwnership: {
                     include: {
                       user: {
                         select: {
@@ -110,6 +109,12 @@ export default async function FieldPage({ params }: FieldPageProps) {
               },
             },
           },
+        },
+      },
+      fieldExpenses: { // YENİ: Tarla giderlerini dahil et
+        take: 10,
+        orderBy: {
+          expenseDate: "desc",
         },
       },
     },
@@ -365,6 +370,50 @@ export default async function FieldPage({ params }: FieldPageProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* YENİ: Tarla Giderleri Kartı */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Tarla Giderleri</CardTitle>
+          <CardDescription>
+            Bu tarlaya ait işlem maliyetleri ve faturalar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {field.fieldExpenses.length === 0 ? (
+            <div className="flex h-24 items-center justify-center rounded-md border border-dashed">
+              <p className="text-sm text-muted-foreground">
+                Bu tarlaya ait gider kaydı bulunmuyor.
+              </p>
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {field.fieldExpenses.map((expense) => (
+                <li
+                  key={expense.id}
+                  className="flex items-center justify-between rounded-lg border p-3"
+                >
+                  <div>
+                    <p className="font-medium">{expense.description}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Tarih: {formatDate(expense.expenseDate)} | Tutar:{" "}
+                      <span className="font-semibold">
+                        {expense.totalCost.toLocaleString("tr-TR", {
+                          style: "currency",
+                          currency: "TRY",
+                        })}
+                      </span>
+                    </p>
+                  </div>
+                  <Badge variant={expense.sourceType === 'WELL_BILL' ? 'default' : 'secondary'}>
+                    {expense.sourceType === 'WELL_BILL' ? 'Kuyu Faturası' : 'İşlem Maliyeti'}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

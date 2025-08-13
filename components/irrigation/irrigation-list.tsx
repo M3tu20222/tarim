@@ -85,7 +85,7 @@ interface IrrigationLog {
   startDateTime: string;
   duration: number;
   well: { name: string };
-  fieldUsages: { id: string; field: { name: string }; percentage: number }[];
+  fieldUsages: { id: string; field: { name: string; size: number | null }; percentage: number }[];
   user: { name: string };
   status: string;
   notes?: string;
@@ -508,63 +508,44 @@ export function IrrigationList() {
                         </TableCell>
                         <TableCell>{log.well?.name || "-"}</TableCell>
                         <TableCell>
-                          {(() => {
-                            const maxDurationInMinutes = 20 * 60; // 20 hours
-                            const duration = log.duration;
-                            const percentage = Math.min(
-                              (duration / maxDurationInMinutes) * 100,
-                              100
-                            );
-                            const durationInHours = duration / 60;
-                            const durationText = `${Math.floor(duration / 60)}s ${duration % 60}dk`;
-
-                            let bgColorClass = "";
-                            if (durationInHours < 4) {
-                              bgColorClass = "bg-green-500";
-                            } else if (durationInHours <= 10) {
-                              bgColorClass = "bg-yellow-500";
-                            } else {
-                              bgColorClass = "bg-red-500";
-                            }
-
-                            return (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className="w-full bg-black rounded-md h-6 relative overflow-hidden border border-gray-500">
-                                    <div
-                                      className={`h-full rounded-md ${bgColorClass} transition-all duration-500`}
-                                      style={{ width: `${percentage}%` }}
-                                    />
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                      <span className="text-xs font-medium text-white px-2">
-                                        {durationText}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>{durationText}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            );
-                          })()}
+                          <div className="w-full bg-gray-200 rounded-full h-2.5">
+                            <div 
+                              className={`h-2.5 rounded-full ${
+                                log.duration / 60 > 10 
+                                  ? "bg-red-600" 
+                                  : log.duration / 60 > 4 
+                                    ? "bg-blue-600" 
+                                    : "bg-green-600"
+                              }`}
+                              style={{ width: `${Math.min((log.duration / (20 * 60)) * 100, 100)}%` }}
+                            ></div>
+                          </div>
+                          <div className="text-xs text-center mt-1 text-muted-foreground">
+                            {Math.floor(log.duration / 60)}s {log.duration % 60}dk
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
                             {log.fieldUsages?.map(
                               (usage: {
                                 id: string;
-                                field: { name: string };
+                                field: { name: string; size: number | null };
                                 percentage: number;
-                              }) => (
-                                <Badge
-                                  key={usage.id}
-                                  variant="outline"
-                                  className="border-yellow-500 text-[rgb(3,207,252)]"
-                                >
-                                  {usage.field?.name} (%{usage.percentage})
-                                </Badge>
-                              )
+                              }) => {
+                                const calculatedArea = usage.field?.size && usage.percentage 
+                                  ? (usage.field.size * usage.percentage) / 100 
+                                  : null;
+                                
+                                return (
+                                  <Badge
+                                    key={usage.id}
+                                    variant="outline"
+                                    className="border-yellow-500 text-[rgb(3,207,252)]"
+                                  >
+                                    {usage.field?.name} ({calculatedArea ? `${calculatedArea.toFixed(2)} dekar` : usage.field?.size ? `${usage.field.size} dekar` : 'Bilinmeyen alan'} - %{usage.percentage})
+                                  </Badge>
+                                );
+                              }
                             )}
                           </div>
                         </TableCell>
@@ -723,15 +704,21 @@ export function IrrigationList() {
                       Tarlalar
                     </Label>
                     <div className="flex flex-wrap gap-1">
-                      {viewItem.fieldUsages?.map((usage) => (
-                        <Badge
-                          key={usage.id}
-                          variant="outline"
-                          className="border-yellow-500 text-[rgb(3,207,252)]"
-                        >
-                          {usage.field?.name} (%{usage.percentage})
-                        </Badge>
-                      ))}
+                      {viewItem.fieldUsages?.map((usage) => {
+                        const calculatedArea = usage.field?.size && usage.percentage 
+                          ? (usage.field.size * usage.percentage) / 100 
+                          : null;
+                        
+                        return (
+                          <Badge
+                            key={usage.id}
+                            variant="outline"
+                            className="border-yellow-500 text-[rgb(3,207,252)]"
+                          >
+                            {usage.field?.name} ({calculatedArea ? `${calculatedArea.toFixed(2)} dekar` : usage.field?.size ? `${usage.field.size} dekar` : 'Bilinmeyen alan'} - %{usage.percentage})
+                          </Badge>
+                        );
+                      })}
                     </div>
                   </div>
 

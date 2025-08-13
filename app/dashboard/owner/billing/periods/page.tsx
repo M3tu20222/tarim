@@ -1,3 +1,4 @@
+import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PeriodsTable } from "@/components/billing/periods-table";
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,6 @@ async function getPeriods() {
   // Bu kısım, gerçek API çağrısını simüle eder.
   // Gerçek implementasyonda, fetch veya bir API client kütüphanesi kullanılmalıdır.
   // Şimdilik, doğrudan prisma call yapacağız, çünkü bu bir server component.
-  const { prisma } = await import("@/lib/prisma");
   try {
     const periods = await prisma.wellBillingPeriod.findMany({
       include: {

@@ -9,6 +9,9 @@
     "lint": "next lint",
     "eslint": "eslint . --ext .js,.jsx,.ts,.tsx"
   },
+  "prisma": {
+    "seed": "ts-node --project prisma/tsconfig.prisma.json prisma/seed.ts"
+  },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
     "@prisma/client": "^6.13.0",
@@ -71,7 +74,6 @@
     "recharts": "2.15.0",
     "sonner": "^1.7.1",
     "swagger-jsdoc": "^6.2.8",
-    "swagger-ui-react": "^5.17.14",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
     "zod": "^3.24.1"

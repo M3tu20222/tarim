@@ -42,10 +42,15 @@ const formSchema = z
     totalAmount: z.coerce
     .number({ invalid_type_error: "Tutar bir sayı olmalıdır." })
     .positive({ message: "Tutar 0'dan büyük olmalıdır." }),
+    paymentDueDate: z.date({ required_error: "Fatura ödeme tarihi zorunludur." }),
   })
   .refine((data) => data.endDate > data.startDate, {
     message: "Bitiş tarihi, başlangıç tarihinden sonra olmalıdır.",
     path: ["endDate"],
+  })
+  .refine((data) => data.paymentDueDate >= data.endDate, { // İyileştirme: Ödeme tarihi bitiş tarihinden sonra veya aynı gün olabilir
+    message: "Fatura ödeme tarihi, bitiş tarihinden sonra veya aynı gün olmalıdır.",
+    path: ["paymentDueDate"],
   });
 
 interface NewPeriodFormProps {
@@ -64,13 +69,14 @@ export function NewPeriodForm({ wells }: NewPeriodFormProps) {
       startDate: undefined,
       endDate: undefined,
       totalAmount: undefined,
+      paymentDueDate: undefined,
     },
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
-      const response = await fetch("/api/billing/well-periods", {
+      const response = await fetch("/api/billing/periods", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(values),
@@ -216,6 +222,44 @@ export function NewPeriodForm({ wells }: NewPeriodFormProps) {
                   onChange={(e) => onChange(e.target.valueAsNumber)}
                 />
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="paymentDueDate"
+          render={({ field }) => (
+            <FormItem className="flex flex-col">
+              <FormLabel>Fatura Ödeme Tarihi</FormLabel>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <FormControl>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-full pl-3 text-left font-normal",
+                        !field.value && "text-muted-foreground"
+                      )}
+                    >
+                      {field.value ? (
+                        format(field.value, "PPP")
+                      ) : (
+                        <span>Bir tarih seçin</span>
+                      )}
+                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                    </Button>
+                  </FormControl>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={field.value}
+                    onSelect={field.onChange}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
               <FormMessage />
             </FormItem>
           )}

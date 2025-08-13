@@ -44,7 +44,7 @@ export function DistributeBillDialog({
       }
 
       const response = await fetch(
-        `/api/billing/well-periods/${period.id}/distribute`,
+        `/api/billing/periods/${period.id}/distribute`,
         {
           method: "POST",
           headers: {

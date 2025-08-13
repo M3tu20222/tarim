@@ -60,7 +60,7 @@ export function PeriodsTable({ data }: PeriodsTableProps) {
     }
 
     try {
-      const response = await fetch(`/api/billing/well-periods/${periodId}`, {
+      const response = await fetch(`/api/billing/periods/${periodId}`, {
         method: "DELETE",
       });
 

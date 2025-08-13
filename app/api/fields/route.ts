@@ -88,6 +88,8 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         name: true,
+        location: true, // Eklendi: Konum bilgisi
+        status: true,   // Eklendi: Durum bilgisi
         size: true,
         seasonId: true,
         // İsteğe bağlı sahiplik bilgileri (yalnızca gereken alanlar)
@@ -95,6 +97,7 @@ export async function GET(request: NextRequest) {
           ? {
               owners: {
                 select: {
+                  id: true, // Eklendi: FieldOwnership ID'si
                   userId: true,
                   percentage: true,
                   user: {
@@ -110,6 +113,7 @@ export async function GET(request: NextRequest) {
         // Kuyu bilgisi: yalnızca id ve name
         fieldWells: {
           select: {
+            id: true, // Eklendi: FieldWell ilişki kaydının ID'si
             well: {
               select: {
                 id: true,

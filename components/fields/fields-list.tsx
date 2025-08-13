@@ -72,10 +72,10 @@ interface Field {
   }[];
   // Güncellendi: wells -> fieldWells
   fieldWells: {
+    id: string; // Eklendi: FieldWell ilişki kaydının ID'si
     well: {
       id: string;
       name: string;
-      status: string;
     };
   }[];
   processingLogs?: {
@@ -467,7 +467,7 @@ export default function FieldsList() {
                       {/* field.owners var mı ve dizi mi diye kontrol et, yoksa boş dizi kullan */}
                       {(field.owners || []).map((owner) => (
                         <div
-                          key={owner.id}
+                          key={owner.id} // API'den artık FieldOwnership ID'si geliyor, bu en doğru anahtar.
                           className="text-xs flex items-center gap-1"
                         >
                           <User className="h-3 w-3 text-muted-foreground" />
@@ -486,7 +486,7 @@ export default function FieldsList() {
                         {/* Güncellendi: field.wells -> field.fieldWells */}
                         {field.fieldWells.map((fieldWell) => (
                           <div
-                            key={fieldWell.well.id} // fieldWell.well.id
+                            key={fieldWell.id} // En doğru anahtar: FieldWell ilişki kaydının ID'si
                             className="text-xs flex items-center gap-1"
                           >
                             <DropletIcon className="h-3 w-3 text-muted-foreground" />

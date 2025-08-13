@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { RecordPaymentDialog } from "@/components/billing/record-payment-dialog";
 import { toast } from "@/components/ui/use-toast";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -26,7 +27,7 @@ import type { WellBillingPeriod, WellBillDistribution, Well, User, Field, Debt }
 type PeriodDetails = WellBillingPeriod & {
   well: Well;
   distributions: (WellBillDistribution & {
-    owner: Pick<User, "name" | "email">;
+    owner: Pick<User, "id" | "name" | "email">;
     field: Pick<Field, "name">;
     debt: Debt | null;
   })[];
@@ -38,6 +39,7 @@ export default function BillingPeriodDetailPage() {
 
   const [period, setPeriod] = useState<PeriodDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [payingOwnerId, setPayingOwnerId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -79,14 +81,100 @@ export default function BillingPeriodDetailPage() {
     return <div className="text-center text-red-500">Dönem bulunamadı.</div>;
   }
 
+  const uniqueOwners = Array.from(new Map(period.distributions.map(d => [d.owner.id, d.owner])).values());
+
+  const handlePaymentRecorded = () => {
+    toast({
+      title: "Başarılı",
+      description: "Ödeme kaydedildi. Sayfa yenileniyor...",
+    });
+    // Fetch data again to reflect changes
+    const fetchPeriodDetails = async () => {
+      setIsLoading(true);
+      try {
+        const response = await fetch(`/api/billing/periods/${id}`);
+        if (!response.ok) throw new Error("Dönem detayları yeniden yüklenemedi.");
+        const data = await response.json();
+        setPeriod(data);
+      } catch (error: any) {
+        toast({ title: "Hata", description: error.message, variant: "destructive" });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchPeriodDetails();
+  };
+
   const ownerTotals = period.distributions.reduce((acc, dist) => {
-    const ownerName = dist.owner.name || "Bilinmeyen Sahip";
-    if (!acc[ownerName]) {
-      acc[ownerName] = 0;
+    const ownerId = dist.owner.id;
+    if (!acc[ownerId]) {
+      acc[ownerId] = { 
+        name: dist.owner.name || "Bilinmeyen Sahip", 
+        total: 0,
+        unpaidDebtIds: [],
+        isFullyPaid: true 
+      };
     }
-    acc[ownerName] += dist.amount;
+    acc[ownerId].total += dist.amount;
+    if (dist.debt && dist.debt.status !== 'PAID') {
+      acc[ownerId].unpaidDebtIds.push(dist.debt.id);
+      acc[ownerId].isFullyPaid = false;
+    }
     return acc;
-  }, {} as Record<string, number>);
+  }, {} as Record<string, { name: string; total: number; unpaidDebtIds: string[]; isFullyPaid: boolean }>);
+
+  const handlePayDebts = async (ownerId: string) => {
+    const ownerInfo = ownerTotals[ownerId];
+    if (!ownerInfo || ownerInfo.unpaidDebtIds.length === 0) {
+      toast({ title: "Bilgi", description: "Ödenecek borç bulunmuyor." });
+      return;
+    }
+
+    setPayingOwnerId(ownerId);
+
+    try {
+      const paymentPromises = ownerInfo.unpaidDebtIds.map(debtId => {
+        // We need to fetch the debt amount to pay it fully
+        const distribution = period.distributions.find(d => d.debt?.id === debtId);
+        if (!distribution || !distribution.debt) return Promise.reject(`Borç detayı bulunamadı: ${debtId}`);
+        
+        return fetch(`/api/debts/${debtId}/pay`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount: distribution.debt.amount, // Pay the full amount of the specific debt
+            paymentMethod: 'BANK_TRANSFER',
+            paymentDate: new Date().toISOString(),
+            notes: `Fatura dönemi ${period.id} için otomatik ödeme.`
+          }),
+        });
+      });
+
+      const results = await Promise.all(paymentPromises);
+
+      const allSuccess = results.every(res => res.ok);
+
+      if (allSuccess) {
+        toast({
+          title: "Başarılı",
+          description: `${ownerInfo.name} için tüm borçlar ödendi.`,
+        });
+        // Refresh the page to show the new status
+        window.location.reload();
+      } else {
+        throw new Error("Bazı ödemeler başarısız oldu.");
+      }
+    } catch (error: any) {
+      console.error("Ödeme işlemi başarısız:", error);
+      toast({
+        title: "Ödeme Hatası",
+        description: error.message || "Borçlar ödenirken bir hata oluştu.",
+        variant: "destructive",
+      });
+    } finally {
+      setPayingOwnerId(null);
+    }
+  };
 
   const totalDurationInMinutes = period.distributions.reduce(
     (sum, dist) => sum + dist.basisDuration,
@@ -129,7 +217,7 @@ export default function BillingPeriodDetailPage() {
       doc.text(`Kuyu Fatura Raporu: ${period.well.name}`, 14, 20);
       doc.text(`Dönem: ${new Date(period.startDate).toLocaleDateString()} - ${new Date(period.endDate).toLocaleDateString()}`, 14, 28);
       
-      const ownerData = Object.entries(ownerTotals).map(([owner, total]) => [owner, `${total.toFixed(2)} TL`]);
+      const ownerData = Object.values(ownerTotals).map(ownerInfo => [ownerInfo.name, `${ownerInfo.total.toFixed(2)} TL`]);
       autoTable(doc, {
         startY: 35,
         head: [['Sahip', 'Toplam Tutar']],
@@ -183,26 +271,51 @@ export default function BillingPeriodDetailPage() {
 
   return (
     <div className="space-y-8 cyberpunk-grid p-4 md:p-6">
-       <div className="flex justify-between items-center">
+       <div className="flex flex-wrap justify-between items-center gap-4">
         <h1 className="text-3xl md:text-4xl font-bold neon-text-purple animate-flicker">
           Fatura Detayları
         </h1>
-        <Button onClick={handleDownloadPdf} className="btn-cyberpunk">
-          PDF Olarak İndir
-        </Button>
+        <div className="flex gap-2">
+          <RecordPaymentDialog
+            periodId={id}
+            owners={uniqueOwners}
+            ownerTotals={ownerTotals}
+            wellName={period.well.name}
+            startDate={period.startDate}
+            endDate={period.endDate}
+            totalAmount={period.totalAmount}
+            onPaymentRecorded={handlePaymentRecorded}
+          />
+          <Button onClick={handleDownloadPdf} className="btn-cyberpunk">
+            PDF Olarak İndir
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {Object.entries(ownerTotals).map(([owner, total]) => (
-          <Card key={owner} className="card-cyberpunk animate-pulse-neon">
+        {Object.entries(ownerTotals).map(([ownerId, ownerInfo]) => (
+          <Card key={ownerId} className="card-cyberpunk flex flex-col justify-between">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium neon-text-cyan">{owner}</CardTitle>
+              <CardTitle className="text-sm font-medium neon-text-cyan">{ownerInfo.name}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold neon-text-green">{total.toFixed(2)} TL</div>
-              <p className="text-xs text-muted-foreground">
-                Toplam Ödenecek Tutar
+              <div className="text-2xl font-bold neon-text-green">{ownerInfo.total.toFixed(2)} TL</div>
+              <p className="text-xs text-muted-foreground mb-4">
+                Toplam Bakiye
               </p>
+              {ownerInfo.isFullyPaid ? (
+                 <div className="text-center py-2 px-4 rounded-md bg-green-900/50 text-green-300 border border-green-500/50 font-semibold">
+                   Tümü Ödendi
+                 </div>
+              ) : (
+                <Button 
+                  onClick={() => handlePayDebts(ownerId)} 
+                  disabled={payingOwnerId === ownerId}
+                  className="w-full btn-cyberpunk-secondary"
+                >
+                  {payingOwnerId === ownerId ? 'Ödeniyor...' : 'Toplu Ödeme Yap'}
+                </Button>
+              )}
             </CardContent>
           </Card>
         ))}

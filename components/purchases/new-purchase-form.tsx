@@ -103,6 +103,55 @@ interface User {
   role: string;
 }
 
+// This is a new helper component to avoid JSX parsing issues.
+const DueDateField = ({ control, index }: { control: any; index: number }) => {
+  const hasPaid = useForm().watch(`partners.${index}.hasPaid`);
+
+  if (hasPaid) {
+    return null;
+  }
+
+  return (
+    <FormField
+      control={control}
+      name={`partners.${index}.dueDate`}
+      render={({ field }) => (
+        <FormItem className="flex flex-col">
+          <FormLabel>Vade Tarihi</FormLabel>
+          <Popover>
+            <PopoverTrigger asChild>
+              <FormControl>
+                <Button
+                  variant={"outline"}
+                  className={`w-full pl-3 text-left font-normal ${
+                    !field.value ? "text-muted-foreground" : ""
+                  }`}
+                >
+                  {field.value ? (
+                    format(field.value, "PPP", { locale: tr })
+                  ) : (
+                    <span>Tarih seçin</span>
+                  )}
+                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                </Button>
+              </FormControl>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <Calendar
+                mode="single"
+                selected={field.value}
+                onSelect={field.onChange}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+};
+
 export function NewPurchaseForm() {
   const router = useRouter();
   const { toast } = useToast();
@@ -193,7 +242,7 @@ export function NewPurchaseForm() {
           setUsers(data as User[]);
         } else {
           console.warn(
-            "API returned empty or invalid user data, using mock data"
+            "API returned empty or invalid user data"
           );
         }
       } catch (error) {
@@ -552,64 +601,7 @@ export function NewPurchaseForm() {
             )}
           />
 
-        <FormField
-          control={form.control}
-          name="saveAsTemplate"
-          render={({ field }) => (
-            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-              <div className="space-y-0.5">
-                <FormLabel className="text-base">
-                  Şablon Olarak Kaydet
-                </FormLabel>
-                <FormDescription>
-                  Bu alışı şablon olarak kaydedin ve gelecekte tekrar kullanın
-                </FormDescription>
-              </div>
-              <FormControl>
-                <Switch
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
-              </FormControl>
-            </FormItem>
-          )}
-        />
-
-        {saveAsTemplate && (
-          <FormField
-            control={form.control}
-            name="templateName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Şablon Adı</FormLabel>
-                <FormControl>
-                  <Input placeholder="Örn: Aylık Gübre Alışı" {...field} />
-                </FormControl>
-                <FormDescription>
-                  Şablonu kolayca bulabilmek için bir isim verin
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          )}
-
-        <FormField
-          control={form.control}
-          name="notes"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Notlar</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder="Alış hakkında ek bilgiler..."
-                  className="resize-none"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        
 
         {/* Partners Section */}
         <Card>
@@ -735,45 +727,47 @@ export function NewPurchaseForm() {
                     )}
                   />
 
-                  {!form.watch(`partners.${index}.hasPaid`) && (
-                    <FormField
-                      control={form.control}
-                      name={`partners.${index}.dueDate`}
-                      render={({ field }) => (
-                        <FormItem className="flex flex-col">
-                          <FormLabel>Vade Tarihi</FormLabel>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <FormControl>
-                                <Button
-                                  variant={"outline"}
-                                  className={`w-full pl-3 text-left font-normal ${
-                                    !field.value ? "text-muted-foreground" : ""
-                                  }`}
-                                >
-                                  {field.value ? (
-                                    format(field.value, "PPP", { locale: tr }) 
+                  <FormField
+                    control={form.control}
+                    name={`partners.${index}.dueDate`}
+                    render={({ field }) => (
+                      <>
+                        {!form.watch(`partners.${index}.hasPaid`) && (
+                          <FormItem className="flex flex-col">
+                            <FormLabel>Vade Tarihi</FormLabel>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <FormControl>
+                                  <Button
+                                    variant={"outline"}
+                                    className={`w-full pl-3 text-left font-normal ${
+                                      !field.value ? "text-muted-foreground" : ""
+                                    }`}
+                                  >
+                                    {field.value ? (
+                                    format(field.value, "PPP", { locale: tr })
                                   ) : (
                                     <span>Tarih seçin</span>
                                   )}
-                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                </Button>
-                              </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0">
-                            <Calendar
-                              mode="single"
-                              selected={field.value}
-                              onSelect={field.onChange}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                          </Popover>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  )}
+                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                  </Button>
+                                </FormControl>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0">
+                                <Calendar
+                                  mode="single"
+                                  selected={field.value}
+                                  onSelect={field.onChange}
+                                  initialFocus
+                                />
+                              </PopoverContent>
+                            </Popover>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      </>
+                    )}
+                  />
 
                   {/* Partner actions */}
                   <div className="flex items-center justify-end md:col-span-2 lg:col-span-4">

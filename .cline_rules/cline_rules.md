@@ -85,3 +85,4 @@ Projenin ana dizin yapısı aşağıdaki gibidir ve bu yapıya uyulmalıdır:
 *   **Çevre Değişkenleri**: Hassas bilgiler `.env.local` dosyasında saklanmalı ve doğrudan koda gömülmemelidir.
 
 Bu kurallar, projenin sağlıklı bir şekilde ilerlemesi için temel bir çerçeve sunar. Herhangi bir belirsizlik durumunda veya yeni bir yaklaşım benimsenmesi gerektiğinde, mevcut proje yapısı ve en iyi uygulamalar göz önünde bulundurularak karar verilmelidir.
+## 8. Dial
