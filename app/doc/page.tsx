@@ -1,11 +1,12 @@
 'use client';
 
-import React from 'react';
-import SwaggerUI from 'swagger-ui-react';
-import 'swagger-ui-react/swagger-ui.css';
-
 const SwaggerPage = () => {
-  return <SwaggerUI url="/api/doc/swagger" />;
+  return (
+    <div>
+      <h1>API Documentation</h1>
+      <p>Swagger documentation has been temporarily disabled.</p>
+    </div>
+  );
 };
 
 export default SwaggerPage;
