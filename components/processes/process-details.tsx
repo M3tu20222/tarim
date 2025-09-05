@@ -303,20 +303,11 @@ export function ProcessDetails({ process }: ProcessDetailsProps) {
                     <span className="font-medium">Toplam Maliyet:</span>
                     <span className="font-bold">
                       {(() => {
-                          // Tarla giderleri toplamı - Bu, toplam maliyeti temsil eder
-                          const fieldExpensesTotal = process.processCosts.reduce((total: number, cost: any) => {
-                            const costTotal = cost.fieldExpenses?.reduce(
-                              (sum: number, exp: any) => sum + (exp.totalCost ?? 0),
-                              0
-                            ) || 0;
-                            return total + costTotal;
-                          }, 0);
-
-                          // NOT: Sahip giderleri, tarla giderlerinin sahipler arasında dağıtılmış halidir
-                          // Bu nedenle toplam maliyete eklemiyoruz, çünkü bu çift sayım olur
-
-                          // Toplam maliyet sadece tarla giderleridir
-                          const totalCost = fieldExpensesTotal;
+                          // processCosts dizisindeki her bir maliyetin totalCost'unu topla
+                          const totalCost = process.processCosts.reduce(
+                            (total: number, cost: any) => total + (cost.totalCost ?? 0),
+                            0
+                          );
 
                           return totalCost.toLocaleString("tr-TR", {
                             style: "currency",

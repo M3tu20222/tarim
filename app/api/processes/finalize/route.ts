@@ -159,10 +159,11 @@ export async function POST(request: Request) {
               data: {
                 fieldId: process.fieldId!,
                 seasonId: process.seasonId!,
-                processCostId: processCost.id,
+                sourceType: "PROCESS",
+                sourceId: process.id,
+                description: `${process.field?.name} tarlasındaki ${process.type} işlemi maliyeti`,
                 totalCost,
-                periodStart: process.date,
-                periodEnd: process.date,
+                expenseDate: process.date,
               },
             });
 

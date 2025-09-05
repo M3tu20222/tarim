@@ -164,18 +164,26 @@ export default async function ProcessDetailPage({
               {process.status && (
                 <Badge
                   className={
-                    process.status === "COMPLETED"
+                    process.status === "COMPLETED" || process.status === "FINALIZED"
                       ? "bg-green-500"
                       : process.status === "IN_PROGRESS"
                         ? "bg-blue-500"
-                        : "bg-yellow-500"
+                        : process.status === "DRAFT"
+                          ? "bg-gray-500"
+                          : process.status === "PENDING_INVENTORY_EQUIPMENT"
+                            ? "bg-orange-500"
+                            : "bg-yellow-500"
                   }
                 >
-                  {process.status === "COMPLETED"
+                  {process.status === "COMPLETED" || process.status === "FINALIZED"
                     ? "Tamamlandı"
                     : process.status === "IN_PROGRESS"
                       ? "Devam Ediyor"
-                      : "Planlandı"}
+                      : process.status === "DRAFT"
+                        ? "Taslak"
+                        : process.status === "PENDING_INVENTORY_EQUIPMENT"
+                          ? "Envanter Bekleniyor"
+                          : "Planlandı"}
                 </Badge>
               )}
             </div>

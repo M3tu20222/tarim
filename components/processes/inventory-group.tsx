@@ -40,6 +40,12 @@ const unitTranslations: Record<Unit, string> = {
   DIGER: "diğer"
 };
 
+// Birim seçenekleri
+const unitOptions: { value: Unit; label: string }[] = Object.entries(unitTranslations).map(([value, label]) => ({
+  value: value as Unit,
+  label,
+}));
+
 interface InventoryGroupProps {
   group: {
     id: string;
@@ -151,19 +157,40 @@ export function InventoryGroup({
   return (
     <div className="border rounded-lg p-4 mb-4 bg-gray-900">
       {/* Toplam Miktar */}
-      <div className="mb-4">
-        <label className="block text-sm font-medium mb-1">
-          Toplam Miktar
-        </label>
-        <input
-          type="number"
-          min="0"
-          step="0.01"
-          value={group.totalQuantity}
-          onChange={(e) => onChange(group.id, { totalQuantity: Number(e.target.value) })}
-          className="w-full p-2 border rounded bg-gray-800 text-white"
-          aria-label="Toplam miktar"
-        />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            Toplam Miktar
+          </label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={group.totalQuantity}
+            onChange={(e) => onChange(group.id, { totalQuantity: Number(e.target.value) })}
+            className="w-full p-2 border rounded bg-gray-800 text-white"
+            aria-label="Toplam miktar"
+          />
+        </div>
+
+        {/* Birim Seçimi */}
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            Birim
+          </label>
+          <select
+            value={group.unit}
+            onChange={(e) => onChange(group.id, { unit: e.target.value as Unit })}
+            className="w-full p-2 border rounded bg-gray-800 text-white"
+            aria-label="Birim seçin"
+          >
+            {unitOptions.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Silme Butonu */}

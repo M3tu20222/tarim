@@ -38,8 +38,7 @@ export function ProcessActions({ process }: ProcessActionsProps) {
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
-      const response = await fetch(`${baseUrl}/api/processes/${process.id}`, {
+      const response = await fetch(`/api/processes/${process.id}`, {
         method: "DELETE",
         // Gerekirse header ekleyebilirsiniz, örneğin yetkilendirme için
         // headers: {

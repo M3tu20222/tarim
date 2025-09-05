@@ -245,10 +245,12 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
         if (equipmentRes.ok) setEquipment(await equipmentRes.json());
         if (seasonsRes.ok) {
             const seasonsData = await seasonsRes.json();
-            const seasonsArray = seasonsData.data || [];
-            setSeasons(seasonsArray);
-            if (seasonsArray.length === 1 && !initialData) {
-                form.setValue("seasonId", seasonsArray[0].id, { shouldValidate: true });
+            const allSeasons = seasonsData.data || [];
+            // Sadece aktif olan sezonları filtrele
+            const activeSeasons = allSeasons.filter((season: any) => season.isActive);
+            setSeasons(activeSeasons);
+            if (activeSeasons.length === 1 && !initialData) {
+                form.setValue("seasonId", activeSeasons[0].id, { shouldValidate: true });
             }
         }
         if (inventoryTypesRes.ok) {
@@ -369,7 +371,7 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
       id: Date.now().toString(),
       inventoryTypeId: "",
       totalQuantity: 0,
-      unit: "KG" as Unit,
+      unit: "ADET" as Unit, // Varsayılan birimi "ADET" olarak ayarla
       category,
       allocations: []
     };

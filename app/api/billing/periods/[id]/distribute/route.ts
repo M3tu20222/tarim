@@ -192,45 +192,53 @@ export async function POST(
       }
     }
 
-    // 7) Dağıtım, Borç ve Gider Kayıtlarını Tek Bir Transaction İçinde Oluştur
-    const createdDists = await prisma.$transaction(async (tx: any) => {
-      const results = [];
-      for (const r of rounded) {
-        if (r.shareAmount <= 0) continue; // Tutarı 0 olanlar için kayıt oluşturma
+    // 7) Dağıtımları sahip bazında grupla ve borçları toplu oluştur
+    const ownerDebts = new Map<string, { totalAmount: number; distributions: DistRow[] }>();
 
-        // Her bir dağıtım için borç kaydı oluştur
+    for (const r of rounded) {
+      if (r.shareAmount <= 0) continue;
+      if (!ownerDebts.has(r.ownerId)) {
+        ownerDebts.set(r.ownerId, { totalAmount: 0, distributions: [] });
+      }
+      const ownerData = ownerDebts.get(r.ownerId)!;
+      ownerData.totalAmount += r.shareAmount;
+      ownerData.distributions.push(r);
+    }
+
+    const createdDists = await prisma.$transaction(async (tx: any) => {
+      const allDistributions = [];
+      for (const [ownerId, data] of ownerDebts.entries()) {
+        // Her sahip için TEK BİR borç kaydı oluştur
         const newDebt = await tx.debt.create({
           data: {
-            amount: r.shareAmount,
+            amount: Math.round(data.totalAmount * 100) / 100,
             dueDate: updatedPeriod.paymentDueDate,
-            description: `Kuyu Faturası: ${period.well.name} - Tarla: ${r.fieldId}`, // period üzerinden well bilgisine eriş
+            description: `Kuyu Faturası: ${period.well.name} (${data.distributions.length} tarla)`,
             creditorId: userId, // Faturayı oluşturan kişi alacaklı
-            debtorId: r.ownerId,
+            debtorId: ownerId,
             status: 'PENDING',
             reason: 'WELL_BILL',
           },
         });
 
-        // WellBillDistribution kaydını oluştur ve borca bağla
-        // Unique constraint hatasını önlemek için upsert kullanmayı düşünebiliriz,
-        // ancak bu durumda dağıtımın tekrar yapılmaması daha doğru.
-        // Mevcut kod, dağıtımın zaten yapıldığı bir dönemde tekrar çalıştırıldığında hata veriyor.
-        // Bu, genellikle istenmeyen bir durumdur.
-        const newDist = await tx.wellBillDistribution.create({
-          data: {
-            wellBillingPeriodId: updatedPeriod.id,
-            fieldId: r.fieldId,
-            ownerId: r.ownerId,
-            basisDuration: r.basisDuration,
-            basisArea: r.basisArea === 0 ? null : r.basisArea,
-            sharePercentage: (r.shareAmount / totalAmount) * 100,
-            amount: r.shareAmount,
-            debtId: newDebt.id, // Yeni oluşturulan borca bağla
-          },
-        });
-        results.push(newDist);
+        // Bu sahibin tüm dağıtımlarını oluştur ve aynı borca bağla
+        for (const distData of data.distributions) {
+          const newDist = await tx.wellBillDistribution.create({
+            data: {
+              wellBillingPeriodId: updatedPeriod.id,
+              fieldId: distData.fieldId,
+              ownerId: distData.ownerId,
+              basisDuration: distData.basisDuration,
+              basisArea: distData.basisArea === 0 ? null : distData.basisArea,
+              sharePercentage: (distData.shareAmount / totalAmount) * 100,
+              amount: distData.shareAmount,
+              debtId: newDebt.id, // Toplu borca bağla
+            },
+          });
+          allDistributions.push(newDist);
+        }
       }
-      return results;
+      return allDistributions;
     });
 
     // Calculate totalMinutes from the created distributions for WellBillingIrrigationUsage

@@ -117,7 +117,6 @@ export async function GET(
         },
         processCosts: {
           include: {
-            fieldExpenses: true,
             ownerExpenses: {
               include: {
                 fieldOwnership: {
@@ -508,7 +507,10 @@ export async function PUT(
        });
        // Önce mevcut tarla giderini sil (yeniden oluşturulacak)
        await tx.fieldExpense.deleteMany({
-         where: { processCost: { processId: processId } },
+         where: { 
+            sourceType: "PROCESS",
+            sourceId: processId 
+         },
        });
 
        // Yeni ProcessCost ID'sini al (güncellenmiş veya yeni oluşturulmuş)
@@ -529,10 +531,11 @@ export async function PUT(
            data: {
              fieldId: updated.fieldId,
              seasonId: updated.seasonId, // Bu noktada string olmalı
-             processCostId: currentProcessCost.id,
+             sourceType: "PROCESS",
+             sourceId: processId,
+             description: `İşlem maliyeti: ${updated.type}`,
              totalCost,
-             periodStart: new Date(updated.date),
-           periodEnd: new Date(updated.date),
+             expenseDate: new Date(updated.date),
          },
        });
 
@@ -735,7 +738,10 @@ export async function DELETE(
 
       // Sonra FieldExpense kayıtlarını sil (Yeni Eklendi)
       await tx.fieldExpense.deleteMany({
-        where: { processCost: { processId: processId } },
+        where: { 
+            sourceType: "PROCESS",
+            sourceId: processId 
+        },
       });
 
       // Sonra ProcessCost kayıtlarını sil

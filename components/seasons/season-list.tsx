@@ -58,7 +58,17 @@ export function SeasonList() {
           throw new Error("Sezonlar yüklenirken bir hata oluştu");
         }
         const data = await response.json();
-        setSeasons(data);
+        // API'den gelen verinin { data: [...] } formatında olup olmadığını kontrol et
+        if (data && Array.isArray(data.data)) {
+          setSeasons(data.data);
+        } else if (Array.isArray(data)) {
+          // Eski format (direkt dizi) için yedek
+          setSeasons(data);
+        } else {
+          console.error("API'den beklenmedik veri yapısı:", data);
+          setSeasons([]); // Boş bir dizi ata
+          setError("Sezonlar yüklenirken bir hata oluştu: Beklenmedik veri yapısı");
+        }
       } catch (error) {
         console.error("Error fetching seasons:", error);
         setError("Sezonlar yüklenirken bir hata oluştu");
