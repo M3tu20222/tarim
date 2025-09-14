@@ -141,12 +141,14 @@ export async function POST(request: NextRequest) {
 
     const data = await request.json();
 
+    const bcrypt = require("bcrypt");
+    const hashedPassword = await bcrypt.hash(data.password, 10);
     // Kullanıcı oluştur
     const user = await prisma.user.create({
       data: {
         name: data.name,
         email: data.email,
-        password: data.password, // Gerçek uygulamada şifre hash'lenmeli
+        password: hashedPassword, // Gerçek uygulamada şifre hash'lenmeli
         role: data.role,
         status: data.status || "ACTIVE", // Varsayılan olarak ACTIVE
       },
