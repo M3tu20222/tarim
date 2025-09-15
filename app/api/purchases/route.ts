@@ -12,7 +12,7 @@ import {
 } from "@prisma/client"; // 'type' kaldırıldı
 import { getServerSideSession } from "@/lib/session"; // getAuth yerine getServerSideSession
 
-// Tüm ALIŞLARI getir (Bu GET isteği aslında PROCESS'leri getiriyordu, şimdilik dokunmuyoruz ama idealde bu da düzeltilmeli)
+// Tüm ALIŞLARI getir
 export async function GET(request: Request) {
   try {
     const userId = request.headers.get("x-user-id");
@@ -25,26 +25,37 @@ export async function GET(request: Request) {
       );
     }
 
-    // TODO: Bu kısım aslında Process'leri getiriyor, Purchase'ları getirecek şekilde güncellenmeli.
-    // Şimdilik mevcut haliyle bırakıyoruz.
-    const purchases = await prisma.purchase.findMany({
-      include: {
-        contributors: {
+    const { searchParams } = new URL(request.url);
+    const includeQuery = searchParams.get("include");
+
+    const include: any = {
+      // Sezon bilgisi genellikle liste görünümünde faydalıdır.
+      season: true,
+    };
+
+    if (includeQuery) {
+      if (includeQuery.includes("contributors")) {
+        include.contributors = {
           include: {
             user: {
               select: { id: true, name: true },
             },
           },
-        },
-        season: true,
-        approvals: {
+        };
+      }
+      if (includeQuery.includes("approvals")) {
+        include.approvals = {
           include: {
             approver: {
               select: { id: true, name: true },
             },
           },
-        },
-      },
+        };
+      }
+    }
+
+    const purchases = await prisma.purchase.findMany({
+      include: include, // Dinamik olarak oluşturulan include nesnesi
       orderBy: {
         createdAt: "desc",
       },
