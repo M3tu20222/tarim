@@ -44,4 +44,4 @@ export async function GET(request: Request) {
 }
 
 // Cache süresi ayarı (3 saat)
-export const revalidate = 60 * 60 * 3; // 3 hours
+export const revalidate = 10800; // 3 hours

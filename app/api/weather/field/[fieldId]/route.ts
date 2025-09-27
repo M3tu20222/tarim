@@ -105,4 +105,4 @@ export async function GET(request: Request, { params }: { params: { fieldId: str
 }
 
 // Cache süresi ayarı (1 saat)
-export const revalidate = 60 * 60;
+export const revalidate = 3600;

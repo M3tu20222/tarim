@@ -309,4 +309,4 @@ function generateCropSpecificRisks(crops: any[], soilType?: string) {
 }
 
 // Cache süresi ayarı (30 dakika)
-export const revalidate = 60 * 30;
+export const revalidate = 1800;

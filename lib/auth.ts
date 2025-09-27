@@ -36,3 +36,6 @@ export async function getServerSession() {
     return null;
   }
 }
+
+// Alias for backward compatibility
+export const getCurrentUser = getServerSession;

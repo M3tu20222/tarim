@@ -244,4 +244,4 @@ function determineGrowthStage(cropCoefficient: any, daysAfterPlanting: number): 
 }
 
 // Cache süresi ayarı (15 dakika)
-export const revalidate = 60 * 15;
+export const revalidate = 900;
