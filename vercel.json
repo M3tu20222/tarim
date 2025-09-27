@@ -11,14 +11,4 @@
     "NEXTJS_IGNORE_TYPECHECK": "1",
     "NEXT_TELEMETRY_DISABLED": "1"
   },
-  "crons": [
-    {
-      "path": "/api/cron/debt-reminders",
-      "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/weather-sync",
-      "schedule": "0 */3 * * *"
-    }
-  ]
 }
