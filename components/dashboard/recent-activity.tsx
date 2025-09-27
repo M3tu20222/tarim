@@ -3,7 +3,7 @@ import { formatDate, formatCurrency } from "@/lib/utils";
 import { ShoppingCart, CreditCard, Bell } from "lucide-react";
 import { Purchase, Debt, Notification } from "@prisma/client";
 
-// Aktivite tiplerini tanımla
+// Aktivite tiplerini tanimla
 type PurchaseActivity = Purchase & {
   contributors: Array<{
     user: { name: string };
@@ -26,7 +26,7 @@ type Activity =
   | { type: "notification"; date: Date; data: NotificationActivity };
 
 export async function RecentActivity() {
-  // Son 10 aktiviteyi getir (alışlar, borçlar, bildirimler)
+  // Son 10 aktiviteyi getir (alislar, borclar, bildirimler)
   const recentPurchases = await prisma.purchase.findMany({
     take: 5,
     orderBy: {
@@ -83,7 +83,7 @@ export async function RecentActivity() {
     },
   });
 
-  // Tüm aktiviteleri birleştir ve tarihe göre sırala
+  // Tum aktiviteleri birlestir ve tarihe gore sirala
   const allActivities: Activity[] = [
     ...recentPurchases.map((purchase) => ({
       type: "purchase" as const,
@@ -107,14 +107,14 @@ export async function RecentActivity() {
   if (allActivities.length === 0) {
     return (
       <div className="text-center py-4 text-muted-foreground">
-        Henüz aktivite bulunmuyor.
+        Henuz aktivite bulunmuyor.
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      {allActivities.map((activity, index) => {
+      {allActivities.map((activity) => {
         if (activity.type === "purchase") {
           const purchase = activity.data;
           return (
@@ -127,7 +127,7 @@ export async function RecentActivity() {
               </div>
               <div className="space-y-1">
                 <p className="text-sm font-medium leading-none">
-                  {purchase.product} alındı
+                  {purchase.product} alindi
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {formatCurrency(purchase.totalCost)} -{" "}
@@ -147,7 +147,7 @@ export async function RecentActivity() {
               </div>
               <div className="space-y-1">
                 <p className="text-sm font-medium leading-none">
-                  {debt.debtor.name} → {debt.creditor.name}
+                  {debt.debtor.name}  {debt.creditor.name}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {formatCurrency(debt.amount)} - {formatDate(debt.createdAt)}

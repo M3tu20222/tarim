@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/select";
 import { CalendarDateRangePicker } from "@/components/date-range-picker";
 import { toast } from "@/components/ui/use-toast";
-import { addDays } from "date-fns";
 import type { DateRange } from "react-day-picker";
 
 // Define types for the data we expect from the API
@@ -58,10 +57,11 @@ export default function FieldReportsPage() {
           setFields([]);
           throw new Error("API'den beklenen formatta tarla verisi gelmedi.");
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Bilinmeyen hata";
         toast({
           title: "Hata",
-          description: error.message,
+          description: message,
           variant: "destructive",
         });
       }
@@ -102,10 +102,11 @@ export default function FieldReportsPage() {
 
       const data = await response.json();
       setReportData(data);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Bilinmeyen hata";
       toast({
         title: "Rapor Hatası",
-        description: error.message,
+        description: message,
         variant: "destructive",
       });
     } finally {

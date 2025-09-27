@@ -4,9 +4,10 @@ import { getServerSession } from "@/lib/auth";
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await getServerSession();
 
     if (!session) {
@@ -37,7 +38,7 @@ export async function PATCH(
     // İşlemi bul
     const process = await prisma.process.findUnique({
       where: {
-        id: params.id,
+        id,
       },
     });
 
@@ -78,7 +79,7 @@ export async function PATCH(
     // İşlemi güncelle
     const updatedProcess = await prisma.process.update({
       where: {
-        id: params.id,
+        id,
       },
       data: {
         processedPercentage,

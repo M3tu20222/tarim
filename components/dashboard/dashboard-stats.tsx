@@ -1,5 +1,5 @@
 // components/dashboard/dashboard-stats.tsx
-"use client"; // Client Component olduğunu belirt
+"use client"; // Client Component oldugunu belirt
 
 import {
   Card,
@@ -13,32 +13,30 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 interface DashboardStatsProps {
-  statTitle: string; // Düzeltildi
-  statValue: string | number; // Düzeltildi
-  statDescription: string; // Düzeltildi
+  statTitle: string; // Duzeltildi
+  statValue: string | number; // Duzeltildi
+  statDescription: string; // Duzeltildi
   trend: "up" | "down";
   trendValue: string | number;
-  icon?: string;
   className?: string;
 }
 
 export function DashboardStats({
-  statTitle, // Düzeltildi
-  statValue, // Düzeltildi
-  statDescription, // Düzeltildi
+  statTitle, // Duzeltildi
+  statValue, // Duzeltildi
+  statDescription, // Duzeltildi
   trend,
   trendValue,
-  icon,
   className,
 }: DashboardStatsProps) {
   return (
     <Card className={cn("shadow-sm", className)}>
       <CardHeader className="pb-0">
-        <CardTitle>{statTitle}</CardTitle> {/* Düzeltildi */}
+        <CardTitle>{statTitle}</CardTitle> {/* Duzeltildi */}
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold">{statValue}</div> {/* Düzeltildi */}
-        <CardDescription>{statDescription}</CardDescription> {/* Düzeltildi */}
+        <div className="text-2xl font-bold">{statValue}</div> {/* Duzeltildi */}
+        <CardDescription>{statDescription}</CardDescription> {/* Duzeltildi */}
       </CardContent>
       <CardFooter>
         <Badge

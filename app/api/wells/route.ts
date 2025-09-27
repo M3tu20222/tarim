@@ -4,6 +4,20 @@ import { prisma } from "@/lib/prisma";
 // Route-level ISR (300 sn): Kuyular nispeten sık değişmez, DB yükünü azalt
 export const revalidate = 300;
 
+const parseCoordinate = (value: unknown) => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const normalized = Number(value.trim());
+    return Number.isFinite(normalized) ? normalized : null;
+  }
+  return null;
+};
+
 // Tüm kuyuları getir
 export async function GET(request: Request) {
   try {
@@ -42,7 +56,11 @@ export async function GET(request: Request) {
       select: {
         id: true,
         name: true,
+        depth: true,
+        capacity: true,
         status: true,
+        latitude: true,
+        longitude: true,
         // İlişkiler: sadece gereken alanlar
         fieldWells: {
           select: {
@@ -90,7 +108,7 @@ export async function POST(request: Request) {
     }
 
     // Geri Alındı: fieldId -> fieldIds
-    const { name, depth, capacity, status, fieldIds } = await request.json();
+    const { name, depth, capacity, status, fieldIds, latitude, longitude } = await request.json();
 
     // Veri doğrulama
     if (!name || !depth || !capacity) {
@@ -101,12 +119,17 @@ export async function POST(request: Request) {
     }
 
     // Kuyu oluştur
+    const latitudeValue = parseCoordinate(latitude);
+    const longitudeValue = parseCoordinate(longitude);
+
     const well = await prisma.well.create({
       data: {
         name,
         depth,
         capacity,
         status: status || "ACTIVE",
+        latitude: latitudeValue,
+        longitude: longitudeValue,
         // Güncellendi: Explicit join modeli için fieldWells.create kullanılıyor
         fieldWells: {
           create: fieldIds?.map((id: string) => ({

@@ -1,15 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import type { FieldUpdateInput } from "@/types/prisma-types";
-
-// Güncellenmiş tip
-type FieldAssignmentType = {
-  id: string;
-  userId: string;
-  fieldId: string;
-  createdAt: Date;
-  updatedAt: Date;
-};
+import type { Prisma } from "@prisma/client";
+import type { Field } from "@prisma/client";
 
 // Belirli bir tarlayı getir
 export async function GET(req: NextRequest) {
@@ -89,7 +81,25 @@ export async function PUT(req: NextRequest) {
     // wellIds dizisini request body'den al
     // ownerIds -> fieldOwnershipsData olarak değiştirildi, artık {userId, percentage} objeleri içerecek
     const { name, location, size, coordinates, status, workerIds, wellIds, fieldOwnershipsData, cropData, seasonId } = // seasonId eklendi
-      await req.json();
+      (await req.json()) as {
+        name?: string;
+        location?: string;
+        size?: number;
+        coordinates?: string | null;
+        status?: string;
+        workerIds?: string[];
+        wellIds?: string[];
+        fieldOwnershipsData?: { userId: string; percentage: number }[];
+        cropData?: {
+          cropId?: string;
+          name?: string;
+          plantedDate?: string;
+          harvestDate?: string;
+          status?: string;
+          notes?: string;
+        };
+        seasonId?: string | null;
+      };
 
     // Mevcut tarlayı fieldWells ile birlikte getir
     const existingField = await prisma.field.findUnique({
@@ -110,7 +120,7 @@ export async function PUT(req: NextRequest) {
     }
 
     // Temel tarla güncelleme verileri
-    const updateData: FieldUpdateInput = {};
+    const updateData: any = {};
     if (name !== undefined) updateData.name = name;
     if (location !== undefined) updateData.location = location;
     if (size !== undefined) updateData.size = size;
@@ -118,14 +128,12 @@ export async function PUT(req: NextRequest) {
     if (status !== undefined) updateData.status = status;
     if (seasonId !== undefined) updateData.seasonId = seasonId; // seasonId güncellemesi eklendi
 
-    // Mevcut kuyu ID'lerini al
-    const currentWellIds = existingField.fieldWells.map(fw => fw.wellId);
     // Gelen yeni kuyu ID'leri (boş veya null değilse)
     const newWellIds = Array.isArray(wellIds) ? wellIds.filter(id => id) : []; // Gelen ID'leri filtrele
     console.log("newWellIds:", newWellIds); // Kullanıcının önerdiği log eklendi
 
     // Atomik işlem için transaction başlat
-    const transactionOperations = [];
+    const transactionOperations: Prisma.PrismaPromise<unknown>[] = [];
 
     // 1. Temel tarla bilgilerini güncelle
     transactionOperations.push(
@@ -146,9 +154,9 @@ export async function PUT(req: NextRequest) {
     if (newWellIds.length > 0) {
       transactionOperations.push(
         prisma.fieldWell.createMany({
-          data: newWellIds.map((wellId: string) => ({
+          data: newWellIds.map((wellId) => ({
             fieldId: id,
-            wellId: wellId,
+            wellId,
           })),
           // skipDuplicates: true, // MongoDB provider'ı için createMany'de doğrudan desteklenmiyor olabilir.
         })
@@ -167,9 +175,9 @@ export async function PUT(req: NextRequest) {
       if (workerIds.length > 0) {
         transactionOperations.push(
           prisma.fieldWorkerAssignment.createMany({
-            data: workerIds.map((userId: string) => ({
+            data: workerIds.map((workerId) => ({
               fieldId: id,
-              userId,
+              userId: workerId,
             })),
           })
         );
@@ -188,10 +196,10 @@ export async function PUT(req: NextRequest) {
       if (fieldOwnershipsData.length > 0) {
         transactionOperations.push(
           prisma.fieldOwnership.createMany({
-            data: fieldOwnershipsData.map((ownership: { userId: string, percentage: number }) => ({
+            data: fieldOwnershipsData.map((ownership) => ({
               fieldId: id,
               userId: ownership.userId,
-              percentage: ownership.percentage, // Yüzde değeri eklendi
+              percentage: ownership.percentage,
             })),
           })
         );
@@ -211,7 +219,7 @@ export async function PUT(req: NextRequest) {
             data: {
               plantedDate: newPlantedDate,
               ...(harvestDate && { harvestDate: new Date(harvestDate) }),
-              ...(cropStatus && { status: cropStatus }),
+              ...(cropStatus && { status: cropStatus as any }),
               ...(notes && { notes: notes }),
               ...(name && { name: name }), // Eğer isim de güncelleniyorsa
             },
@@ -232,7 +240,7 @@ export async function PUT(req: NextRequest) {
               data: {
                 plantedDate: newPlantedDate,
                 ...(harvestDate && { harvestDate: new Date(harvestDate) }),
-                ...(cropStatus && { status: cropStatus }),
+                ...(cropStatus && { status: cropStatus as any }),
                 ...(notes && { notes: notes }),
               },
             })
@@ -259,8 +267,7 @@ export async function PUT(req: NextRequest) {
     }
 
     // Transaction'ı çalıştır
-    const results = await prisma.$transaction(transactionOperations);
-    const updatedFieldResult = results[0]; // İlk işlem field update sonucudur
+    await prisma.$transaction(transactionOperations);
 
     // Güncellenmiş tarlayı ilişkileriyle birlikte getirip döndür
     const finalUpdatedField = await prisma.field.findUnique({
@@ -356,10 +363,10 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ message: "Tarla başarıyla silindi" });
 
-  } catch (error: any) { // Hata tipini any olarak belirle veya daha spesifik bir tip kullan
+  } catch (error: unknown) {
     console.error("Error deleting field:", error);
     // Transaction içinde fırlatılan özel hatayı kontrol et
-    if (error.message === "Tarla bulunamadı") {
+    if (error instanceof Error && error.message === "Tarla bulunamadı") {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }
     // Diğer hatalar için genel hata mesajı

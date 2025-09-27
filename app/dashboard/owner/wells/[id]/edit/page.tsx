@@ -52,6 +52,8 @@ export default async function EditWellPage({ params }: EditWellPageProps) {
     name: well.name,
     depth: well.depth,
     capacity: well.capacity,
+    latitude: well.latitude ?? null,
+    longitude: well.longitude ?? null,
     status: well.status,
     fieldIds: well.fieldWells.map((fw) => fw.field.id),
   };
@@ -82,3 +84,4 @@ export default async function EditWellPage({ params }: EditWellPageProps) {
     </div>
   );
 }
+

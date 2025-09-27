@@ -1,12 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import {
-  PaymentHistory,
-  FieldOwnerExpense,
-  Debt,
-  DebtStatus,
-  PaymentMethod,
-} from "@prisma/client"; // Gerekli türleri içe aktar
+import type { Prisma, PaymentHistory } from "@prisma/client";
+import { DebtStatus, PaymentMethod } from "@prisma/client";
 
 // Tarla sahibi gideri için ödeme yap
 export async function POST(
@@ -14,6 +9,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const { id } = params;
     const userId = request.headers.get("x-user-id");
     const userRole = request.headers.get("x-user-role");
 
@@ -24,7 +20,7 @@ export async function POST(
       );
     }
 
-    const fieldOwnerExpenseId = params.id; // Bu ID FieldOwnerExpense ID'si
+    const fieldOwnerExpenseId = id; // Bu ID FieldOwnerExpense ID'si
     const { amount, paymentDate, method, notes } = (await request.json()) as {
       amount: number;
       paymentDate: string;
@@ -149,7 +145,7 @@ export async function POST(
       return { newPayment, updatedDebt };
     });
 
-    return NextResponse.json(paymentResult.newPayment); // Sadece yeni ödeme kaydını döndür
+    return NextResponse.json((paymentResult as any).newPayment); // Sadece yeni ödeme kaydını döndür
   } catch (error) {
     console.error("Error making payment:", error);
     return NextResponse.json(

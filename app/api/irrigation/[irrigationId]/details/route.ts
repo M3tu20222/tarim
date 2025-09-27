@@ -65,9 +65,10 @@ type IrrigationFieldUsageWithFieldAndOwners = Prisma.IrrigationFieldUsageGetPayl
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { irrigationId: string } }
+  { params }: { params: Promise<{ irrigationId: string }> }
 ) {
   try {
+    const { irrigationId: paramIrrigationId } = await params;
     const session = await getServerSideSession();
     if (!session || !session.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

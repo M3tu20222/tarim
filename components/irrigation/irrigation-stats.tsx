@@ -34,6 +34,7 @@ import {
 import { Droplet, Clock, Calendar } from "lucide-react";
 import { tr } from "date-fns/locale";
 import { format } from "date-fns";
+import type { DateRange } from "react-day-picker";
 
 // Tarla tipi
 interface Field {
@@ -310,10 +311,11 @@ export function IrrigationStats() {
                  Tarih Aralığı
                </label>
                <CalendarDateRangePicker
-                 // value={dateRange} // CalendarDateRangePicker kendi state'ini yönetiyor, dışarıdan value almaz.
-                 // onChange={setDateRange} // Dışarıya state değişikliğini bildirmek için prop eklenmeli.
-                 // align, locale, placeholder props'ları CalendarDateRangePicker'da tanımlı değil.
-                 className="w-full" 
+                 date={dateRange}
+                 onSelect={(range: DateRange | undefined) => {
+                   setDateRange(range || { from: undefined, to: undefined } as any);
+                 }}
+                 className="w-full"
               />
             </div>
           </div>

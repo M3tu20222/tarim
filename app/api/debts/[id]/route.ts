@@ -4,9 +4,10 @@ import { prisma } from "@/lib/prisma";
 // Belirli bir borcu getir
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const userId = request.headers.get("x-user-id");
     const userRole = request.headers.get("x-user-role");
 
@@ -18,7 +19,7 @@ export async function GET(
     }
 
     const debt = await prisma.debt.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         creditor: {
           select: {
@@ -86,9 +87,10 @@ export async function GET(
 // Borcu güncelle
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const userId = request.headers.get("x-user-id");
     const userRole = request.headers.get("x-user-role");
 
@@ -108,7 +110,7 @@ export async function PUT(
     }
 
     const debt = await prisma.debt.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!debt) {
@@ -157,7 +159,7 @@ export async function PUT(
 
     // Borcu güncelle
     const updatedDebt = await prisma.debt.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         amount,
         dueDate: new Date(dueDate),
@@ -200,9 +202,10 @@ export async function PUT(
 // Borcu sil
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const userId = request.headers.get("x-user-id");
     const userRole = request.headers.get("x-user-role");
 
@@ -222,7 +225,7 @@ export async function DELETE(
     }
 
     const debt = await prisma.debt.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         paymentHistory: true,
       },
@@ -245,7 +248,7 @@ export async function DELETE(
 
     // Borcu sil
     await prisma.debt.delete({
-      where: { id: params.id },
+      where: { id },
     });
 
     return NextResponse.json({ message: "Borç başarıyla silindi" });

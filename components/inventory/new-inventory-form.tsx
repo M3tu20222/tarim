@@ -32,7 +32,9 @@ import { Plus } from "lucide-react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { Unit } from "@prisma/client";
-import type { InventoryCategoryType } from "@/types/prisma-types";
+import type { InventoryCategory } from "@prisma/client";
+
+type InventoryCategoryType = InventoryCategory;
 
 const formSchema = z.object({
   name: z.string().min(2, {

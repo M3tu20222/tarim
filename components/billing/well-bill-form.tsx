@@ -33,7 +33,9 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/components/ui/use-toast";
-import type { WellBill, BillingPeriod } from "@/types/billing-types";
+import type { WellBillingPeriod, BillingPeriod } from "@prisma/client";
+
+type WellBill = WellBillingPeriod;
 
 // Kuyu tipi
 interface Well {

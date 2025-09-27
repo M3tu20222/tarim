@@ -1,6 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+const parseCoordinate = (value: unknown) => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const normalized = Number(value.trim());
+    return Number.isFinite(normalized) ? normalized : null;
+  }
+  return null;
+};
+
 // Belirli bir kuyuyu getir
 export async function GET(
   request: Request,
@@ -77,7 +91,7 @@ export async function PUT(
 
     const { id: wellId } = await params;
     // Düzeltildi: fieldId -> fieldIds (çoğul dizi)
-    const { name, depth, capacity, status, fieldIds } = await request.json();
+    const { name, depth, capacity, status, fieldIds, latitude, longitude } = await request.json();
 
     // Veri doğrulama
     if (!name || !depth || !capacity) {
@@ -88,6 +102,9 @@ export async function PUT(
     }
 
     // Kuyu güncelle
+    const latitudeValue = parseCoordinate(latitude);
+    const longitudeValue = parseCoordinate(longitude);
+
     const well = await prisma.well.update({
       where: {
         id: wellId,
@@ -97,6 +114,8 @@ export async function PUT(
         depth,
         capacity,
         status,
+        latitude: latitudeValue,
+        longitude: longitudeValue,
         // Düzeltildi: fieldWells ilişkisi yönetimi
         fieldWells: {
           deleteMany: {}, // Mevcut tüm fieldWell bağlantılarını sil
@@ -163,3 +182,4 @@ export async function DELETE(
     );
   }
 }
+

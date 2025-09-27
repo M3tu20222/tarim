@@ -1,12 +1,13 @@
-"use client";
+﻿"use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import * as z from "zod";
 import { Loader2 } from "lucide-react";
+import * as z from "zod";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -17,6 +18,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -24,133 +26,146 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useToast } from "@/components/ui/use-toast";
-// import { MultiSelect } from "@/components/ui/multi-select"; // Kaldırıldı
-import { Checkbox } from "@/components/ui/checkbox"; // Tekrar eklendi
-// import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"; // Kaldırıldı
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
-  SheetClose, // Eklendi
-  SheetFooter, // Eklendi
-} from "@/components/ui/sheet"; // Eklendi
-import { Badge } from "@/components/ui/badge"; // Eklendi
-import { ScrollArea } from "@/components/ui/scroll-area"; // Eklendi
+} from "@/components/ui/sheet";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { useToast } from "@/components/ui/use-toast";
 
-// Form şeması
+const numericCoordinate = (label: string) =>
+  z
+    .preprocess((value) => {
+      if (value === "" || value === null || value === undefined) {
+        return null;
+      }
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : value;
+    }, z.number({ invalid_type_error: `${label} sayisal bir deger olmalidir.` }).nullable())
+    .optional();
+
 const formSchema = z.object({
-  name: z.string().min(2, {
-    message: "Kuyu adı en az 2 karakter olmalıdır.",
-  }),
-  depth: z.coerce.number().positive({
-    message: "Derinlik pozitif bir sayı olmalıdır.",
-  }),
-  capacity: z.coerce.number().positive({
-    message: "Kapasite pozitif bir sayı olmalıdır.",
-  }),
-  status: z.string().min(1, {
-    message: "Durum seçilmelidir.",
-  }),
-  // Geri Alındı: fieldId -> fieldIds (dizi)
+  name: z.string().min(2, { message: "Kuyu adi en az 2 karakter olmalidir." }),
+  depth: z.coerce.number().positive({ message: "Derinlik pozitif bir sayi olmalidir." }),
+  capacity: z.coerce.number().positive({ message: "Kapasite pozitif bir sayi olmalidir." }),
+  status: z.string().min(1, { message: "Durum secilmelidir." }),
+  latitude: numericCoordinate("Enlem").refine(
+    (value) => value === null || value === undefined || (value >= -90 && value <= 90),
+    { message: "Enlem -90 ile 90 arasinda olmalidir." }
+  ),
+  longitude: numericCoordinate("Boylam").refine(
+    (value) => value === null || value === undefined || (value >= -180 && value <= 180),
+    { message: "Boylam -180 ile 180 arasinda olmalidir." }
+  ),
   fieldIds: z.array(z.string()).optional(),
 });
 
-// Props tipi
-interface WellFormProps {
-  wellId?: string;
-  defaultValues?: z.infer<typeof formSchema>;
+export type WellFormValues = z.infer<typeof formSchema>;
+
+interface ApiField {
+  id: string;
+  name: string;
 }
 
-export function WellForm({ wellId, defaultValues }: WellFormProps = {}) {
+interface WellFormProps {
+  wellId?: string;
+  defaultValues?: Partial<WellFormValues>;
+}
+
+export function WellForm({ wellId, defaultValues }: WellFormProps) {
   const router = useRouter();
   const { toast } = useToast();
+  const [fields, setFields] = useState<ApiField[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [fields, setFields] = useState<any[]>([]);
+  const [isLoadingFields, setIsLoadingFields] = useState(false);
 
-  // Form oluştur
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<WellFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: defaultValues || {
-      name: "",
-      depth: 0,
-      capacity: 0,
-      status: "ACTIVE",
-      // Geri Alındı: fieldId -> fieldIds
-      fieldIds: [],
+    defaultValues: {
+      name: defaultValues?.name ?? "",
+      depth: defaultValues?.depth ?? undefined,
+      capacity: defaultValues?.capacity ?? undefined,
+      status: defaultValues?.status ?? "ACTIVE",
+      latitude: defaultValues?.latitude ?? null,
+      longitude: defaultValues?.longitude ?? null,
+      fieldIds: defaultValues?.fieldIds ?? [],
     },
   });
 
-  // Tarlaları getir
   useEffect(() => {
-    const fetchFields = async () => {
+    const run = async () => {
+      setIsLoadingFields(true);
       try {
-        const response = await fetch("/api/fields?fetchAll=true"); // fetchAll=true eklendi
-        if (response.ok) {
-          const data = await response.json();
-          setFields(data.data);
+        const response = await fetch("/api/fields?fetchAll=true");
+        if (!response.ok) {
+          throw new Error("Tarlalar yuklenirken hata olustu.");
+        }
+        const payload = await response.json();
+        if (Array.isArray(payload.data)) {
+          setFields(payload.data as ApiField[]);
         } else {
-          toast({
-            title: "Hata",
-            description: "Tarlalar yüklenirken bir hata oluştu.",
-            variant: "destructive",
-          });
+          setFields([]);
         }
       } catch (error) {
-        console.error("Error fetching fields:", error);
+        console.error("fields fetch error", error);
         toast({
           title: "Hata",
-          description: "Tarlalar yüklenirken bir hata oluştu.",
+          description: "Tarlalar yuklenirken bir hata olustu.",
           variant: "destructive",
         });
+      } finally {
+        setIsLoadingFields(false);
       }
     };
-
-    fetchFields();
+    run();
   }, [toast]);
 
-  // Form gönderimi
-  async function onSubmit(values: z.infer<typeof formSchema>) {
+  const onSubmit = async (values: WellFormValues) => {
     setIsSubmitting(true);
     try {
       const url = wellId ? `/api/wells/${wellId}` : "/api/wells";
       const method = wellId ? "PUT" : "POST";
+      const payload = {
+        ...values,
+        latitude: values.latitude ?? null,
+        longitude: values.longitude ?? null,
+      };
 
       const response = await fetch(url, {
         method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(values),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
 
-      if (response.ok) {
-        toast({
-          title: "Başarılı!",
-          description: wellId
-            ? "Kuyu başarıyla güncellendi."
-            : "Kuyu başarıyla eklendi.",
-        });
-        router.push("/dashboard/owner/wells");
-        router.refresh();
-      } else {
-        const error = await response.json();
-        throw new Error(error.error || "Bir hata oluştu");
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}));
+        throw new Error(errorPayload.error ?? "Kuyu kaydedilirken bir hata olustu.");
       }
-    } catch (error: any) {
-      console.error("Kuyu kaydetme hatası:", error);
+
       toast({
-        title: "Hata!",
-        description: error.message || "Kuyu kaydedilirken bir hata oluştu.",
+        title: "Basarili",
+        description: wellId ? "Kuyu guncellendi." : "Kuyu olusturuldu.",
+      });
+
+      router.push("/dashboard/owner/wells");
+      router.refresh();
+    } catch (error) {
+      console.error("well save error", error);
+      toast({
+        title: "Hata",
+        description: error instanceof Error ? error.message : "Beklenmedik hata olustu.",
         variant: "destructive",
       });
     } finally {
       setIsSubmitting(false);
     }
-  }
+  };
 
   return (
     <Form {...form}>
@@ -161,9 +176,9 @@ export function WellForm({ wellId, defaultValues }: WellFormProps = {}) {
             name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Kuyu Adı</FormLabel>
+                <FormLabel>Kuyu adi</FormLabel>
                 <FormControl>
-                  <Input placeholder="Örn: Merkez Kuyu" {...field} />
+                  <Input placeholder="Orn: Merkez Kuyu" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -177,7 +192,13 @@ export function WellForm({ wellId, defaultValues }: WellFormProps = {}) {
               <FormItem>
                 <FormLabel>Derinlik (metre)</FormLabel>
                 <FormControl>
-                  <Input type="number" min="0" step="0.1" {...field} />
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={field.value ?? ""}
+                    onChange={(event) => field.onChange(event.target.value)}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -189,9 +210,15 @@ export function WellForm({ wellId, defaultValues }: WellFormProps = {}) {
             name="capacity"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Kapasite (litre/saat)</FormLabel>
+                <FormLabel>Kapasite (litre / saat)</FormLabel>
                 <FormControl>
-                  <Input type="number" min="0" step="1" {...field} />
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={field.value ?? ""}
+                    onChange={(event) => field.onChange(event.target.value)}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -204,105 +231,132 @@ export function WellForm({ wellId, defaultValues }: WellFormProps = {}) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Durum</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                >
+                <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Durum seçin" />
+                      <SelectValue placeholder="Durum secin" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
                     <SelectItem value="ACTIVE">Aktif</SelectItem>
                     <SelectItem value="INACTIVE">Pasif</SelectItem>
-                    <SelectItem value="MAINTENANCE">Bakımda</SelectItem>
+                    <SelectItem value="MAINTENANCE">Bakimda</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
               </FormItem>
             )}
           />
+
+          <FormField
+            control={form.control}
+            name="latitude"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Enlem</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    step="any"
+                    placeholder="38.573794"
+                    value={field.value ?? ""}
+                    onChange={(event) => field.onChange(event.target.value)}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="longitude"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Boylam</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    step="any"
+                    placeholder="31.850831"
+                    value={field.value ?? ""}
+                    onChange={(event) => field.onChange(event.target.value)}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
         </div>
 
-        {/* fieldIds FormField - Çoklu Seçim (Checkbox + Sheet) */}
         <FormField
           control={form.control}
-          name="fieldIds" // fieldIds (dizi) kullanılıyor
+          name="fieldIds"
           render={({ field }) => (
             <FormItem className="flex flex-col">
-              <FormLabel>Tarlalar</FormLabel> {/* Çoğul etiket */}
+              <FormLabel>Tarlalar</FormLabel>
               <Sheet>
                 <SheetTrigger asChild>
                   <FormControl>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start text-left font-normal"
-                    >
-                      {/* Seçili tarlaları Badge olarak göster */}
+                    <Button variant="outline" className="w-full justify-start text-left">
                       {field.value && field.value.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
                           {field.value.map((fieldId) => {
-                            const selectedField = fields.find(
-                              (f) => f.id === fieldId
-                            );
-                            return selectedField ? (
+                            const matched = fields.find((item) => item.id === fieldId);
+                            return matched ? (
                               <Badge key={fieldId} variant="secondary">
-                                {selectedField.name}
+                                {matched.name}
                               </Badge>
                             ) : null;
                           })}
                         </div>
                       ) : (
-                        <span>Tarlaları Seç</span> // Varsayılan metin
+                        <span>Tarla secin</span>
                       )}
                     </Button>
                   </FormControl>
                 </SheetTrigger>
                 <SheetContent className="flex flex-col">
                   <SheetHeader>
-                    <SheetTitle>Tarlaları Seç</SheetTitle>
-                    <SheetDescription>
-                      Bu kuyuya bağlamak istediğiniz tarlaları seçin.
-                    </SheetDescription>
+                    <SheetTitle>Tarlalar</SheetTitle>
+                    <SheetDescription>Bu kuyu ile iliskilendirmek istediginiz tarlalari secin.</SheetDescription>
                   </SheetHeader>
-                  <ScrollArea className="flex-grow">
-                    {/* Çoklu seçim için Checkbox kullan */}
+                  <ScrollArea className="flex-1">
                     <div className="space-y-2 p-4">
-                      {fields.map((item) => (
-                        <FormField
-                          key={item.id}
-                          control={form.control}
-                          name="fieldIds" // fieldIds dizisini hedefle
-                          render={({ field: fieldControl }) => { // Çakışmayı önlemek için farklı isim
-                            return (
-                              <FormItem
-                                key={item.id}
-                                className="flex flex-row items-start space-x-3 space-y-0"
-                              >
-                                <FormControl>
-                                  <Checkbox
-                                    checked={fieldControl.value?.includes(item.id)}
-                                    onCheckedChange={(checked) => {
-                                      const currentValue = fieldControl.value || [];
-                                      return checked
-                                        ? fieldControl.onChange([...currentValue, item.id])
-                                        : fieldControl.onChange(
-                                            currentValue.filter(
-                                              (value) => value !== item.id
-                                            )
-                                          );
-                                    }}
-                                  />
-                                </FormControl>
-                                <FormLabel className="font-normal">
-                                  {item.name}
-                                </FormLabel>
-                              </FormItem>
-                            );
-                          }}
-                        />
-                      ))}
+                      {isLoadingFields ? (
+                        <p className="text-sm text-muted-foreground">Tarlalar yukleniyor...</p>
+                      ) : fields.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Kayitli tarla bulunamadi.</p>
+                      ) : (
+                        fields.map((item) => (
+                          <FormField
+                            key={item.id}
+                            control={form.control}
+                            name="fieldIds"
+                            render={({ field: innerField }) => {
+                              const currentValue = innerField.value ?? [];
+                              const isChecked = currentValue.includes(item.id);
+                              return (
+                                <FormItem className="flex flex-row items-start space-x-3">
+                                  <FormControl>
+                                    <Checkbox
+                                      checked={isChecked}
+                                      onCheckedChange={(checked) => {
+                                        if (checked) {
+                                          innerField.onChange([...currentValue, item.id]);
+                                        } else {
+                                          innerField.onChange(currentValue.filter((value) => value !== item.id));
+                                        }
+                                      }}
+                                    />
+                                  </FormControl>
+                                  <FormLabel className="font-normal">{item.name}</FormLabel>
+                                </FormItem>
+                              );
+                            }}
+                          />
+                        ))
+                      )}
                     </div>
                   </ScrollArea>
                   <SheetFooter>
@@ -316,7 +370,6 @@ export function WellForm({ wellId, defaultValues }: WellFormProps = {}) {
             </FormItem>
           )}
         />
-        {/* /fieldIds FormField */}
 
         <div className="flex justify-end gap-4">
           <Button
@@ -325,7 +378,7 @@ export function WellForm({ wellId, defaultValues }: WellFormProps = {}) {
             onClick={() => router.push("/dashboard/owner/wells")}
             disabled={isSubmitting}
           >
-            İptal
+            Iptal
           </Button>
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? (

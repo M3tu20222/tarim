@@ -14,9 +14,10 @@ export const revalidate = 900;
 // Belirli bir envanter öğesini getir
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: inventoryId } = await params;
     const session = await getServerSideSession();
     if (!session || !session.id) {
       return NextResponse.json({ error: "Yetkisiz erişim" }, { status: 401 });
@@ -30,9 +31,6 @@ export async function GET(
         { status: 401 }
       );
     }
-
-    // params nesnesini await ile beklet
-    const inventoryId = params.id;
 
     const inventory = await prisma.inventory.findUnique({
       where: { id: inventoryId },
@@ -90,9 +88,10 @@ export async function GET(
 // Envanter öğesini güncelle
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: inventoryId } = await params;
     const session = await getServerSideSession();
     if (!session || !session.id) {
       return NextResponse.json({ error: "Yetkisiz erişim" }, { status: 401 });
@@ -114,9 +113,6 @@ export async function PUT(
         { status: 403 }
       );
     }
-
-    // params nesnesini await ile beklet
-    const inventoryId = params.id;
 
     const {
       name,
@@ -210,9 +206,10 @@ export async function PUT(
 // Envanter öğesini sil
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: inventoryId } = await params;
     const session = await getServerSideSession();
     if (!session || !session.id) {
       return NextResponse.json({ error: "Yetkisiz erişim" }, { status: 401 });
@@ -227,9 +224,6 @@ export async function DELETE(
         { status: 403 }
       );
     }
-
-    // params doğrudan kullan
-    const inventoryId = params.id;
 
     // Mevcut envanteri kontrol et
     const existingInventory = await prisma.inventory.findUnique({

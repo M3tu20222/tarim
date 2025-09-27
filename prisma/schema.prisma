@@ -47,12 +47,19 @@ model User {
   wellAssignments     WorkerWellAssignment[]
 
   notificationPreferences NotificationPreference?
+  weatherAlerts          WeatherAlert[]         @relation("UserWeatherAlerts")
 
   irrigationOwnerUsages          IrrigationOwnerUsage[]
   irrigationInventoryOwnerUsages IrrigationInventoryOwnerUsage[]
   irrigationOwnerSummaries       IrrigationOwnerSummary[]
 
   wellBillDistributions WellBillDistribution[]
+
+  // İrrigation cost tracking relationships
+  irrigationOwnerExpenses IrrigationOwnerExpense[] @relation("UserIrrigationExpenses")
+
+  // Harvest tracking relationships
+  harvests                Harvest[]
 }
 
 // YENİ: Sezon Modeli
@@ -79,6 +86,12 @@ model Season {
   fieldExpenses FieldExpense[]
 
   notifications Notification[] @relation("SeasonNotifications")
+
+  // İrrigation cost tracking relationships
+  irrigationFieldExpenses IrrigationFieldExpense[] @relation("SeasonIrrigationExpenses")
+
+  // Harvest tracking relationships
+  harvests                Harvest[]
 }
 
 // Tarla Modeli
@@ -88,6 +101,9 @@ model Field {
   location            String
   size                Float
   coordinates         String?
+  soilType            String?
+  notes               String?
+  isRental            Boolean?                @default(false)
   status              String
   createdAt           DateTime                @default(now())
   updatedAt           DateTime                @updatedAt
@@ -104,9 +120,24 @@ model Field {
   fieldExpenses       FieldExpense[]
   notifications       Notification[]          @relation("FieldNotifications")
   irrigationFieldUsages IrrigationFieldUsage[]
+  irrigationLogs      IrrigationLog[]
 
   wellBillFieldDistributions WellBillFieldDistribution[]
   wellBillDistributions      WellBillDistribution[]
+
+  weatherSnapshots      WeatherSnapshot[]
+  weatherDailySummaries WeatherDailySummary[]
+  agroDailyFeatures     AgroFeatureDaily[]
+
+  // İrrigation cost tracking relationships
+  irrigationCosts            IrrigationCost[]            @relation("FieldIrrigationCosts")
+  irrigationFieldExpenses    IrrigationFieldExpense[]    @relation("FieldIrrigationExpenses")
+
+  // Harvest tracking relationships
+  harvests                   Harvest[]
+
+  // Weather alerts for this field
+  weatherAlerts             WeatherAlert[]          @relation("FieldWeatherAlerts")
 }
 
 // Tarla Sahipliği Modeli
@@ -122,6 +153,9 @@ model FieldOwnership {
   userId  String @db.ObjectId
 
   ownerExpenses FieldOwnerExpense[]
+
+  // İrrigation cost tracking relationships
+  irrigationOwnerExpenses IrrigationOwnerExpense[] @relation("FieldOwnershipIrrigationExpenses")
 
   @@unique([fieldId, userId])
 }
@@ -169,6 +203,9 @@ model Well {
   name               String
   depth              Float
   capacity           Float
+  latitude           Float?
+  longitude          Float?
+  locationNote       String?
   status             String
   createdAt          DateTime               @default(now())
   updatedAt          DateTime               @updatedAt
@@ -179,9 +216,94 @@ model Well {
   workerAssignments  WorkerWellAssignment[]
 }
 
+// Weather and agronomic intelligence models
+model WeatherSnapshot {
+  id                        String         @id @default(auto()) @map("_id") @db.ObjectId
+  field                     Field          @relation(fields: [fieldId], references: [id])
+  fieldId                   String         @db.ObjectId
+  source                    WeatherSource  @default(FORECAST)
+  timestamp                 DateTime
+  latitude                  Float?
+  longitude                 Float?
+  temperature2m             Float?
+  relativeHumidity2m        Float?
+  precipitationMm           Float?
+  windSpeed10m              Float?
+  shortwaveRadiation        Float?
+  et0FaoEvapotranspiration  Float?
+  vapourPressureDeficit     Float?
+  timezone                  String?
+  model                     String?
+  raw                       Json?
+  createdAt                 DateTime       @default(now())
+  updatedAt                 DateTime       @updatedAt
+
+  @@index([fieldId, timestamp])
+  @@unique([fieldId, timestamp, source])
+}
+
+model WeatherDailySummary {
+  id                        String         @id @default(auto()) @map("_id") @db.ObjectId
+  field                     Field          @relation(fields: [fieldId], references: [id])
+  fieldId                   String         @db.ObjectId
+  source                    WeatherSource  @default(FORECAST)
+  date                      DateTime
+  latitude                  Float?
+  longitude                 Float?
+  tMaxC                     Float?
+  tMinC                     Float?
+  precipitationSumMm        Float?
+  shortwaveRadiationSumMj   Float?
+  et0FaoEvapotranspiration  Float?
+  vapourPressureDeficitMax  Float?
+  rainfallProbability       Float?
+  daylightSeconds           Int?
+  timezone                  String?
+  model                     String?
+  raw                       Json?
+  createdAt                 DateTime       @default(now())
+  updatedAt                 DateTime       @updatedAt
+
+  agroFeatures              AgroFeatureDaily[]
+
+  @@unique([fieldId, date, source])
+  @@index([fieldId, date])
+}
+
+model AgroFeatureDaily {
+  id                 String                @id @default(auto()) @map("_id") @db.ObjectId
+  field              Field                 @relation(fields: [fieldId], references: [id])
+  fieldId            String                @db.ObjectId
+  crop               Crop?                 @relation(fields: [cropId], references: [id])
+  cropId             String?               @db.ObjectId
+  weatherSummary     WeatherDailySummary?  @relation(fields: [weatherSummaryId], references: [id])
+  weatherSummaryId   String?               @db.ObjectId
+  date               DateTime
+  gdd                Float?
+  gddCumulative      Float?
+  etcMm              Float?
+  etcCumulative      Float?
+  waterBalanceMm     Float?
+  rainfallMm         Float?
+  irrigationMm       Float?
+  vpdMax             Float?
+  heatStressHours    Int?
+  frostHours         Int?
+  recommendations    String[]              @default([])
+  phenologyStage     String?
+  notes              String?
+  metadata           Json?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@unique([fieldId, date])
+  @@index([cropId])
+}
+
 model Crop {
   id          String     @id @default(auto()) @map("_id") @db.ObjectId
-  name        String
+  name        String     // Manuel isim (opsiyonel özel isim)
+  cropType    CropType   @default(OTHER) // Bitki türü enum
   plantedDate DateTime
   harvestDate DateTime?
   status      CropStatus @default(GROWING)
@@ -196,6 +318,41 @@ model Crop {
   fieldId String @db.ObjectId
 
   notifications Notification[] @relation("CropNotifications")
+  agroDailyFeatures   AgroFeatureDaily[]
+  harvests            Harvest[]
+}
+
+// Hasat Kayıt Modeli
+model Harvest {
+  id                  String        @id @default(auto()) @map("_id") @db.ObjectId
+  harvestDate         DateTime
+  harvestedArea       Float         // Hasat edilen alan (dönüm)
+  quantity            Float         // Hasat miktarı (kg, ton vb.)
+  unit                String        @default("kg") // Birim (kg, ton, çuval vb.)
+  pricePerUnit        Float?        // Birim fiyat (TL/kg)
+  totalRevenue        Float?        // Toplam gelir (TL)
+  quality             String?       // Kalite (A, B, C vb.)
+  moistureContent     Float?        // Nem oranı (%)
+  storageLocation     String?       // Depolama yeri
+  buyerInfo           String?       // Alıcı bilgisi
+  transportCost       Float?        // Nakliye maliyeti
+  laborCost           Float?        // İşçilik maliyeti
+  notes               String?       // Ek notlar
+  weatherConditions   String?       // Hava durumu koşulları
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  // İlişkiler
+  crop                Crop          @relation(fields: [cropId], references: [id])
+  cropId              String        @db.ObjectId
+  field               Field         @relation(fields: [fieldId], references: [id])
+  fieldId             String        @db.ObjectId
+  season              Season?       @relation(fields: [seasonId], references: [id])
+  seasonId            String?       @db.ObjectId
+  harvestedBy         User          @relation(fields: [harvestedById], references: [id])
+  harvestedById       String        @db.ObjectId
+
+  notifications       Notification[] @relation("HarvestNotifications")
 }
 
 model ProcessingLog {
@@ -368,6 +525,9 @@ model Debt {
   wellBillDistributions WellBillDistribution[]
   fieldOwnerExpenses    FieldOwnerExpense[]
   notifications        Notification[]        @relation("DebtNotifications")
+
+  // İrrigation cost tracking relationships
+  irrigationOwnerExpenseDebts IrrigationOwnerExpense[] @relation("IrrigationOwnerExpenseDebts")
 }
 
 model Invoice {
@@ -426,6 +586,7 @@ model Process {
   processCosts          ProcessCost[]
   notifications         Notification[]
   inventoryDistribution Json?
+  weatherSnapshots      ProcessWeatherSnapshot[]
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
 }
@@ -434,8 +595,10 @@ model Notification {
   id                 String               @id @default(auto()) @map("_id") @db.ObjectId
   title              String
   message            String
+  body               String?
   type               NotificationType
   priority           NotificationPriority @default(NORMAL)
+  status             NotificationStatus   @default(UNREAD)
   isRead             Boolean              @default(false)
   isArchived         Boolean              @default(false)
   link               String?
@@ -489,6 +652,16 @@ model Notification {
   fieldExpenseId     String?              @db.ObjectId
   ownerExpense       FieldOwnerExpense?   @relation("OwnerExpenseNotifications", fields: [ownerExpenseId], references: [id])
   ownerExpenseId     String?              @db.ObjectId
+
+  // İrrigation cost tracking notification relationships
+  irrigationCost                IrrigationCost?        @relation("IrrigationCostNotifications", fields: [irrigationCostId], references: [id])
+  irrigationCostId              String?                @db.ObjectId
+  irrigationFieldExpense        IrrigationFieldExpense? @relation("IrrigationFieldExpenseNotifications", fields: [irrigationFieldExpenseId], references: [id])
+  irrigationFieldExpenseId      String?                @db.ObjectId
+  irrigationOwnerExpense        IrrigationOwnerExpense? @relation("IrrigationOwnerExpenseNotifications", fields: [irrigationOwnerExpenseId], references: [id])
+  irrigationOwnerExpenseId      String?                @db.ObjectId
+  harvest                       Harvest?               @relation("HarvestNotifications", fields: [harvestId], references: [id])
+  harvestId                     String?                @db.ObjectId
 }
 
 model NotificationPreference {
@@ -625,9 +798,14 @@ model FieldOwnerExpense {
 model IrrigationLog {
   id              String                       @id @default(auto()) @map("_id") @db.ObjectId
   startDateTime   DateTime
+  date            DateTime?
   duration        Float
+  amount          Float?
+  method          String?
   wellId          String                       @db.ObjectId
   well            Well                         @relation(fields: [wellId], references: [id])
+  fieldId         String?                      @db.ObjectId
+  field           Field?                       @relation(fields: [fieldId], references: [id])
   notes           String?
   status          String                       @default("COMPLETED")
   createdBy       String                       @db.ObjectId
@@ -641,6 +819,8 @@ model IrrigationLog {
   billingUsages   WellBillingIrrigationUsage[]
   ownerSummaries  IrrigationOwnerSummary[]
   notifications   Notification[]               @relation("IrrigationNotifications")
+  irrigationCosts IrrigationCost[]
+  weatherSnapshots ProcessWeatherSnapshot[]
 }
 
 model IrrigationFieldUsage {
@@ -766,6 +946,69 @@ model WellBillDistribution {
   @@index([debtId])
 }
 
+// İRRIGATION COST TRACKING MODELS - Process benzeri sistem
+model IrrigationCost {
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  irrigationLogId   String    @db.ObjectId
+  irrigationLog     IrrigationLog @relation(fields: [irrigationLogId], references: [id], onDelete: Cascade)
+  fieldId           String    @db.ObjectId
+  field             Field     @relation("FieldIrrigationCosts", fields: [fieldId], references: [id])
+
+  // Process benzeri maliyet kategorileri
+  laborCost         Float
+  equipmentCost     Float
+  inventoryCost     Float
+  fuelCost          Float
+
+  // İrrigation'a özel maliyetler
+  electricityCost   Float     // WellBillingPeriod'dan hesaplanacak
+  waterFee          Float
+
+  totalCost         Float
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Sahip bazında gider dağıtımı
+  ownerExpenses     IrrigationOwnerExpense[]
+  notifications     Notification[]           @relation("IrrigationCostNotifications")
+}
+
+model IrrigationFieldExpense {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  field           Field    @relation("FieldIrrigationExpenses", fields: [fieldId], references: [id])
+  fieldId         String   @db.ObjectId
+  season          Season   @relation("SeasonIrrigationExpenses", fields: [seasonId], references: [id])
+  seasonId        String   @db.ObjectId
+  irrigationLogId String   @db.ObjectId
+  sourceType      String   // "IRRIGATION"
+  sourceId        String   // IrrigationLog ID
+  totalCost       Float
+  description     String
+  expenseDate     DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  notifications   Notification[] @relation("IrrigationFieldExpenseNotifications")
+}
+
+model IrrigationOwnerExpense {
+  id                    String              @id @default(auto()) @map("_id") @db.ObjectId
+  fieldOwnership        FieldOwnership      @relation("FieldOwnershipIrrigationExpenses", fields: [fieldOwnershipId], references: [id])
+  fieldOwnershipId      String              @db.ObjectId
+  irrigationCost        IrrigationCost      @relation(fields: [irrigationCostId], references: [id])
+  irrigationCostId      String              @db.ObjectId
+  user                  User                @relation("UserIrrigationExpenses", fields: [userId], references: [id])
+  userId                String              @db.ObjectId
+  amount                Float
+  percentage            Float
+  periodStart           DateTime
+  periodEnd             DateTime
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  notifications         Notification[]      @relation("IrrigationOwnerExpenseNotifications")
+  debt                  Debt?               @relation("IrrigationOwnerExpenseDebts", fields: [debtId], references: [id])
+  debtId                String?             @db.ObjectId
+}
+
 // --------------------------------------------------
 // ENUM TANIMLAMALARI
 // --------------------------------------------------
@@ -799,6 +1042,25 @@ enum CropStatus {
   FAILED
 }
 
+enum CropType {
+  CORN       // Mısır
+  WHEAT      // Buğday
+  BEAN       // Fasulye
+  CHICKPEA   // Nohut
+  CUMIN      // Kimyon
+  CANOLA     // Kanola
+  POPPY      // Haşhaş
+  BARLEY     // Arpa
+  OATS       // Yulaf
+  SUNFLOWER  // Ayçiçeği
+  COTTON     // Pamuk
+  SUGAR_BEET // Şeker Pancarı
+  POTATO     // Patates
+  TOMATO     // Domates
+  ONION      // Soğan
+  OTHER      // Diğer
+}
+
 enum InventoryCategory {
   SEED
   FERTILIZER
@@ -816,6 +1078,12 @@ enum ProductCategory {
   SEED
   EQUIPMENT
   OTHER
+}
+
+enum WeatherSource {
+  FORECAST
+  ARCHIVE
+  HISTORICAL_FORECAST
 }
 
 enum InventoryStatus {
@@ -900,6 +1168,12 @@ enum NotificationPriority {
   URGENT
 }
 
+enum NotificationStatus {
+  UNREAD
+  READ
+  ARCHIVED
+}
+
 enum TransactionType {
   PURCHASE
   USAGE
@@ -944,3 +1218,149 @@ enum Unit {
   HECTARE
   DIGER
 }
+
+// Hava Durumu Önbellekleme Modeli
+model WeatherCache {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  location          String   // "lat_lng" formatında
+  weatherData       Json     // Ham weather API verisi
+  lastFetched       DateTime @default(now())
+  expiresAt         DateTime // 3 saat sonrası
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([location])
+  @@index([expiresAt])
+}
+
+// 7 Günlük Hava Tahmini
+model WeatherForecast {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  location        String
+  date            DateTime
+  minTemp         Float
+  maxTemp         Float
+  humidity        Float
+  precipitation   Float
+  windSpeed       Float
+  weatherCode     Int
+  description     String
+  soilMoisture    Float?
+  irrigationNeed  Boolean  @default(false)
+  riskLevel       Int      @default(0) // 0-4 arası risk seviyesi
+  createdAt       DateTime @default(now())
+
+  @@unique([location, date])
+}
+
+// İşlem sırasında çekilen hava durumu verisi (Timeline için)
+model ProcessWeatherSnapshot {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+
+  // İlişkiler
+  processId         String?   @db.ObjectId
+  process           Process?  @relation(fields: [processId], references: [id])
+  irrigationLogId   String?   @db.ObjectId
+  irrigationLog     IrrigationLog? @relation(fields: [irrigationLogId], references: [id])
+
+  // Weather verisi
+  timestamp         DateTime  @default(now())
+  location          Json      // { latitude, longitude, name }
+  temperature       Float
+  humidity          Float
+  windSpeed         Float
+  precipitation     Float
+  soilMoisture      Float?
+  weatherCode       Int?
+  description       String?
+
+  // Risk analizi
+  riskLevel         Int       @default(0) // 0-4 arası
+  risks             Json?     // Risk detayları
+
+  // Sulama önerileri
+  irrigationAdvice  Json?     // Sulama önerisi
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([processId])
+  @@index([irrigationLogId])
+  @@index([timestamp])
+}
+
+// 🌦️ WEATHER RISK ALERTS MODEL
+model WeatherAlert {
+  id          String           @id @default(auto()) @map("_id") @db.ObjectId
+  alertType   WeatherAlertType
+  severity    AlertSeverity
+  title       String
+  message     String
+
+  // Coğrafi bilgiler
+  fieldId     String?          @db.ObjectId
+  field       Field?           @relation("FieldWeatherAlerts", fields: [fieldId], references: [id])
+  coordinates Json?            // {latitude: number, longitude: number}
+
+  // Risk parametreleri
+  riskFactors Json             // {windSpeed: number, temperature: number, humidity: number, etc.}
+  threshold   Json?            // Eşik değerleri
+
+  // Timing
+  startTime   DateTime
+  endTime     DateTime?
+  duration    Int?             // Dakika cinsinden
+
+  // Status
+  status      AlertStatus      @default(ACTIVE)
+  isResolved  Boolean          @default(false)
+
+  // Actions & Recommendations
+  recommendations String[]     // Öneriler listesi
+  actionTaken     String?      // Yapılan işlem
+
+  // Metadata
+  createdBy   String?          @db.ObjectId
+  user        User?            @relation("UserWeatherAlerts", fields: [createdBy], references: [id])
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  // External data
+  apiSource   String?          // "openmeteo", "custom", etc.
+  sourceData  Json?            // Ham API verisi
+
+  @@index([alertType])
+  @@index([severity])
+  @@index([fieldId])
+  @@index([status])
+  @@index([startTime])
+  @@index([createdAt])
+}
+
+// Weather Alert Enums
+enum WeatherAlertType {
+  FROST_WARNING          // Don uyarısı
+  HIGH_WIND             // Yüksek rüzgar
+  IRRIGATION_RISK       // Sulama riski
+  DISEASE_RISK          // Hastalık riski
+  DROUGHT_WARNING       // Kuraklık uyarısı
+  EXTREME_TEMPERATURE   // Aşırı sıcaklık
+  HAIL_WARNING          // Dolu uyarısı
+  PRECIPITATION_HEAVY   // Şiddetli yağış
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AlertStatus {
+  ACTIVE    // Aktif uyarı
+  RESOLVED  // Çözümlendi
+  EXPIRED   // Süresi doldu
+  CANCELLED // İptal edildi
+}
+
+

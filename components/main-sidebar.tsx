@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useMobile } from "@/hooks/use-mobile"
-import { ChevronLeftIcon, ChevronRightIcon, HomeIcon, MapIcon, TractorIcon, ShieldIcon } from "lucide-react"
+import { ChevronLeftIcon, ChevronRightIcon, CloudSunIcon, HomeIcon, MapIcon, TractorIcon, ShieldIcon } from "lucide-react"
 
 export function MainSidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -37,10 +37,11 @@ export function MainSidebar() {
   }
 
   const links = [
-    { href: "/", label: "Giriş Sayfası", icon: HomeIcon },
+    { href: "/", label: "Giris Sayfasi", icon: HomeIcon },
     { href: "/dashboard/admin", label: "Admin Paneli", icon: ShieldIcon },
     { href: "/dashboard/owner", label: "Sahip Paneli", icon: MapIcon },
-    { href: "/dashboard/worker", label: "İşçi Paneli", icon: TractorIcon },
+    { href: "/dashboard/owner/weather", label: "Hava Durumu", icon: CloudSunIcon },
+    { href: "/dashboard/worker", label: "Isci Paneli", icon: TractorIcon },
   ]
 
   const sidebarContent = (
@@ -51,7 +52,7 @@ export function MainSidebar() {
       )}
     >
       <div className="p-4 flex items-center justify-between">
-        {(!isCollapsed || isOpen) && <h2 className="text-xl font-bold neon-text-cyan">Tarım Yönetim</h2>}
+        {(!isCollapsed || isOpen) && <h2 className="text-xl font-bold neon-text-cyan">Tarim Yonetim</h2>}
         <Button variant="ghost" size="icon" onClick={toggleSidebar} className="ml-auto">
           {isCollapsed && !isOpen ? <ChevronRightIcon className="h-4 w-4" /> : <ChevronLeftIcon className="h-4 w-4" />}
         </Button>
@@ -88,7 +89,7 @@ export function MainSidebar() {
               <span className="text-xs font-bold">TY</span>
             </div>
             <div>
-              <p className="text-sm font-medium">Tarım Yönetim</p>
+              <p className="text-sm font-medium">Tarim Yonetim</p>
               <p className="text-xs text-muted-foreground">v1.0.0</p>
             </div>
           </div>
@@ -125,4 +126,5 @@ export function MainSidebar() {
     </>
   )
 }
+
 

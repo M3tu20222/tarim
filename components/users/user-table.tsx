@@ -16,12 +16,12 @@ import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { useToast } from "@/components/ui/use-toast";
 
-import type { UserFormData } from "@/types/user-form-data";
+import type { User } from "@prisma/client";
 
 interface UserTableProps {
   refreshTrigger?: number;
-  onEditUser?: (user: UserFormData) => void;
-  onDeleteUser?: (user: UserFormData) => void;
+  onEditUser?: (user: User) => void;
+  onDeleteUser?: (user: User) => void;
 }
 
 export function UserTable({
@@ -29,7 +29,7 @@ export function UserTable({
   onEditUser,
   onDeleteUser,
 }: UserTableProps) {
-  const [users, setUsers] = useState<UserFormData[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();

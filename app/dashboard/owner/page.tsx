@@ -12,17 +12,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Overview } from "@/components/dashboard/overview";
 import { RecentSales } from "@/components/dashboard/recent-sales";
 import { Button } from "@/components/ui/button";
-import { CalendarDateRangePicker } from "@/components/date-range-picker";
+import { WaterWeatherWidget } from "@/components/dashboard/water-weather-widget";
+import { WeatherWidget } from "@/components/weather/weather-widget";
+import WeatherForecastTable from "@/components/weather/weather-forecast-table";
+import WeatherRiskDashboard from "@/components/weather/weather-risk-dashboard";
+import { IrrigationAIDashboard } from "@/components/irrigation/irrigation-ai-dashboard";
 import { prisma } from "@/lib/prisma";
 import type { DebtStatus } from "@prisma/client";
 
 export const metadata: Metadata = {
-  title: "Genel Bakış | Tarım Yönetim Sistemi",
-  description: "Tarım yönetim sistemi genel bakış sayfası",
+  title: "Genel Bakis | Tarim Yonetim Sistemi",
+  description: "Tarim yonetim sistemi genel bakis sayfasi",
 };
 
 export default async function DashboardPage() {
-  // Özet istatistikleri getir
+  // Ozet istatistikleri getir
   const totalFields = await prisma.field.count();
   const totalCrops = await prisma.crop.count();
   const totalUsers = await prisma.user.count();
@@ -32,7 +36,53 @@ export default async function DashboardPage() {
     where: { isActive: true },
   });
 
-  // Vadesi yaklaşan borçları getir (7 gün içinde)
+  const weatherFieldWithRecentData = await prisma.field.findFirst({
+    where: {
+      weatherDailySummaries: {
+        some: {},
+      },
+      crops: {
+        some: {
+          status: { notIn: ["HARVESTED"] },
+        },
+      },
+    },
+    select: { id: true, name: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  let weatherField = weatherFieldWithRecentData;
+
+  if (!weatherField) {
+    weatherField = await prisma.field.findFirst({
+      where: {
+        OR: [
+          { coordinates: { not: null } },
+          {
+            fieldWells: {
+              some: {
+                well: {
+                  latitude: { not: null },
+                  longitude: { not: null },
+                },
+              },
+            },
+          },
+        ],
+      },
+      select: { id: true, name: true },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
+  if (!weatherField) {
+    weatherField = await prisma.field.findFirst({
+      select: { id: true, name: true },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
+  // Vadesi yaklasan borclari getir (7 gun icinde)
   const sevenDaysLater = new Date();
   sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
 
@@ -65,17 +115,17 @@ export default async function DashboardPage() {
     take: 5,
   });
 
-  // Borçları DebtList bileşeninin beklediği formata dönüştür
+  // Borclari DebtList bileseninin bekledigi formata donustur
   const formattedDebts = upcomingDebts.map((debt) => ({
     id: debt.id,
     amount: debt.amount,
     dueDate: debt.dueDate.toISOString(),
     status: debt.status as DebtStatus,
-    description: debt.description || undefined, // null değerleri undefined'a dönüştür
-    reason: debt.reason || undefined, // null değerleri undefined'a dönüştür
-    paymentDate: debt.paymentDate?.toISOString() || undefined, // null değerleri undefined'a dönüştür
+    description: debt.description || undefined, // null degerleri undefined'a donustur
+    reason: debt.reason || undefined, // null degerleri undefined'a donustur
+    paymentDate: debt.paymentDate?.toISOString() || undefined, // null degerleri undefined'a donustur
     reminderSent: debt.reminderSent,
-    lastReminderDate: debt.lastReminderDate?.toISOString() || undefined, // null değerleri undefined'a dönüştür
+    lastReminderDate: debt.lastReminderDate?.toISOString() || undefined, // null degerleri undefined'a donustur
     creditor: {
       id: debt.creditor.id,
       name: debt.creditor.name,
@@ -89,24 +139,26 @@ export default async function DashboardPage() {
       amount: payment.amount,
       paymentDate: payment.paymentDate.toISOString(),
       paymentMethod: payment.paymentMethod,
-      notes: payment.notes || undefined, // null değerleri undefined'a dönüştür
+      notes: payment.notes || undefined, // null degerleri undefined'a donustur
     })),
   }));
 
   return (
     <div className="flex-1 space-y-4 p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Genel Bakış</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Genel Bakis</h2>
         <div className="flex items-center space-x-2">
-          <CalendarDateRangePicker />
-          <Button>İndir</Button>
+          <Button>Indir</Button>
         </div>
       </div>
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="overview">Genel Bakış</TabsTrigger>
+          <TabsTrigger value="overview">Genel Bakis</TabsTrigger>
+          <TabsTrigger value="weather">🌤️ Hava Durumu</TabsTrigger>
+          <TabsTrigger value="risk">⚠️ Risk Analizi</TabsTrigger>
           <TabsTrigger value="analytics">Analitik</TabsTrigger>
           <TabsTrigger value="reports">Raporlar</TabsTrigger>
+          <TabsTrigger value="ai-irrigation">🤖 AI Sulama</TabsTrigger>
           <TabsTrigger value="notifications">Bildirimler</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="space-y-4">
@@ -170,7 +222,7 @@ export default async function DashboardPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Toplam Kullanıcı
+                  Toplam Kullanici
                 </CardTitle>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -189,7 +241,7 @@ export default async function DashboardPage() {
               <CardContent>
                 <div className="text-2xl font-bold">{totalUsers}</div>
                 <p className="text-xs text-muted-foreground">
-                  Aktif kullanıcılar
+                  Aktif kullanicilar
                 </p>
               </CardContent>
             </Card>
@@ -217,10 +269,26 @@ export default async function DashboardPage() {
               </CardContent>
             </Card>
           </div>
+          {weatherField ? (
+            <div className="grid gap-4 md:grid-cols-1">
+              <WaterWeatherWidget fieldId={weatherField.id} />
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-1">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Hava Durumu & Su Tuketimi</CardTitle>
+                  <CardDescription>
+                    Hava durumu ve su tuketimi verilerini goruntulemek icin koordinat bilgisi girilmis bir tarla ekleyin.
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            </div>
+          )}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
             <Card className="col-span-4">
               <CardHeader>
-                <CardTitle>Genel Bakış</CardTitle>
+                <CardTitle>Genel Bakis</CardTitle>
               </CardHeader>
               <CardContent className="pl-2">
                 <Overview />
@@ -228,8 +296,8 @@ export default async function DashboardPage() {
             </Card>
             <Card className="col-span-3">
               <CardHeader>
-                <CardTitle>Son Satışlar</CardTitle>
-                <CardDescription>Bu ay 16 satış yaptınız.</CardDescription>
+                <CardTitle>Son Satislar</CardTitle>
+                <CardDescription>Bu ay 16 satis yaptiniz.</CardDescription>
               </CardHeader>
               <CardContent>
                 <RecentSales />
@@ -239,13 +307,13 @@ export default async function DashboardPage() {
           <div className="grid gap-4 md:grid-cols-1">
             <Card>
               <CardHeader>
-                <CardTitle>Yaklaşan Borç Ödemeleri</CardTitle>
+                <CardTitle>Yaklasan Borc Odemeleri</CardTitle>
                 <CardDescription>
-                  Önümüzdeki 7 gün içinde vadesi dolacak borçlar
+                  Onumuzdeki 7 gun icinde vadesi dolacak borclar
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {/* DebtList bileşenini import etmek yerine doğrudan kullanıyoruz */}
+                {/* DebtList bilesenini import etmek yerine dogrudan kullaniyoruz */}
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {formattedDebts.length > 0 ? (
                     formattedDebts.map((debt) => (
@@ -267,13 +335,13 @@ export default async function DashboardPage() {
                           <CardDescription>
                             <div className="flex flex-col gap-1 mt-1">
                               <div className="flex justify-between">
-                                <span>Alacaklı:</span>
+                                <span>Alacakli:</span>
                                 <span className="font-medium">
                                   {debt.creditor.name}
                                 </span>
                               </div>
                               <div className="flex justify-between">
-                                <span>Borçlu:</span>
+                                <span>Borclu:</span>
                                 <span className="font-medium">
                                   {debt.debtor.name}
                                 </span>
@@ -296,7 +364,7 @@ export default async function DashboardPage() {
                             {debt.description && (
                               <div className="text-sm">
                                 <span className="text-muted-foreground">
-                                  Açıklama:
+                                  Aciklama:
                                 </span>
                                 <p className="line-clamp-1">
                                   {debt.description}
@@ -322,10 +390,10 @@ export default async function DashboardPage() {
                   ) : (
                     <div className="col-span-3 flex flex-col items-center justify-center p-8 border rounded-lg">
                       <h3 className="text-xl font-semibold mb-2">
-                        Yaklaşan borç bulunmuyor
+                        Yaklasan borc bulunmuyor
                       </h3>
                       <p className="text-muted-foreground mb-4 text-center">
-                        Önümüzdeki 7 gün içinde vadesi dolacak borç bulunmuyor.
+                        Onumuzdeki 7 gun icinde vadesi dolacak borc bulunmuyor.
                       </p>
                     </div>
                   )}
@@ -334,7 +402,37 @@ export default async function DashboardPage() {
             </Card>
           </div>
         </TabsContent>
+
+        <TabsContent value="weather" className="space-y-4">
+          <WeatherWidget />
+          <WeatherForecastTable />
+        </TabsContent>
+
+        <TabsContent value="risk" className="space-y-4">
+          {weatherField ? (
+            <WeatherRiskDashboard fieldId={weatherField.id} />
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>Risk Analizi</CardTitle>
+                <CardDescription>
+                  Risk analizi yapmak için koordinat bilgisi girilmis bir tarla ekleyin.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="ai-irrigation" className="space-y-4">
+          <IrrigationAIDashboard
+            totalFields={totalFields}
+            totalCrops={totalCrops}
+          />
+        </TabsContent>
       </Tabs>
     </div>
   );
 }
+
+
+

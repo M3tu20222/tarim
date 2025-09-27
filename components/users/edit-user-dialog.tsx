@@ -22,12 +22,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import type { UserFormData } from "@/types/user-form-data";
+import type { User } from "@prisma/client";
 
 interface EditUserDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  user: UserFormData;
+  user: User;
   onUserEdited: () => void;
 }
 

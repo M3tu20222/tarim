@@ -253,7 +253,7 @@ export function WorkerOverview({
                         <p className="text-sm mt-1">
                           {irrigation.fieldUsages.length} tarla,{" "}
                           {irrigation.fieldUsages
-                            .map((u) => u.field.name)
+                            .map((u: any) => u.field.name)
                             .join(", ")}
                         </p>
                       </div>

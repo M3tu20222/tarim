@@ -7,8 +7,15 @@ export async function middleware(request: NextRequest) {
   const isLoginPage = request.nextUrl.pathname === "/login"
   const token = request.cookies.get("token")?.value
 
+  const isApiRoute = request.nextUrl.pathname.startsWith("/api/") && !request.nextUrl.pathname.startsWith("/api/auth/")
+  const isCronWeatherSync = request.nextUrl.pathname === "/api/cron/weather-sync"
+
+  if (isApiRoute && isCronWeatherSync) {
+    return NextResponse.next()
+  }
+
   // API rotaları için token kontrolü
-  if (request.nextUrl.pathname.startsWith("/api/") && !request.nextUrl.pathname.startsWith("/api/auth/")) {
+  if (isApiRoute) {
     if (!token) {
       console.log("API isteği token bulunamadı:", request.nextUrl.pathname)
       return NextResponse.json({ error: "Kimlik doğrulama gerekli" }, { status: 401 })

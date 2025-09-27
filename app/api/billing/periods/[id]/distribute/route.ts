@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { addMinutes, max as dateMax, min as dateMin } from 'date-fns';
+import type { Prisma, WellBillDistribution } from '@prisma/client';
 
 // Belirli bir fatura dönemini dağıt
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     const userId = request.headers.get('x-user-id');
@@ -25,7 +26,7 @@ export async function POST(
       );
     }
 
-    const { id: billingPeriodId } = await params;
+    const { id: billingPeriodId } = params;
     const { totalAmount, invoiceNumber, invoiceDate } = await request.json();
 
     if (totalAmount === undefined) {
@@ -179,8 +180,8 @@ export async function POST(
       shareAmount: Math.round(d.shareAmount * 100) / 100,
     }));
 
-    let sumRoundedShares = rounded.reduce((sum: number, d: DistRow) => sum + d.shareAmount, 0);
-    let roundingDiff = Math.round((totalAmount - sumRoundedShares) * 100) / 100;
+    const sumRoundedShares = rounded.reduce((sum: number, d: DistRow) => sum + d.shareAmount, 0);
+    const roundingDiff = Math.round((totalAmount - sumRoundedShares) * 100) / 100;
 
     if (Math.abs(roundingDiff) >= 0.01 && rounded.length > 0) {
       // Yuvarlama farkını genellikle en büyük paya ekle
@@ -205,8 +206,8 @@ export async function POST(
       ownerData.distributions.push(r);
     }
 
-    const createdDists = await prisma.$transaction(async (tx: any) => {
-      const allDistributions = [];
+    const createdDists = await prisma.$transaction<WellBillDistribution[]>(async (tx) => {
+      const allDistributions: WellBillDistribution[] = [];
       for (const [ownerId, data] of ownerDebts.entries()) {
         // Her sahip için TEK BİR borç kaydı oluştur
         const newDebt = await tx.debt.create({
@@ -251,7 +252,7 @@ export async function POST(
     }
 
 
-    const usageCreates: any[] = [];
+    const usageCreates: Prisma.PrismaPromise<unknown>[] = [];
     for (const log of logs) {
       const logStart = log.startDateTime;
       const logEnd = addMinutes(log.startDateTime, log.duration);

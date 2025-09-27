@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { ProcessType, Unit, ProcessStatus } from "@prisma/client"; // ProcessStatus eklendi
+import { WeatherSnapshotService } from "@/lib/weather/weather-snapshot-service";
+
+const weatherSnapshotService = new WeatherSnapshotService();
 
 // Tüm işlemleri getir (GET metodu aynı kalacak)
 export async function GET(request: Request) {
@@ -236,7 +239,20 @@ export async function POST(request: Request) {
       throw new Error("İşlem başlatma birden fazla denemeye rağmen tamamlanamadı.");
     }
 
-    return NextResponse.json({ processId: process.id, message: "İşlem taslağı başarıyla oluşturuldu." });
+    // 📸 Hava durumu snapshot'ı oluştur (async, hata durumunda process'i etkilemesin)
+    try {
+      await weatherSnapshotService.captureProcessWeatherSnapshot(process.id, fieldId);
+      console.log(`✅ Process ${process.id} için weather snapshot oluşturuldu`);
+    } catch (snapshotError) {
+      console.warn(`⚠️ Process ${process.id} weather snapshot hatası:`, snapshotError);
+      // Snapshot hatası process'i etkilemesin
+    }
+
+    return NextResponse.json({
+      processId: process.id,
+      message: "İşlem taslağı başarıyla oluşturuldu.",
+      weatherSnapshotCaptured: true
+    });
 
   } catch (error: any) {
     console.error("Error initiating process:", error);

@@ -187,8 +187,126 @@ export async function POST(
         }
       }
 
-      // Maliyet tahsislerini işle (costAllocations) - eğer veritabanına kaydedilecekse burada yapılabilir
-      // Şimdilik sadece bildirimleri işliyoruz.
+      // IRRIGATION COST CALCULATION - Process benzeri maliyet hesaplaması
+      const irrigationLogWithDetails = await tx.irrigationLog.findUnique({
+        where: { id: irrigationId },
+        include: {
+          fieldUsages: {
+            include: {
+              field: {
+                include: {
+                  owners: true,
+                },
+              },
+            },
+          },
+          inventoryUsages: {
+            include: {
+              inventory: {
+                select: { id: true, costPrice: true },
+              },
+            },
+          },
+        },
+      });
+
+      if (irrigationLogWithDetails && irrigationLogWithDetails.fieldUsages.length > 0) {
+        // Her tarla için ayrı maliyet hesaplama (Process sistemine benzer)
+        for (const fieldUsage of irrigationLogWithDetails.fieldUsages) {
+          // Maliyet hesaplaması
+          const laborCost = 50; // TODO: Gerçek işçilik maliyeti hesaplaması
+          const equipmentCost = 30; // TODO: Gerçek ekipman maliyeti hesaplaması
+          const fuelCost = 20; // TODO: Gerçek yakıt maliyeti hesaplaması
+
+          // Inventory cost hesaplama
+          let inventoryCost = 0;
+          for (const inventoryUsage of irrigationLogWithDetails.inventoryUsages) {
+            const unitPrice = inventoryUsage.inventory.costPrice || inventoryUsage.unitPrice;
+            inventoryCost += inventoryUsage.quantity * unitPrice;
+          }
+
+          // Electricity cost - WellBillingPeriod'dan hesaplama
+          let electricityCost = 0;
+
+          // Bu irrigation'ın WellBillingIrrigationUsage kayıtlarını bul
+          const billingUsages = await tx.wellBillingIrrigationUsage.findMany({
+            where: { irrigationLogId: irrigationId },
+            include: {
+              wellBillingPeriod: true,
+            },
+          });
+
+          // WellBillingPeriod'dan elektrik maliyetini hesapla
+          for (const billingUsage of billingUsages) {
+            const periodTotalAmount = billingUsage.wellBillingPeriod.totalAmount;
+            const irrigationPercentage = billingUsage.percentage;
+            const fieldPercentage = fieldUsage.percentage;
+
+            // Bu irrigation'ın bu tarla için elektrik maliyeti
+            const fieldElectricityShare = (periodTotalAmount * irrigationPercentage * fieldPercentage) / 10000;
+            electricityCost += fieldElectricityShare;
+          }
+
+          // Eğer henüz WellBillingPeriod'a atanmamışsa placeholder değer
+          if (electricityCost === 0) {
+            electricityCost = 50; // Default değer
+          }
+
+          const waterFee = 25; // TODO: Su ücreti hesaplaması
+
+          const totalCost = laborCost + equipmentCost + inventoryCost + fuelCost + electricityCost + waterFee;
+
+          // IrrigationCost kaydı oluştur
+          const irrigationCost = await tx.irrigationCost.create({
+            data: {
+              irrigationLogId: irrigationId,
+              fieldId: fieldUsage.fieldId,
+              laborCost,
+              equipmentCost,
+              inventoryCost,
+              fuelCost,
+              electricityCost,
+              waterFee,
+              totalCost,
+            },
+          });
+
+          // IrrigationFieldExpense kaydı oluştur
+          await tx.irrigationFieldExpense.create({
+            data: {
+              fieldId: fieldUsage.fieldId,
+              seasonId: irrigationLogWithDetails.seasonId!,
+              irrigationLogId: irrigationId,
+              sourceType: "IRRIGATION",
+              sourceId: irrigationId,
+              description: `${fieldUsage.field.name} tarlası sulama maliyeti`,
+              totalCost,
+              expenseDate: irrigationLogWithDetails.startDateTime,
+            },
+          });
+
+          // Tarla sahipleri için gider kayıtları oluştur
+          const fieldOwnerships = await tx.fieldOwnership.findMany({
+            where: { fieldId: fieldUsage.fieldId },
+          });
+
+          for (const ownership of fieldOwnerships) {
+            const ownerAmount = totalCost * (ownership.percentage / 100);
+
+            await tx.irrigationOwnerExpense.create({
+              data: {
+                fieldOwnershipId: ownership.id,
+                irrigationCostId: irrigationCost.id,
+                userId: ownership.userId,
+                amount: ownerAmount,
+                percentage: ownership.percentage,
+                periodStart: irrigationLogWithDetails.startDateTime,
+                periodEnd: irrigationLogWithDetails.startDateTime,
+              },
+            });
+          }
+        }
+      }
 
       return { id: irrigationId, status: "COMPLETED" };
     },

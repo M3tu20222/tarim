@@ -8,7 +8,7 @@ const data = [
     total: Math.floor(Math.random() * 5000) + 1000,
   },
   {
-    name: "Şub",
+    name: "Sub",
     total: Math.floor(Math.random() * 5000) + 1000,
   },
   {
@@ -32,7 +32,7 @@ const data = [
     total: Math.floor(Math.random() * 5000) + 1000,
   },
   {
-    name: "Ağu",
+    name: "Agu",
     total: Math.floor(Math.random() * 5000) + 1000,
   },
   {
@@ -69,7 +69,7 @@ export function Overview() {
           fontSize={12}
           tickLine={false}
           axisLine={false}
-          tickFormatter={(value) => `₺${value}`}
+          tickFormatter={(value) => `${value}`}
         />
         <Bar
           dataKey="total"

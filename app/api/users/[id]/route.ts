@@ -6,13 +6,13 @@ import { headers } from "next/headers";
 // Get a specific user
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const headersList = await headers();
     const userRole = headersList.get("x-user-role");
     const requestingUserId = headersList.get("x-user-id");
-    const targetUserId = params.id;
+    const { id: targetUserId } = await params;
 
     console.log("API isteği alındı - Kullanıcı Detayı");
     console.log("İstenen Kullanıcı ID:", targetUserId);
@@ -119,13 +119,13 @@ export async function PUT(request: Request) {
 // Delete a user
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const headersList = await headers();
     const userRole = headersList.get("x-user-role");
     const requestingUserId = headersList.get("x-user-id");
-    const targetUserId = params.id;
+    const { id: targetUserId } = await params;
 
     console.log("API isteği alındı - Kullanıcı Silme");
     console.log("Silinecek Kullanıcı ID:", targetUserId);

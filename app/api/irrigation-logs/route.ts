@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import { WeatherSnapshotService } from "@/lib/weather/weather-snapshot-service";
+
+const weatherSnapshotService = new WeatherSnapshotService();
 
 // Tüm sulama kayıtlarını getir
 export async function GET() {
@@ -14,8 +17,7 @@ export async function GET() {
             location: true,
           },
         },
-        worker: {
-          // worker ilişkisi doğru
+        user: {
           select: {
             id: true,
             name: true,
@@ -23,7 +25,7 @@ export async function GET() {
         },
       },
       orderBy: {
-        date: "desc",
+        startDateTime: "desc",
       },
     });
     return NextResponse.json(irrigationLogs);
@@ -44,21 +46,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { date, amount, duration, method, notes, fieldId, workerId } =
+    const { date, amount, duration, method, notes, fieldId, wellId } =
       await request.json();
 
     const irrigationLog = await prisma.irrigationLog.create({
       data: {
+        startDateTime: new Date(date),
         date: new Date(date),
         amount,
         duration,
         method,
         notes,
-        field: { connect: { id: fieldId } }, // fieldId ile ilişkilendir
-        worker: { connect: { id: workerId } }, // workerId ile ilişkilendir
+        fieldId,
+        wellId,
+        createdBy: session.id,
       },
       include: {
-        // İlişkileri include et
         field: {
           select: {
             id: true,
@@ -66,8 +69,7 @@ export async function POST(request: Request) {
             location: true,
           },
         },
-        worker: {
-          // include içinde worker ilişkisi
+        user: {
           select: {
             id: true,
             name: true,
@@ -81,31 +83,44 @@ export async function POST(request: Request) {
       where: { id: fieldId },
       include: {
         owners: {
-          // owner yerine owners (çoğul) kullan
           select: {
-            // Hangi alanların seçileceğini belirt
-            id: true,
+            user: {
+              select: {
+                id: true,
+              },
+            },
           },
         },
       },
     });
 
     if (field && field.owners && field.owners.length > 0) {
-      // Birden fazla sahip olabileceği için döngü kullan
-      for (const owner of field.owners) {
+      for (const ownership of field.owners) {
         await prisma.notification.create({
           data: {
             title: "Yeni Sulama Kaydı",
             message: `${field.name} tarlasında yeni bir sulama kaydı oluşturuldu.`,
             type: "IRRIGATION",
-            receiverId: owner.id, // owner.id kullan
-            senderId: session.user.id, // session.user.id kullan (workerId yerine)
+            receiverId: ownership.user.id,
+            senderId: session.id,
           },
         });
       }
     }
 
-    return NextResponse.json(irrigationLog);
+    // 🚿 Hava durumu snapshot'ı oluştur (async, hata durumunda irrigation'ı etkilemesin)
+    try {
+      await weatherSnapshotService.captureIrrigationWeatherSnapshot(irrigationLog.id, fieldId);
+      console.log(`✅ Irrigation ${irrigationLog.id} için weather snapshot oluşturuldu`);
+    } catch (snapshotError) {
+      console.warn(`⚠️ Irrigation ${irrigationLog.id} weather snapshot hatası:`, snapshotError);
+      // Snapshot hatası irrigation'ı etkilemesin
+    }
+
+    return NextResponse.json({
+      ...irrigationLog,
+      weatherSnapshotCaptured: true
+    });
   } catch (error) {
     console.error("Error creating irrigation log:", error);
     return NextResponse.json(

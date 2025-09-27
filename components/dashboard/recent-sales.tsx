@@ -8,12 +8,12 @@ export function RecentSales() {
           <AvatarFallback>AY</AvatarFallback>
         </Avatar>
         <div className="ml-4 space-y-1">
-          <p className="text-sm font-medium leading-none">Ahmet Yılmaz</p>
+          <p className="text-sm font-medium leading-none">Ahmet Yilmaz</p>
           <p className="text-sm text-muted-foreground">
             ahmet.yilmaz@example.com
           </p>
         </div>
-        <div className="ml-auto font-medium">+₺1,999.00</div>
+        <div className="ml-auto font-medium">+1,999.00</div>
       </div>
       <div className="flex items-center">
         <Avatar className="flex h-9 w-9 items-center justify-center space-y-0 border">
@@ -25,19 +25,19 @@ export function RecentSales() {
             mehmet.kaya@example.com
           </p>
         </div>
-        <div className="ml-auto font-medium">+₺39.00</div>
+        <div className="ml-auto font-medium">+39.00</div>
       </div>
       <div className="flex items-center">
         <Avatar className="h-9 w-9">
-          <AvatarFallback>AÇ</AvatarFallback>
+          <AvatarFallback>AC</AvatarFallback>
         </Avatar>
         <div className="ml-4 space-y-1">
-          <p className="text-sm font-medium leading-none">Ayşe Çelik</p>
+          <p className="text-sm font-medium leading-none">Ayse Celik</p>
           <p className="text-sm text-muted-foreground">
             ayse.celik@example.com
           </p>
         </div>
-        <div className="ml-auto font-medium">+₺299.00</div>
+        <div className="ml-auto font-medium">+299.00</div>
       </div>
       <div className="flex items-center">
         <Avatar className="h-9 w-9">
@@ -49,19 +49,19 @@ export function RecentSales() {
             fatma.demir@example.com
           </p>
         </div>
-        <div className="ml-auto font-medium">+₺99.00</div>
+        <div className="ml-auto font-medium">+99.00</div>
       </div>
       <div className="flex items-center">
         <Avatar className="h-9 w-9">
-          <AvatarFallback>MŞ</AvatarFallback>
+          <AvatarFallback>MS</AvatarFallback>
         </Avatar>
         <div className="ml-4 space-y-1">
-          <p className="text-sm font-medium leading-none">Mustafa Şahin</p>
+          <p className="text-sm font-medium leading-none">Mustafa Sahin</p>
           <p className="text-sm text-muted-foreground">
             mustafa.sahin@example.com
           </p>
         </div>
-        <div className="ml-auto font-medium">+₺2,499.00</div>
+        <div className="ml-auto font-medium">+2,499.00</div>
       </div>
     </div>
   );

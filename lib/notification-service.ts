@@ -1,7 +1,6 @@
-import type {
-  NotificationCreateInput,
-  NotificationType,
-} from "@/types/notification-types";
+import type { Notification, NotificationType, Prisma } from "@prisma/client";
+
+type NotificationCreateInput = Prisma.NotificationCreateInput;
 
 // Bildirim gönderme servisi
 export const NotificationService = {
@@ -13,7 +12,7 @@ export const NotificationService = {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(data),
+        message: JSON.stringify(data),
       });
 
       return response.ok;
@@ -39,7 +38,7 @@ export const NotificationService = {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
+        message: JSON.stringify({
           notifications: {
             title,
             message,
@@ -68,11 +67,9 @@ export const NotificationService = {
   ): Promise<boolean> {
     return this.sendNotification({
       title: "Ödeme Alındı",
-      body: `${amount.toFixed(2)} ₺ tutarında ödemeniz alındı.`, // message -> body
+      message: `${amount.toFixed(2)} ₺ tutarında ödemeniz alındı.`,
       type: "PAYMENT_RECEIVED",
-      receiverId,
-      relatedEntityId: entityId,
-      relatedEntityType: entityType,
+      receiver: { connect: { id: receiverId } },
     });
   },
 
@@ -88,9 +85,9 @@ export const NotificationService = {
 
     return this.sendNotification({
       title: "Ödeme Hatırlatması",
-      body: `${amount.toFixed(2)} ₺ tutarındaki ödemenizin son tarihi ${formattedDate}.`, // message -> body
+      message: `${amount.toFixed(2)} ₺ tutarındaki ödemenizin son tarihi ${formattedDate}.`, // message -> body
       type: "PAYMENT_DUE",
-      receiverId,
+      receiver: { connect: { id: receiverId } },
       relatedEntityId: entityId,
       relatedEntityType: entityType,
     });
@@ -105,9 +102,9 @@ export const NotificationService = {
   ): Promise<boolean> {
     return this.sendNotification({
       title: "Düşük Envanter Uyarısı",
-      body: `${itemName} stoğu ${currentStock} birime düştü.`, // message -> body
+      message: `${itemName} stoğu ${currentStock} birime düştü.`, // message -> body
       type: "INVENTORY_LOW",
-      receiverId,
+      receiver: { connect: { id: receiverId } },
       relatedEntityId: inventoryId,
       relatedEntityType: "INVENTORY",
     });
@@ -121,9 +118,9 @@ export const NotificationService = {
   ): Promise<boolean> {
     return this.sendNotification({
       title: "Süreç Tamamlandı",
-      body: `${processName} süreci başarıyla tamamlandı.`, // message -> body
+      message: `${processName} süreci başarıyla tamamlandı.`, // message -> body
       type: "PROCESS_COMPLETED",
-      receiverId,
+      receiver: { connect: { id: receiverId } },
       relatedEntityId: processId,
       relatedEntityType: "PROCESS",
     });
@@ -141,9 +138,9 @@ export const NotificationService = {
 
     return this.sendNotification({
       title: "Yeni Görev Atandı",
-      body: `Size "${taskName}" görevi atandı. Son tarih: ${formattedDate}.`, // message -> body
+      message: `Size "${taskName}" görevi atandı. Son tarih: ${formattedDate}.`, // message -> body
       type: "TASK_ASSIGNED",
-      receiverId,
+      receiver: { connect: { id: receiverId } },
       relatedEntityId: taskId,
       relatedEntityType: entityType,
     });
@@ -160,9 +157,9 @@ export const NotificationService = {
 
     return this.sendNotification({
       title: "Sulama Planlandı",
-      body: `${fieldName} için ${formattedDate} tarihinde sulama planlandı.`, // message -> body
+      message: `${fieldName} için ${formattedDate} tarihinde sulama planlandı.`, // message -> body
       type: "IRRIGATION_SCHEDULED",
-      receiverId,
+      receiver: { connect: { id: receiverId } },
       relatedEntityId: irrigationId,
       relatedEntityType: "IRRIGATION",
     });
@@ -179,9 +176,9 @@ export const NotificationService = {
 
     return this.sendNotification({
       title: "Sulama Tamamlandı",
-      body: `${fieldName} için ${formattedDate} tarihinde sulama tamamlandı.`, // message -> body
+      message: `${fieldName} için ${formattedDate} tarihinde sulama tamamlandı.`, // message -> body
       type: "IRRIGATION_COMPLETED",
-      receiverId,
+      receiver: { connect: { id: receiverId } },
       relatedEntityId: irrigationId,
       relatedEntityType: "IRRIGATION",
     });
@@ -196,9 +193,9 @@ export const NotificationService = {
   ): Promise<boolean> {
     return this.sendNotification({
       title: "Sistem Uyarısı",
-      body: alertMessage, // message -> body
+      message: alertMessage, // message -> body
       type: "SYSTEM_ALERT",
-      receiverId,
+      receiver: { connect: { id: receiverId } },
       relatedEntityId: entityId,
       relatedEntityType: entityType,
     });

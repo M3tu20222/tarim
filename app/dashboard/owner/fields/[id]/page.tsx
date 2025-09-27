@@ -168,6 +168,14 @@ export default async function FieldPage({ params }: FieldPageProps) {
                 </dd>
               </div>
               <div>
+                <dt className="text-sm font-medium text-gray-500">Tarla Tipi</dt>
+                <dd className="mt-1">
+                  <Badge variant={field.isRental ? "destructive" : "default"}>
+                    {field.isRental ? "Kiralık" : "Sahipli"}
+                  </Badge>
+                </dd>
+              </div>
+              <div>
                 <dt className="text-sm font-medium text-gray-500">
                   Oluşturulma Tarihi
                 </dt>
@@ -275,7 +283,7 @@ export default async function FieldPage({ params }: FieldPageProps) {
                     <div>
                       <p className="font-medium">{fieldWell.well.name}</p> {/* well.name -> fieldWell.well.name */}
                       <p className="text-sm text-muted-foreground">
-                        Derinlik: {fieldWell.well.depth}m | Kapasite: {fieldWell.well.capacity}{" "} {/* well.depth -> fieldWell.well.depth, etc. */}
+                        Derinlik: {fieldWell.well.depth || 'Bilinmiyor'}m | Kapasite: {fieldWell.well.capacity || 'Bilinmiyor'}{" "} {/* well.depth -> fieldWell.well.depth, etc. */}
                         lt/sa
                       </p>
                     </div>
@@ -353,7 +361,7 @@ export default async function FieldPage({ params }: FieldPageProps) {
                           )}
                           {process.description && (
                              <p className="text-sm text-muted-foreground">
-                               Açıklama: {process.description} {/* Display description if available */}
+                               Açıklama: {process.description || "Açıklama yok"}
                              </p>
                           )}
                         </div>
@@ -394,7 +402,7 @@ export default async function FieldPage({ params }: FieldPageProps) {
                   className="flex items-center justify-between rounded-lg border p-3"
                 >
                   <div>
-                    <p className="font-medium">{expense.description}</p>
+                    <p className="font-medium">{expense.description || "Açıklama yok"}</p>
                     <p className="text-sm text-muted-foreground">
                       Tarih: {formatDate(expense.expenseDate)} | Tutar:{" "}
                       <span className="font-semibold">

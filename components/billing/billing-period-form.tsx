@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/components/ui/use-toast";
-import type { BillingPeriod } from "@/types/billing-types";
+import type { BillingPeriod } from "@prisma/client";
 
 const formSchema = z.object({
   name: z.string().min(1, {

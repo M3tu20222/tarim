@@ -13,7 +13,12 @@ import { Button } from "@/components/ui/button";
 import { Bell } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
-import { Notification, NotificationSummary } from "@/types/notification-types"; // İthalat satırını yeniden yazıyoruz
+import type { Notification } from "@prisma/client";
+
+interface NotificationSummary {
+  unreadCount: number;
+  recentNotifications: Notification[];
+}
 import { formatDistanceToNow } from "date-fns";
 import { tr } from "date-fns/locale";
 import { useToast } from "@/components/ui/use-toast";

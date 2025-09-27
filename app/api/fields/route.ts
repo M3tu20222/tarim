@@ -2,21 +2,29 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { NextRequest } from "next/server";
 import { getServerSideSession } from "@/lib/session";
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 // Route-level ISR (120 sn): sabit referans veriler için DB yükünü azaltır
 export const revalidate = 120;
 
-// includeOwnerships durumuna bağlı olarak dinamik tip tanımı
-type FieldWithRelations = Prisma.FieldGetPayload<{
-  include: {
-    season: true;
-    fieldWells: { include: { well: true } };
-    owners: boolean extends true
-      ? { include: { user: { select: { id: true; name: true; email: true } } } }
-      : false;
-  };
-}>;
+interface FieldOwnershipInput {
+  userId: string;
+  percentage: number;
+}
+
+interface CreateFieldPayload {
+  name: string;
+  location: string;
+  size: number;
+  coordinates?: string;
+  crop: string;
+  plantingDate: string;
+  expectedHarvestDate: string;
+  soilType: string;
+  seasonId?: string | null;
+  wellId?: string | null;
+  ownerships: FieldOwnershipInput[];
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -40,7 +48,7 @@ export async function GET(request: NextRequest) {
     const fetchAll = searchParams.get("fetchAll") === "true";
 
     // Filtreleme koşulları
-    const where: any = {};
+    const where: Prisma.FieldWhereInput = {};
 
     // Kuyu ID'sine göre filtreleme
     if (wellId) {
@@ -182,15 +190,15 @@ export async function POST(request: Request) {
       name,
       location,
       size,
+      coordinates,
       crop,
       plantingDate,
       expectedHarvestDate,
       soilType,
-      notes,
       seasonId,
       wellId,
       ownerships,
-    } = await request.json();
+    } = (await request.json()) as CreateFieldPayload;
 
     // Veri doğrulama
     if (
@@ -217,7 +225,7 @@ export async function POST(request: Request) {
     }
 
     const totalPercentage = ownerships.reduce(
-      (sum: number, o: any) => sum + o.percentage,
+      (sum, owner) => sum + owner.percentage,
       0
     );
     if (totalPercentage !== 100) {
@@ -233,6 +241,7 @@ export async function POST(request: Request) {
         name,
         location,
         size,
+        coordinates: coordinates || null,
         status: "ACTIVE",
         season: seasonId
           ? {
@@ -253,7 +262,7 @@ export async function POST(request: Request) {
           },
         },
         owners: {
-          create: ownerships.map((ownership: any) => ({
+          create: ownerships.map((ownership) => ({
             user: {
               connect: { id: ownership.userId },
             },

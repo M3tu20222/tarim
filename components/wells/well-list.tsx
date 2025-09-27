@@ -44,6 +44,12 @@ interface Well {
   depth: number;
   capacity: number;
   status: string;
+  fieldWells?: {
+    field: {
+      id: string;
+      name: string;
+    };
+  }[];
   fields?: {
     id: string;
     name: string;

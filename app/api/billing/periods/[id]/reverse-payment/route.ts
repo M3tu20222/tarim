@@ -6,14 +6,13 @@ const prisma = new PrismaClient();
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id: periodId } = await params;
   const session = await getServerSession();
   if (!session) {
     return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
   }
-
-  const periodId = params.id;
 
   try {
     const result = await prisma.$transaction(async (tx) => {

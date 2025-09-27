@@ -6,9 +6,10 @@ import { headers } from "next/headers";
 // Belirli bir sezonu getir
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const headersList = await headers();
     const userId = headersList.get("x-user-id");
     const userRole = headersList.get("x-user-role");
@@ -21,7 +22,7 @@ export async function GET(
     }
 
     const season = await prisma.season.findUnique({
-      where: { id: params.id },
+      where: { id: id },
       include: {
         creator: {
           select: {
@@ -50,9 +51,10 @@ export async function GET(
 // Sezonu güncelle
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const headersList = await headers();
     const userId = headersList.get("x-user-id");
     const userRole = headersList.get("x-user-role");
@@ -99,7 +101,7 @@ export async function PUT(
       await prisma.season.updateMany({
         where: {
           isActive: true,
-          id: { not: params.id },
+          id: { not: id },
         },
         data: { isActive: false },
       });
@@ -107,7 +109,7 @@ export async function PUT(
 
     // Sezonu güncelle
     const season = await prisma.season.update({
-      where: { id: params.id },
+      where: { id: id },
       data: {
         name,
         startDate: start,
@@ -130,9 +132,10 @@ export async function PUT(
 // Sezonu sil
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const headersList = await headers();
     const userId = headersList.get("x-user-id");
     const userRole = headersList.get("x-user-role");
@@ -154,15 +157,15 @@ export async function DELETE(
 
     // İlişkili kayıtları kontrol et
     const relatedFields = await prisma.field.count({
-      where: { seasonId: params.id },
+      where: { seasonId: id },
     });
 
     const relatedCrops = await prisma.crop.count({
-      where: { seasonId: params.id },
+      where: { seasonId: id },
     });
 
     const relatedPurchases = await prisma.purchase.count({
-      where: { seasonId: params.id },
+      where: { seasonId: id },
     });
 
     // İlişkili kayıtlar varsa silme işlemini engelle
@@ -182,7 +185,7 @@ export async function DELETE(
 
     // Sezonu sil
     await prisma.season.delete({
-      where: { id: params.id },
+      where: { id: id },
     });
 
     return NextResponse.json({ message: "Sezon başarıyla silindi" });

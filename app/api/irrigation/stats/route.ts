@@ -33,12 +33,12 @@ export async function GET(request: Request) {
     }
 
     if (startDate || endDate) {
-      filter.date = {};
+      filter.startDateTime = {};
       if (startDate) {
-        filter.date.gte = new Date(startDate);
+        filter.startDateTime.gte = new Date(startDate);
       }
       if (endDate) {
-        filter.date.lte = new Date(endDate);
+        filter.startDateTime.lte = new Date(endDate);
       }
     }
 
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
     const totalAmount = await prisma.irrigationLog.aggregate({
       where: filter,
       _sum: {
-        amount: true,
+        duration: true,
       },
     });
 
@@ -63,15 +63,17 @@ export async function GET(request: Request) {
       where: filter,
     });
 
-    // Sulama metodlarına göre dağılım
+    // Sulama metodlarına göre dağılım (method alanı optional olduğu için kontrol edelim)
     const methodDistribution = await prisma.irrigationLog.groupBy({
       by: ["method"],
-      where: filter,
+      where: {
+        ...filter,
+        method: { not: null }
+      },
       _count: {
-        method: true,
+        id: true,
       },
       _sum: {
-        amount: true,
         duration: true,
       },
     });
@@ -79,10 +81,14 @@ export async function GET(request: Request) {
     // Tarlalara göre dağılım
     const fieldDistribution = await prisma.irrigationLog.groupBy({
       by: ["fieldId"],
-      where: filter,
-      _count: true,
+      where: {
+        ...filter,
+        fieldId: { not: null }
+      },
+      _count: {
+        id: true,
+      },
       _sum: {
-        amount: true,
         duration: true,
       },
     });
@@ -91,7 +97,7 @@ export async function GET(request: Request) {
     const fields = await prisma.field.findMany({
       where: {
         id: {
-          in: fieldDistribution.map((item) => item.fieldId),
+          in: fieldDistribution.map((item) => item.fieldId!),
         },
       },
       select: {
@@ -104,7 +110,7 @@ export async function GET(request: Request) {
     const fieldDistributionWithNames = fieldDistribution.map((item) => ({
       ...item,
       fieldName:
-        fields.find((field) => field.id === item.fieldId)?.name ||
+        fields.find((field) => field.id === item.fieldId!)?.name ||
         "Bilinmeyen Tarla",
     }));
 
@@ -170,8 +176,8 @@ export async function GET(request: Request) {
 
 
     return NextResponse.json({
-      totalAmount: totalAmount._sum.amount || 0,
-      totalDuration: totalDuration._sum.duration || 0,
+      totalAmount: totalAmount._sum?.duration || 0,
+      totalDuration: totalDuration._sum?.duration || 0,
       irrigationCount,
       methodDistribution,
       fieldDistribution: fieldDistributionWithNames,

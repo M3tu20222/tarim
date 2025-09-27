@@ -23,6 +23,13 @@ import {
   LogOut,
   Wrench,
   Receipt, // Yeni ikon eklendi
+  Brain, // AI Dashboard için
+  Wheat, // Hasat için
+  CloudRain, // Hava durumu için
+  Wind, // Rüzgar için
+  Thermometer, // Sıcaklık için
+  Snowflake, // Don riski için
+  AlertTriangle, // Risk uyarıları için
 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { cn } from "@/lib/utils";
@@ -66,6 +73,7 @@ const MENU_GROUPS = {
   INVENTORY: "inventory",
   FINANCIAL: "financial",
   FARM: "farm",
+  WEATHER: "weather",
   REPORTS: "reports",
   ADMIN: "admin",
 };
@@ -79,10 +87,44 @@ export function AppSidebar() {
   const [mounted, setMounted] = useState(false);
   const { user, logout } = useAuth();
 
+  // Swipe gesture states
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+
+  // Minimum swipe distance (in px)
+  const minSwipeDistance = 50;
+
   // Tema değişikliğini işlemek için useEffect
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Swipe gesture handlers
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+
+    // Close sidebar on left swipe
+    if (isLeftSwipe && open) {
+      setOpen(false);
+    }
+    // Open sidebar on right swipe from left edge
+    if (isRightSwipe && !open && touchStart < 30) {
+      setOpen(true);
+    }
+  };
 
   const toggleSubmenu = (key: string) => {
     setExpanded((prev) => ({
@@ -112,7 +154,12 @@ export function AppSidebar() {
 
   return (
     <TooltipProvider>
-      <Sidebar className="border-r border-border bg-card">
+      <Sidebar
+        className="border-r border-border bg-card"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
         <SidebarHeader className="flex items-center justify-between h-14 px-4 border-b">
           <div className="flex items-center">
             <div
@@ -554,6 +601,22 @@ export function AppSidebar() {
                 </SidebarMenuSub>
               )}
             </SidebarMenuItem>
+
+            {/* 🤖 AI Dashboard - Akıllı Sulama Asistanı */}
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() => router.push("/dashboard/irrigation-ai")}
+                isActive={isActive("/dashboard/irrigation-ai")}
+                tooltip="🤖 Akıllı Sulama Asistanı"
+              >
+                <Brain className="h-5 w-5 text-blue-500" />
+                <span className="flex items-center gap-2">
+                  🤖 AI Sulama Asistanı
+                  <span className="px-1.5 py-0.5 text-xs bg-blue-500 text-white rounded">NEW</span>
+                </span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
             {/* Süreçler - Tüm roller görebilir */}
             <SidebarMenuItem>
               {" "}
@@ -674,6 +737,137 @@ export function AppSidebar() {
                 </SidebarMenuSub>
               )}
             </SidebarMenuItem>
+            {/* Hasat menüsü - Sadece admin ve owner için göster */}
+            {user?.role &&
+              (user.role.toLowerCase() === "admin" ||
+                user.role.toLowerCase() === "owner") && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => toggleSubmenu("harvests")}
+                    isActive={isActiveGroup([
+                      "/dashboard/owner/harvests",
+                      "/dashboard/admin/harvests",
+                      "/dashboard/harvests",
+                    ])}
+                    data-state={expanded["harvests"] ? "open" : "closed"}
+                    tooltip="Hasat"
+                  >
+                    <Wheat className="h-5 w-5" />
+                    <span>Hasat</span>
+                    <SidebarMenuAction
+                      asChild
+                      className="ml-auto"
+                      data-state={expanded["harvests"] ? "open" : "closed"}
+                    >
+                      <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/menu-button:rotate-90" />
+                    </SidebarMenuAction>
+                  </SidebarMenuButton>
+                  {expanded["harvests"] && (
+                    <SidebarMenuSub>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton
+                          onClick={() => router.push("/dashboard/harvests")}
+                          isActive={isActive("/dashboard/harvests")}
+                        >
+                          Hasat Kayıtları
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton
+                          onClick={() => router.push("/dashboard/harvests/new")}
+                          isActive={isActive("/dashboard/harvests/new")}
+                        >
+                          Yeni Hasat Kaydı
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton
+                          onClick={() => router.push("/dashboard/harvests/transfer")}
+                          isActive={isActive("/dashboard/harvests/transfer")}
+                        >
+                          Sezon Aktarımı
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    </SidebarMenuSub>
+                  )}
+                </SidebarMenuItem>
+              )}
+
+            {/* 🌦️ Hava Durumu ve Akıllı Risk Yönetimi */}
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() => toggleSubmenu("weather")}
+                isActive={isActiveGroup([
+                  "/dashboard/weather",
+                  "/dashboard/owner/weather",
+                ])}
+                data-state={expanded["weather"] ? "open" : "closed"}
+                tooltip="🌦️ Akıllı Hava Durumu"
+              >
+                <CloudRain className="h-5 w-5 text-blue-500" />
+                <span className="flex items-center gap-2">
+                  🌦️ Akıllı Hava Durumu
+                  <span className="px-1.5 py-0.5 text-xs bg-green-500 text-white rounded">AI</span>
+                </span>
+                <SidebarMenuAction
+                  asChild
+                  className="ml-auto"
+                  data-state={expanded["weather"] ? "open" : "closed"}
+                >
+                  <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/menu-button:rotate-90" />
+                </SidebarMenuAction>
+              </SidebarMenuButton>
+              {expanded["weather"] && (
+                <SidebarMenuSub>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton
+                      onClick={() => router.push("/dashboard/weather")}
+                      isActive={isActive("/dashboard/weather")}
+                    >
+                      <CloudRain className="h-4 w-4" />
+                      Dashboard
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton
+                      onClick={() => router.push("/dashboard/weather/wind-analysis")}
+                      isActive={isActive("/dashboard/weather/wind-analysis")}
+                    >
+                      <Wind className="h-4 w-4" />
+                      Rüzgar Analizi
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton
+                      onClick={() => router.push("/dashboard/weather/frost-protection")}
+                      isActive={isActive("/dashboard/weather/frost-protection")}
+                    >
+                      <Snowflake className="h-4 w-4" />
+                      Don Koruması
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton
+                      onClick={() => router.push("/dashboard/weather/risk-alerts")}
+                      isActive={isActive("/dashboard/weather/risk-alerts")}
+                    >
+                      <AlertTriangle className="h-4 w-4" />
+                      Risk Uyarıları
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton
+                      onClick={() => router.push("/dashboard/weather/irrigation-advisor")}
+                      isActive={isActive("/dashboard/weather/irrigation-advisor")}
+                    >
+                      <Droplet className="h-4 w-4" />
+                      Sulama Danışmanı
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                </SidebarMenuSub>
+              )}
+            </SidebarMenuItem>
+
             {/* Ekipman menüsü - Sadece admin ve owner için göster */}
             {user?.role &&
               (user.role.toLowerCase() === "admin" ||

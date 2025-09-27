@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -69,6 +70,7 @@ const formSchema = z.object({
   size: z.coerce.number().positive({
     message: "Alan pozitif bir sayı olmalıdır.",
   }),
+  coordinates: z.string().optional(),
   crop: z.string().min(1, {
     message: "Ekin türü seçilmelidir.",
   }),
@@ -82,6 +84,7 @@ const formSchema = z.object({
     message: "Toprak türü seçilmelidir.",
   }),
   notes: z.string().optional(),
+  isRental: z.boolean().optional(),
   seasonId: z.string().optional(),
   // wellId: z.string().optional(), // Kaldırıldı
   wellIds: z.array(z.string()).optional(), // Dizi olarak eklendi
@@ -108,9 +111,11 @@ export function NewFieldForm({ initialData }: NewFieldFormProps = {}) {
       name: initialData?.name || "",
       location: initialData?.location || "",
       size: initialData?.size || 0,
+      coordinates: initialData?.coordinates || "",
       crop: initialData?.crops?.[0]?.name || "",
       soilType: initialData?.soilType || "",
       notes: initialData?.notes || "",
+      isRental: initialData?.isRental || false,
       seasonId: initialData?.seasonId || "",
       // wellId: initialData?.wellId || "", // Kaldırıldı
       wellIds: initialData?.wellIds || [], // Dizi olarak eklendi
@@ -129,18 +134,19 @@ export function NewFieldForm({ initialData }: NewFieldFormProps = {}) {
       try {
         const response = await fetch("/api/seasons");
         if (response.ok) {
-          const data = await response.json();
-          setSeasons(data);
+          const responseData = await response.json();
+          const seasonsData = responseData.data || [];
+          setSeasons(seasonsData);
 
           // Aktif sezonu bul ve form değerini güncelle
-          const activeSeason = data.find((season: Season) => season.isActive);
+          const activeSeason = seasonsData.find((season: Season) => season.isActive);
           if (activeSeason) {
             setActiveSeasonId(activeSeason.id);
             form.setValue("seasonId", activeSeason.id);
-          } else if (data.length > 0) {
+          } else if (seasonsData.length > 0) {
             // Aktif sezon yoksa ilk sezonu seç
-            setActiveSeasonId(data[0].id);
-            form.setValue("seasonId", data[0].id);
+            setActiveSeasonId(seasonsData[0].id);
+            form.setValue("seasonId", seasonsData[0].id);
           } else {
             // Hiç sezon yoksa "no-season" değerini kullan
             form.setValue("seasonId", "no-season");
@@ -280,8 +286,10 @@ export function NewFieldForm({ initialData }: NewFieldFormProps = {}) {
       form.setValue("name", initialData.name);
       form.setValue("location", initialData.location);
       form.setValue("size", initialData.size);
+      form.setValue("coordinates", initialData.coordinates || "");
       form.setValue("soilType", initialData.soilType || "");
       form.setValue("notes", initialData.notes || "");
+      form.setValue("isRental", initialData.isRental || false);
       form.setValue("seasonId", initialData.seasonId || "");
       // form.setValue("wellId", initialData.wellId || ""); // Kaldırıldı
       form.setValue("wellIds", initialData.wellIds || []); // Dizi olarak ayarla
@@ -336,6 +344,23 @@ export function NewFieldForm({ initialData }: NewFieldFormProps = {}) {
 
           <FormField
             control={form.control}
+            name="coordinates"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Koordinatlar</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="Örn: 38.5694,31.8372 (Enlem,Boylam)"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
             name="crop"
             render={({ field }) => (
               <FormItem>
@@ -357,6 +382,11 @@ export function NewFieldForm({ initialData }: NewFieldFormProps = {}) {
                     <SelectItem value="cotton">Pamuk</SelectItem>
                     <SelectItem value="potato">Patates</SelectItem>
                     <SelectItem value="tomato">Domates</SelectItem>
+                    <SelectItem value="bean">Fasulye</SelectItem>
+                    <SelectItem value="chickpea">Nohut</SelectItem>
+                    <SelectItem value="cumin">Kimyon</SelectItem>
+                    <SelectItem value="canola">Kanola</SelectItem>
+                    <SelectItem value="oats">Yulaf</SelectItem>
                     <SelectItem value="other">Diğer</SelectItem>
                   </SelectContent>
                 </Select>
@@ -466,6 +496,29 @@ export function NewFieldForm({ initialData }: NewFieldFormProps = {}) {
             )}
           />
 
+          <FormField
+            control={form.control}
+            name="isRental"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+                <div className="space-y-1 leading-none">
+                  <FormLabel>
+                    Kiralık Tarla
+                  </FormLabel>
+                  <p className="text-xs text-muted-foreground">
+                    Bu tarla kiralık mı?
+                  </p>
+                </div>
+              </FormItem>
+            )}
+          />
+
           {/* Sezon seçimi */}
           <FormField
             control={form.control}
@@ -509,7 +562,7 @@ export function NewFieldForm({ initialData }: NewFieldFormProps = {}) {
                    <MultiSelect
                       options={(Array.isArray(wells) ? wells : []).map((well) => ({ // Dizi kontrolü eklendi
                         value: well.id,
-                        label: `${well.name} (${well.depth}m, ${well.capacity} lt/sa)`,
+                        label: `${well.name} (${well.depth || 'Bilinmiyor'}m, ${well.capacity || 'Bilinmiyor'} lt/sa)`,
                       }))}
                       value={field.value || []} // selected -> value olarak değiştirildi
                       onChange={field.onChange} // onChange handler'ı bağlandı

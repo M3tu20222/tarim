@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 // PrismaNotification ve NotificationType'ı Prisma'dan import et
-import { Notification as PrismaNotification, NotificationType } from "@prisma/client";
-import {
-  Notification as FrontendNotification, // Frontend türünü ayrı bir adla import et
-  NotificationSummary,
-  NotificationStatus, // Bu hala hata verebilir, sonra bakacağız
-} from "@/types/notification-types";
+import { Notification as PrismaNotification, NotificationType, NotificationStatus } from "@prisma/client";
+
+type FrontendNotification = PrismaNotification;
+
+interface NotificationSummary {
+  unreadCount: number;
+  recentNotifications: FrontendNotification[];
+}
 
 // Prisma modelini Frontend türüne dönüştüren yardımcı fonksiyon
 function mapPrismaToFrontend(
@@ -29,7 +31,7 @@ function mapPrismaToFrontend(
     type: prismaNotification.type, // Prisma'dan gelen enum değerini doğrudan kullan
     title: prismaNotification.title, // title eşleşiyor
     body: prismaNotification.message, // message -> body
-    link: prismaNotification.link ?? undefined, // link eşleşiyor (null ise undefined)
+    link: prismaNotification.link || undefined, // link eşleşiyor (null ise undefined)
     priority: prismaNotification.priority, // priority eşleşiyor
     status: status, // isRead/isArchived -> status
     methods: [], // Veritabanında yok, varsayılan boş dizi
@@ -43,7 +45,6 @@ function mapPrismaToFrontend(
 export async function GET(request: Request) {
   try {
     const session = await getSession();
-    // Hata mesajına göre session objesi doğrudan id içeriyor
     const userId = session?.id;
 
     if (!userId) {

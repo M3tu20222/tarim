@@ -11,13 +11,13 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import type { UserFormData } from "@/types/user-form-data";
+import type { User } from "@prisma/client";
 import { AlertTriangleIcon } from "lucide-react";
 
 interface DeleteUserDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  user: UserFormData;
+  user: User;
   onUserDeleted: () => void;
 }
 

@@ -5,9 +5,10 @@ import { ApprovalStatus } from "@prisma/client";
 // Alış onayı
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const userId = request.headers.get("x-user-id");
     const userRole = request.headers.get("x-user-role");
 
@@ -38,7 +39,7 @@ export async function POST(
 
     // Alışı kontrol et
     const purchase = await prisma.purchase.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         approvals: {
           where: { approverId: userId },
@@ -73,7 +74,7 @@ export async function POST(
       // Yeni onay oluştur
       await prisma.purchaseApproval.create({
         data: {
-          purchase: { connect: { id: params.id } },
+          purchase: { connect: { id } },
           approver: { connect: { id: userId } },
           status: status as ApprovalStatus,
           comment,
@@ -84,7 +85,7 @@ export async function POST(
 
     // Tüm onayları kontrol et
     const allApprovals = await prisma.purchaseApproval.findMany({
-      where: { purchaseId: params.id },
+      where: { purchaseId: id },
     });
 
     // Onay durumunu güncelle
@@ -104,7 +105,7 @@ export async function POST(
 
     // Alış durumunu güncelle
     await prisma.purchase.update({
-      where: { id: params.id },
+      where: { id },
       data: { approvalStatus: finalStatus },
     });
 
@@ -120,7 +121,7 @@ export async function POST(
             id:
               (
                 await prisma.purchaseContributor.findFirst({
-                  where: { purchaseId: params.id },
+                  where: { purchaseId: id },
                   orderBy: { createdAt: "asc" },
                   select: { userId: true },
                 })

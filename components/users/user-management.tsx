@@ -8,9 +8,7 @@ import { DeleteUserDialog } from "./delete-user-dialog";
 import { Button } from "@/components/ui/button";
 import { PlusIcon } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import type { UserFormData } from "@/types/user-form-data"; // UserFormData tipini import et
-
-type User = UserFormData;
+import type { User } from "@prisma/client";
 
 
 export function UserManagement() {

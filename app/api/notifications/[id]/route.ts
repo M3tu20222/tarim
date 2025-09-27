@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { NotificationUpdateInput } from "@/types/notification-types";
+import type { Notification } from "@prisma/client";
 
 // Bildirim detaylarını getir
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = request.headers.get("x-user-id");
-    // Await params to get the id
     const { id } = await params;
+    const userId = request.headers.get("x-user-id");
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -45,13 +44,12 @@ export async function GET(
 // Bildirim durumunu güncelle (okundu olarak işaretle, arşivle)
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = request.headers.get("x-user-id");
-    const data: NotificationUpdateInput = await request.json();
-    // Await params to get the id
     const { id } = await params;
+    const userId = request.headers.get("x-user-id");
+    const data: any = await request.json();
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -97,13 +95,12 @@ export async function PATCH(
 // Bildirimi sil
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const userId = request.headers.get("x-user-id");
     const userRole = request.headers.get("x-user-role");
-    // Await params to get the id
-    const { id } = await params;
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

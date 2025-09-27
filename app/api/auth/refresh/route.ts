@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { signToken, decodeToken } from "@/lib/jwt"; // Gerekli fonksiyonları içe aktar
 
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get("token")?.value; // 'token' adını kullan

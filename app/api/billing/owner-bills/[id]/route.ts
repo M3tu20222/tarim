@@ -5,9 +5,10 @@ import { FieldOwnerExpense } from "@prisma/client"; // Gerekli türü içe aktar
 // Belirli bir tarla sahibi giderini getir
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const userId = request.headers.get("x-user-id");
     const userRole = request.headers.get("x-user-role");
 
@@ -17,8 +18,6 @@ export async function GET(
         { status: 401 }
       );
     }
-
-    const id = params.id;
 
     // Tarla sahibi giderini getir
     const fieldOwnerExpense = await prisma.fieldOwnerExpense.findUnique({

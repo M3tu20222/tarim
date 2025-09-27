@@ -28,10 +28,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import type {
-  NotificationType,
-  NotificationListType,
-} from "@/types/notification-types";
+import type { NotificationType } from "@prisma/client";
+
+type NotificationListType = "all" | "unread" | "read";
 
 interface Notification {
   id: string;

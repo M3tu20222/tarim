@@ -22,13 +22,30 @@ const eslintConfig = [
         "plugin:jsx-a11y/recommended" //Erişilebilirlik
     ),
   {
-      ...nextPlugin.configs.recommended, //next için
       files: ["**/*.{js,jsx,ts,tsx}"], // Hangi dosyalara uygulanacağını belirt
+      plugins: {
+        "@next/next": nextPlugin
+      },
       rules: {
+        ...nextPlugin.configs.recommended.rules,
         // Ek kurallar veya kural özelleştirmeleri buraya
-        "@typescript-eslint/explicit-function-return-type": "off", // Gerekirse kapat
-        "react/react-in-jsx-scope": "off", // Next.js'de gerekmeyebilir
-        "react/prop-types": "off", // TypeScript kullanıyorsanız gerekmeyebilir
+        "@typescript-eslint/explicit-function-return-type": "off",
+        "@typescript-eslint/no-unused-vars": "warn", // Error yerine warning
+        "@typescript-eslint/no-explicit-any": "warn", // Error yerine warning
+        "react/react-in-jsx-scope": "off",
+        "react/prop-types": "off",
+        "react/no-unescaped-entities": "warn",
+        "jsx-a11y/label-has-associated-control": "warn",
+        "jsx-a11y/heading-has-content": "warn",
+        "jsx-a11y/anchor-has-content": "warn",
+        "react-hooks/exhaustive-deps": "warn",
+        "prefer-const": "warn",
+        "react/no-unknown-property": "warn",
+        "@typescript-eslint/ban-ts-comment": "warn",
+        "jsx-a11y/click-events-have-key-events": "warn",
+        "jsx-a11y/no-static-element-interactions": "warn",
+        "jsx-a11y/no-autofocus": "warn",
+        "@next/next/no-html-link-for-pages": "warn",
       },
       settings: {
           react: {

@@ -45,7 +45,7 @@ export default async function NotificationsPage() {
           <NotificationList
             userId={session.id}
             role={session.role}
-            type="received"
+            type={"received"}
           />
         </TabsContent>
 
@@ -54,7 +54,7 @@ export default async function NotificationsPage() {
             <NotificationList
               userId={session.id}
               role={session.role}
-              type="sent"
+              type={"sent"}
               showSent={true}
             />
           </TabsContent>
