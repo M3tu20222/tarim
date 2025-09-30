@@ -26,4 +26,4 @@ __.env.local
 *.tsbuildinfo
 next-env.d.ts
 .vercel
-
+CLAUDE.md

@@ -830,6 +830,15 @@ export function AppSidebar() {
                   </SidebarMenuSubItem>
                   <SidebarMenuSubItem>
                     <SidebarMenuSubButton
+                      onClick={() => router.push("/dashboard/weather/forecast")}
+                      isActive={isActive("/dashboard/weather/forecast")}
+                    >
+                      <Calendar className="h-4 w-4" />
+                      Forecast (16 Gün)
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton
                       onClick={() => router.push("/dashboard/weather/wind-analysis")}
                       isActive={isActive("/dashboard/weather/wind-analysis")}
                     >

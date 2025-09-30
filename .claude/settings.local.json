@@ -23,7 +23,11 @@
       "Bash(tasklist:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(dir:*)",
+      "Bash(test:*)",
+      "Bash(rm:*)",
+      "Bash(npm run lint:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,0 +1,5 @@
+{
+  "name": "Hassas Tarım Hava Durumu Paneli",
+  "description": "Open-Meteo API'sinden alınan hava durumu verilerini kullanarak tarımsal operasyonlar için gelişmiş görselleştirmeler ve Gemini tarafından üretilen yorumlar sunan bir web uygulaması.",
+  "requestFramePermissions": []
+}

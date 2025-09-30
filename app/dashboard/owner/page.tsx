@@ -12,9 +12,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Overview } from "@/components/dashboard/overview";
 import { RecentSales } from "@/components/dashboard/recent-sales";
 import { Button } from "@/components/ui/button";
-import { WaterWeatherWidget } from "@/components/dashboard/water-weather-widget";
-import { WeatherWidget } from "@/components/weather/weather-widget";
-import WeatherForecastTable from "@/components/weather/weather-forecast-table";
 import WeatherRiskDashboard from "@/components/weather/weather-risk-dashboard";
 import { IrrigationAIDashboard } from "@/components/irrigation/irrigation-ai-dashboard";
 import { prisma } from "@/lib/prisma";
@@ -154,7 +151,6 @@ export default async function DashboardPage() {
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Genel Bakis</TabsTrigger>
-          <TabsTrigger value="weather">🌤️ Hava Durumu</TabsTrigger>
           <TabsTrigger value="risk">⚠️ Risk Analizi</TabsTrigger>
           <TabsTrigger value="analytics">Analitik</TabsTrigger>
           <TabsTrigger value="reports">Raporlar</TabsTrigger>
@@ -269,22 +265,6 @@ export default async function DashboardPage() {
               </CardContent>
             </Card>
           </div>
-          {weatherField ? (
-            <div className="grid gap-4 md:grid-cols-1">
-              <WaterWeatherWidget fieldId={weatherField.id} />
-            </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-1">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Hava Durumu & Su Tuketimi</CardTitle>
-                  <CardDescription>
-                    Hava durumu ve su tuketimi verilerini goruntulemek icin koordinat bilgisi girilmis bir tarla ekleyin.
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-            </div>
-          )}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
             <Card className="col-span-4">
               <CardHeader>
@@ -401,11 +381,6 @@ export default async function DashboardPage() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
-
-        <TabsContent value="weather" className="space-y-4">
-          <WeatherWidget />
-          <WeatherForecastTable />
         </TabsContent>
 
         <TabsContent value="risk" className="space-y-4">

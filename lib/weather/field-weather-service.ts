@@ -24,6 +24,7 @@ export interface FieldWeatherData {
       windDirection: number;
       windDirectionText: string;
       precipitation: number;
+      pressure: number;
       soilTemperature: number;
       soilMoisture: number;
     };
@@ -237,6 +238,7 @@ export class FieldWeatherService {
       windDirection: currentHourly.windDirection10m || 0,
       windDirectionText: this.getWindDirectionText(currentHourly.windDirection10m || 0),
       precipitation: currentHourly.precipitationMm || 0,
+      pressure: currentHourly.surfacePressure || 1013,
       soilTemperature: currentHourly.soilTemperature0cm || currentHourly.temperature2m || 0,
       soilMoisture: currentHourly.soilMoisture0_1cm || 0
     };

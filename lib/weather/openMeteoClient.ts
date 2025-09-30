@@ -30,6 +30,7 @@ const DEFAULT_DAILY_PARAMS = [
   "temperature_2m_max",
   "temperature_2m_min",
   "precipitation_sum",
+  "precipitation_probability_max",
   "shortwave_radiation_sum",
   "et0_fao_evapotranspiration",
   "wind_speed_10m_max",

@@ -9,8 +9,9 @@ export async function middleware(request: NextRequest) {
 
   const isApiRoute = request.nextUrl.pathname.startsWith("/api/") && !request.nextUrl.pathname.startsWith("/api/auth/")
   const isCronWeatherSync = request.nextUrl.pathname === "/api/cron/weather-sync"
+  const isTestFetch = request.nextUrl.pathname === "/api/weather/test-fetch"
 
-  if (isApiRoute && isCronWeatherSync) {
+  if (isApiRoute && (isCronWeatherSync || isTestFetch)) {
     return NextResponse.next()
   }
 
