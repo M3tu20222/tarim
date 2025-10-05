@@ -165,17 +165,10 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
   // Yeni envanter grup state'i
   const [inventoryGroups, setInventoryGroups] = useState<Array<{
     id: string; // Unique ID for the group in frontend
-    inventoryTypeId: string; // Bu, grubun genel envanter tipi seçimi olabilir (şimdilik kullanılmıyor ama tip uyumluluğu için tutuluyor)
     totalQuantity: number;
     unit: Unit;
     category: InventoryCategory;
-    allocations: Array<{ // Her bir sahip için dağıtım ve seçilen envanter tipi
-      ownerId: string;
-      name: string;
-      percentage: number;
-      allocatedQuantity: number;
-      inventoryTypeId?: string; // Sahip için seçilen envanter tipi
-    }>;
+    allocations: Record<string, Array<{ inventoryId: string; amount: number }>>; // ownerId -> [{inventoryId, amount}]
   }>>([]);
 
   const [fieldOwnerships, setFieldOwnerships] = useState<Array<{ 
@@ -184,11 +177,13 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
     name: string; 
     percentage: number 
   }>>([]);
-  const [inventoryTypes, setInventoryTypes] = useState<Array<{ 
-    id: string; 
-    name: string; 
-    category: InventoryCategory; 
+  const [inventoryTypes, setInventoryTypes] = useState<Array<{
+    id: string;
+    name: string;
+    category: InventoryCategory;
     unit: Unit;
+    totalQuantity: number;
+    totalStock?: number | null;
     ownerships: Array<{
       id: string;
       userId: string;
@@ -360,7 +355,35 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
     } else {
       setActiveEquipmentCategories([]);
     }
-  }, [form.watch("equipmentId"), equipment]);
+
+    // Ekipman yakıt tüketimi varsa ve selectedField varsa, otomatik FUEL grubu oluştur
+    if (currentSelectedEquipment && currentSelectedEquipment.fuelConsumptionPerDecare > 0 && selectedField) {
+      const processedArea = (selectedField.size * form.watch("processedPercentage")) / 100;
+      const fuelNeeded = currentSelectedEquipment.fuelConsumptionPerDecare * processedArea;
+
+      // Zaten FUEL grubu var mı kontrol et
+      const existingFuelGroup = inventoryGroups.find(g => g.category === "FUEL");
+
+      if (!existingFuelGroup && fuelNeeded > 0 && fieldOwnerships.length > 0) {
+        // Otomatik FUEL grubu oluştur - yeni allocation yapısıyla
+        const fuelGroup = {
+          id: "auto-fuel-" + Date.now().toString(),
+          totalQuantity: fuelNeeded,
+          unit: "LITRE" as Unit,
+          category: "FUEL" as InventoryCategory,
+          allocations: {} // Boş başlat, kullanıcı InventoryGroup'ta seçecek
+        };
+
+        setInventoryGroups([...inventoryGroups, fuelGroup]);
+      } else if (existingFuelGroup) {
+        // FUEL grubu zaten varsa, sadece miktarı güncelle
+        updateInventoryGroup(existingFuelGroup.id, { totalQuantity: fuelNeeded });
+      }
+    } else {
+      // Ekipman yok veya yakıt tüketimi yok, FUEL grubunu kaldır
+      setInventoryGroups(inventoryGroups.filter(g => g.category !== "FUEL" || !g.id.startsWith("auto-fuel-")));
+    }
+  }, [form.watch("equipmentId"), form.watch("processedPercentage"), equipment, selectedField, fieldOwnerships]);
 
   // Envanter grubu ekle
   const addInventoryGroup = () => {
@@ -369,11 +392,10 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
     
     const newGroup = {
       id: Date.now().toString(),
-      inventoryTypeId: "",
       totalQuantity: 0,
       unit: "ADET" as Unit, // Varsayılan birimi "ADET" olarak ayarla
       category,
-      allocations: []
+      allocations: {} // Record<ownerId, [{inventoryId, amount}]>
     };
     setInventoryGroups([...inventoryGroups, newGroup]);
   };
@@ -400,11 +422,23 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
       isValid = await form.trigger(Object.keys(step1Schema.shape) as (keyof z.infer<typeof step1Schema>)[], { shouldFocus: true });
     } else if (currentStep === 1) {
       isValid = await form.trigger(Object.keys(step2Schema.shape) as (keyof z.infer<typeof step2Schema>)[], { shouldFocus: true });
-      // Ek olarak envanter gruplarını da doğrula
-      if (inventoryGroups.some(group => group.totalQuantity <= 0 || group.allocations.some(alloc => alloc.allocatedQuantity <= 0 || !alloc.inventoryTypeId))) {
+      // Ek olarak envanter gruplarını da doğrula - yeni allocation yapısı
+      const hasInvalidGroup = inventoryGroups.some(group => {
+        if (group.totalQuantity <= 0) return true;
+        // Her owner için allocation kontrolü
+        for (const ownerId of Object.keys(group.allocations)) {
+          const allocations = group.allocations[ownerId];
+          if (allocations.some(alloc => !alloc.inventoryId || alloc.amount <= 0)) {
+            return true;
+          }
+        }
+        return false;
+      });
+
+      if (hasInvalidGroup) {
         toast({
           title: "Hata",
-          description: "Lütfen tüm envanter gruplarındaki miktarları ve envanter tiplerini doğru girin.",
+          description: "Lütfen tüm envanter gruplarındaki miktarları ve stok seçimlerini doğru girin.",
           variant: "destructive",
         });
         isValid = false;
@@ -479,46 +513,42 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
           return;
         }
 
-        // Envanter dağıtım verisini hazırla (JSON olarak saklanacak)
+        // Envanter dağıtım verisini hazırla (JSON olarak saklanacak) - YENİ YAPI
         const inventoryDistributionData: Record<string, {
           total: number;
           unit: Unit;
-          distributions: Array<{
-            ownerId: string;
-            quantity: number;
-            inventoryTypeId?: string;
-          }>;
+          category: InventoryCategory;
+          allocations: Record<string, Array<{ inventoryId: string; amount: number }>>;
         }> = {};
 
-        const finalInventoryItemsForBackend: { 
-          inventoryId: string; 
-          quantity: number; 
+        const finalInventoryItemsForBackend: {
+          inventoryId: string;
+          quantity: number;
           ownerId: string;
         }[] = [];
 
         for (const group of inventoryGroups) {
-          if (group.totalQuantity > 0 && group.allocations.length > 0) {
-            const distributionsForGroup = group.allocations.map(allocation => ({
-              ownerId: allocation.ownerId,
-              quantity: allocation.allocatedQuantity,
-              inventoryTypeId: allocation.inventoryTypeId || ""
-            }));
-
+          if (group.totalQuantity > 0 && Object.keys(group.allocations).length > 0) {
             inventoryDistributionData[group.id] = {
               total: group.totalQuantity,
               unit: group.unit,
-              distributions: distributionsForGroup
+              category: group.category,
+              allocations: group.allocations
             };
 
-            group.allocations.forEach(allocation => {
-              if (allocation.inventoryTypeId) {
-                finalInventoryItemsForBackend.push({
-                  inventoryId: allocation.inventoryTypeId,
-                  quantity: allocation.allocatedQuantity,
-                  ownerId: allocation.ownerId,
-                });
+            // Backend için flat liste oluştur
+            for (const ownerId of Object.keys(group.allocations)) {
+              const ownerAllocations = group.allocations[ownerId];
+              for (const allocation of ownerAllocations) {
+                if (allocation.inventoryId && allocation.amount > 0) {
+                  finalInventoryItemsForBackend.push({
+                    inventoryId: allocation.inventoryId,
+                    quantity: allocation.amount,
+                    ownerId: ownerId,
+                  });
+                }
               }
-            });
+            }
           }
         }
 
@@ -543,7 +573,7 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
               if (ownerInventoryResponse.ok) {
                 const ownerInventoryData = await ownerInventoryResponse.json();
                 totalAvailableFuel += (ownerInventoryData.data || []).reduce(
-                  (sum: number, item: any) => sum + item.totalQuantity, 0
+                  (sum: number, item: any) => sum + (item.totalStock ?? item.totalQuantity), 0
                 );
               } else {
                  console.warn(`Yakıt envanteri alınamadı: Sahip ${owner.user.name}`);
@@ -954,22 +984,53 @@ export function ProcessForm({ initialData }: ProcessFormProps = {}) {
                 }
                 <h4 className="font-semibold mt-4">Kullanılan Envanter Grupları:</h4>
                 {inventoryGroups.length === 0 ? (
-                  <p>Envanter kullanılmadı.</p>
+                  <p className="text-muted-foreground">Envanter kullanılmadı.</p>
                 ) : (
-                  <ul className="list-disc pl-5 space-y-1">
-                    {inventoryGroups.map(group => (
-                      <li key={group.id}>
-                        {group.totalQuantity} {unitTranslations[group.unit]} {categoryTranslations[group.category]}
-                        <ul className="list-circle pl-5 text-sm text-muted-foreground">
-                          {group.allocations.map(alloc => (
-                            <li key={alloc.ownerId}>
-                              {alloc.name}: {alloc.allocatedQuantity} {unitTranslations[group.unit]} ({inventoryTypes.find(it => it.id === alloc.inventoryTypeId)?.name || "Bilinmeyen Envanter Tipi"})
-                            </li>
-                          ))}
-                        </ul>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="space-y-4">
+                    {inventoryGroups.map(group => {
+                      const categoryLabel = categoryTranslations[group.category];
+                      return (
+                        <div key={group.id} className="border rounded-md p-3 bg-gray-50 dark:bg-gray-900">
+                          <div className="flex justify-between items-center mb-2">
+                            <h5 className="font-medium">
+                              {categoryLabel} - Toplam: {group.totalQuantity.toFixed(2)} {unitTranslations[group.unit]}
+                            </h5>
+                          </div>
+                          <div className="border-t pt-2">
+                            {Object.keys(group.allocations).length === 0 ? (
+                              <p className="text-sm text-amber-600">⚠️ Henüz stok seçimi yapılmamış!</p>
+                            ) : (
+                              <table className="min-w-full text-sm">
+                                <thead className="border-b">
+                                  <tr>
+                                    <th className="text-left py-1 px-2">Sahip</th>
+                                    <th className="text-left py-1 px-2">Stok</th>
+                                    <th className="text-right py-1 px-2">Miktar</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {Object.keys(group.allocations).map(ownerId => {
+                                    const owner = fieldOwnerships.find(o => o.userId === ownerId);
+                                    const allocations = group.allocations[ownerId];
+                                    return allocations.map((alloc, idx) => {
+                                      const inventory = inventoryTypes.find(it => it.id === alloc.inventoryId);
+                                      return (
+                                        <tr key={`${ownerId}-${idx}`} className="border-b">
+                                          <td className="py-1 px-2 text-green-600 dark:text-green-400">{idx === 0 ? owner?.name : ''}</td>
+                                          <td className="py-1 px-2">{inventory?.name || 'Bilinmeyen'}</td>
+                                          <td className="py-1 px-2 text-right">{alloc.amount.toFixed(2)} {unitTranslations[group.unit]}</td>
+                                        </tr>
+                                      );
+                                    });
+                                  })}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </CardContent>
             </Card>

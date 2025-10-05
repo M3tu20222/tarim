@@ -29,7 +29,8 @@ export async function GET(request: Request) {
     const status = searchParams.get("status");
     const showAll = searchParams.get("showAll") === "true";
     const fetchAll = searchParams.get("fetchAll") === "true"; // fetchAll parametresini ekle
-    const userIdsParam = searchParams.get("userIds"); // userIds parametresini al
+    const userIdsParam = searchParams.get("userIds"); // userIds parametresini al (çoğul)
+    const userIdParam = searchParams.get("userId"); // userId parametresini al (tekil)
 
     // Filtre oluştur
     const filter: any = {};
@@ -59,7 +60,7 @@ export async function GET(request: Request) {
     }
 
     // Filtreleme Mantığı Düzeltmesi:
-    // 1. userIds parametresi varsa öncelikli olarak ona göre filtrele
+    // 1. userIds (çoğul) parametresi varsa öncelikli olarak ona göre filtrele
     if (userIdsParam) {
       const userIdsArray = userIdsParam.split(',').filter(id => id.trim() !== '');
       if (userIdsArray.length > 0) {
@@ -75,11 +76,19 @@ export async function GET(request: Request) {
         return NextResponse.json([]);
       }
     }
-    // 2. userIds yoksa, (showAll=true VEYA fetchAll=true) veya rol ADMIN ise filtre uygulama
+    // 2. userId (tekil) parametresi varsa ona göre filtrele
+    else if (userIdParam) {
+      filter.ownerships = {
+        some: {
+          userId: userIdParam,
+        },
+      };
+    }
+    // 3. userIds/userId yoksa, (showAll=true VEYA fetchAll=true) veya rol ADMIN ise filtre uygulama
     else if (showAll || fetchAll || userRole === "ADMIN") { // fetchAll kontrolü eklendi
       // Sahiplik filtresi uygulanmaz, tüm envanter (kategori/status varsa onlara göre filtrelenmiş) gelir.
     }
-    // 3. userIds yoksa, showAll/fetchAll=false ve rol ADMIN değilse, isteği yapan kullanıcıya göre filtrele
+    // 4. Hiçbiri yoksa, isteği yapan kullanıcıya göre filtrele
     else {
       filter.ownerships = {
         some: {
@@ -96,6 +105,7 @@ export async function GET(request: Request) {
         name: true,
         category: true,
         totalQuantity: true,
+        totalStock: true, // Kalan stok bilgisi
         unit: true,
         status: true,
         purchaseDate: true,
