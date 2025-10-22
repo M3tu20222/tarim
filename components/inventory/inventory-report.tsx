@@ -123,17 +123,22 @@ export function InventoryReport() {
     const fetchData = async () => {
       try {
         // Sezonları getir
-        const seasonsResponse = await fetch("/api/seasons");
+        const seasonsResponse = await fetch("/api/seasons", {
+          credentials: "include",
+        });
         if (seasonsResponse.ok) {
           const seasonsData = await seasonsResponse.json();
-          setSeasons(seasonsData);
+          // API { data: seasons } yapısında döndürüyor
+          setSeasons(Array.isArray(seasonsData.data) ? seasonsData.data : []);
         }
 
         // Kategorileri getir
-        const categoriesResponse = await fetch("/api/inventory/categories");
+        const categoriesResponse = await fetch("/api/inventory/categories", {
+          credentials: "include",
+        });
         if (categoriesResponse.ok) {
           const categoriesData = await categoriesResponse.json();
-          setCategories(categoriesData);
+          setCategories(Array.isArray(categoriesData) ? categoriesData : []);
         }
       } catch (error) {
         console.error("Error fetching form data:", error);

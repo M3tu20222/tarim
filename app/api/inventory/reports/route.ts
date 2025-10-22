@@ -22,13 +22,37 @@ export async function GET(request: Request) {
     const endDate = searchParams.get("endDate");
     const status = searchParams.get("status");
 
-    // Filtre oluştur
+    // Geçerli enum değerlerini tanımla
+    const VALID_CATEGORIES = ["SEED", "FERTILIZER", "PESTICIDE", "EQUIPMENT", "FUEL", "OTHER"];
+    const VALID_STATUSES = ["AVAILABLE", "LOW_STOCK", "OUT_OF_STOCK", "EXPIRED"];
+
+    // Filtre oluştur - "all" string'i veya geçersiz değerleri kontrol et
     const filter: any = {};
-    if (category) {
+
+    // Category filtresini ekle - sadece geçerli enum değerlerse
+    if (category && category !== "all" && VALID_CATEGORIES.includes(category)) {
       filter.category = category;
+    } else if (category && category !== "all" && !VALID_CATEGORIES.includes(category)) {
+      return NextResponse.json(
+        { error: `Geçersiz kategori değeri: ${category}. Geçerli değerler: ${VALID_CATEGORIES.join(", ")}` },
+        { status: 400 }
+      );
     }
-    if (status) {
+
+    // Status filtresini ekle - sadece geçerli enum değerlerse
+    if (status && status !== "all" && VALID_STATUSES.includes(status)) {
       filter.status = status;
+    } else if (status && status !== "all" && !VALID_STATUSES.includes(status)) {
+      return NextResponse.json(
+        { error: `Geçersiz durum değeri: ${status}. Geçerli değerler: ${VALID_STATUSES.join(", ")}` },
+        { status: 400 }
+      );
+    }
+
+    // SeasonId filtresini ekle - "all" değerini kontrol et
+    let seasonIdFilter = undefined;
+    if (seasonId && seasonId !== "all") {
+      seasonIdFilter = seasonId;
     }
 
     // Envanter verilerini getir
@@ -48,7 +72,7 @@ export async function GET(request: Request) {
         },
         inventoryTransactions: {
           where: {
-            ...(seasonId ? { seasonId } : {}),
+            ...(seasonIdFilter ? { seasonId: seasonIdFilter } : {}),
             ...(startDate && endDate
               ? {
                   date: {

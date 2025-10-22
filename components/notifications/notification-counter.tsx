@@ -9,10 +9,15 @@ export function NotificationCounter() {
   useEffect(() => {
     const fetchCount = async () => {
       try {
-        const response = await fetch("/api/notifications/unread-count");
+        const response = await fetch("/api/notifications/unread-count", {
+          credentials: "include", // Cookie'yi request ile gönder
+        });
         if (response.ok) {
           const data = await response.json();
           setCount(data.count || 0);
+        } else if (response.status === 401) {
+          // Unauthorized - sessiyonu kaybetmiş
+          console.log("Notification session expired");
         }
       } catch (error) {
         console.error("Error fetching notification count:", error);

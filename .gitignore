@@ -27,3 +27,5 @@ __.env.local
 next-env.d.ts
 .vercel
 CLAUDE.md
+.claude
+nul

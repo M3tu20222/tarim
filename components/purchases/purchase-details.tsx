@@ -21,6 +21,14 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useRouter } from "next/navigation";
 import { formatCurrency } from "@/lib/utils";
 
@@ -80,6 +88,8 @@ const getStatusColor = (status: string) => {
 export function PurchaseDetails({ purchase }: { purchase: any }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("details");
+  const [transactionDialogOpen, setTransactionDialogOpen] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
 
   if (!purchase) {
     return (
@@ -315,7 +325,18 @@ export function PurchaseDetails({ purchase }: { purchase: any }) {
                   <TableBody>
                     {purchase.inventoryTransactions.map((transaction: any) => (
                       <TableRow key={transaction.id}>
-                        <TableCell>{transaction.id}</TableCell>
+                        <TableCell>
+                          <button
+                            onClick={() => {
+                              setSelectedTransaction(transaction);
+                              setTransactionDialogOpen(true);
+                            }}
+                            className="text-blue-600 hover:underline font-medium text-sm"
+                            title={transaction.id}
+                          >
+                            #{transaction.id.slice(0, 8)}...
+                          </button>
+                        </TableCell>
                         <TableCell>{transaction.product}</TableCell>
                         <TableCell>
                           {transaction.quantity} {transaction.unit}
@@ -367,6 +388,81 @@ export function PurchaseDetails({ purchase }: { purchase: any }) {
             </CardContent>
           </Card>
         )}
+
+      {/* İşlem Detayları Dialog'u */}
+      <Dialog open={transactionDialogOpen} onOpenChange={setTransactionDialogOpen}>
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[85vh] p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>İşlem Detayları</DialogTitle>
+            <DialogDescription>
+              Seçili envanter işlemine ait özet bilgiler
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2 -mr-2">
+            {selectedTransaction ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <div className="font-medium text-sm text-gray-500">İşlem ID</div>
+                  <div className="text-sm font-mono">{selectedTransaction.id}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="font-medium text-sm text-gray-500">İşlem Tipi</div>
+                  <div className="text-sm">
+                    {selectedTransaction.type || "Belirtilmemiş"}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="font-medium text-sm text-gray-500">Ürün</div>
+                  <div className="text-sm">{selectedTransaction.product}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="font-medium text-sm text-gray-500">Kategori</div>
+                  <div className="text-sm">
+                    {selectedTransaction.category || "Belirtilmemiş"}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="font-medium text-sm text-gray-500">Miktar</div>
+                  <div className="text-sm">
+                    {selectedTransaction.quantity} {selectedTransaction.unit || ""}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="font-medium text-sm text-gray-500">Tarih</div>
+                  <div className="text-sm">
+                    {format(
+                      new Date(selectedTransaction.createdAt),
+                      "dd MMMM yyyy HH:mm",
+                      { locale: tr }
+                    )}
+                  </div>
+                </div>
+                {selectedTransaction.notes && (
+                  <div className="col-span-2 space-y-1">
+                    <div className="font-medium text-sm text-gray-500">Açıklama</div>
+                    <div className="text-sm">{selectedTransaction.notes}</div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                İşlem yükleniyor...
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setTransactionDialogOpen(false);
+                setSelectedTransaction(null);
+              }}
+            >
+              Kapat
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

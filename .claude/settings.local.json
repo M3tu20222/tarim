@@ -27,7 +27,9 @@
       "Bash(dir:*)",
       "Bash(test:*)",
       "Bash(rm:*)",
-      "Bash(npm run lint:*)"
+      "Bash(npm run lint:*)",
+      "Bash(npx eslint:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []
