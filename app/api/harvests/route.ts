@@ -2,6 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 
+// Mısır nem oranına göre fire ve kesinti hesaplama
+function calculateCornMoistureDeduction(moistureContent: number): number {
+  if (moistureContent <= 14.0) return 0;
+  if (moistureContent <= 14.5) return 1.4;
+  if (moistureContent <= 15.0) return 2.7;
+  if (moistureContent <= 15.5) return 4.0;
+  if (moistureContent <= 16.0) return 5.3;
+  if (moistureContent <= 16.5) return 6.7;
+  if (moistureContent <= 17.0) return 8.0;
+  if (moistureContent <= 17.5) return 9.4;
+  if (moistureContent <= 18.0) return 10.7;
+  if (moistureContent <= 18.5) return 12.0;
+  if (moistureContent <= 19.0) return 13.3;
+  if (moistureContent <= 19.5) return 14.7;
+  if (moistureContent <= 20.0) return 16.0;
+  // 20% üzeri için varsayılan
+  return 16.0 + ((moistureContent - 20) * 1.3); // Her 0.5% için yaklaşık %1.3 artış
+}
+
 // GET - Hasat kayıtlarını listele
 export async function GET(request: NextRequest) {
   try {
@@ -24,19 +43,19 @@ export async function GET(request: NextRequest) {
     // Kullanıcının erişim yetkisi olan tarlaları bul
     let accessibleFields: string[] = [];
 
-    if (user.role === 'ADMIN') {
-      // Admin tüm tarlalara erişebilir
+    if (user.role === 'ADMIN' || user.role === 'OWNER') {
+      // Admin ve Owner tüm tarlalara erişebilir
       const fields = await prisma.field.findMany({
         select: { id: true }
       });
       accessibleFields = fields.map(f => f.id);
     } else {
-      // Owner sadece sahip olduğu tarlalara erişebilir
-      const ownerships = await prisma.fieldOwnership.findMany({
+      // Worker sadece atandığı tarlalara erişebilir
+      const assignments = await prisma.fieldWorkerAssignment.findMany({
         where: { userId: user.id },
         select: { fieldId: true }
       });
-      accessibleFields = ownerships.map(o => o.fieldId);
+      accessibleFields = assignments.map(a => a.fieldId);
     }
 
     // Filtreleme koşulları
@@ -139,6 +158,7 @@ export async function POST(request: NextRequest) {
       quantity,
       unit,
       pricePerUnit,
+      withholdingTaxRate,
       quality,
       moistureContent,
       storageLocation,
@@ -157,16 +177,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Kullanıcının bu tarlaya erişim yetkisi olup olmadığını kontrol et
-    if (user.role !== 'ADMIN') {
-      const ownership = await prisma.fieldOwnership.findFirst({
+    // Yetkilendirme kontrolü
+    // ADMIN ve OWNER kullanıcıları tüm tarlaların hasat kaydını yapabilir
+    // WORKER sadece atandığı tarlaların hasat kaydını yapabilir
+    if (user.role === 'WORKER') {
+      const assignment = await prisma.fieldWorkerAssignment.findFirst({
         where: {
           fieldId: fieldId,
           userId: user.id
         }
       });
 
-      if (!ownership) {
+      if (!assignment) {
         return NextResponse.json(
           { error: 'Bu tarlaya erişim yetkiniz bulunmuyor' },
           { status: 403 }
@@ -192,6 +214,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Mısır için nem fire oranını hesapla
+    let moistureDeduction = null;
+    if (crop.cropType === 'CORN' && moistureContent) {
+      moistureDeduction = calculateCornMoistureDeduction(parseFloat(moistureContent));
+    }
+
     // Toplam geliri hesapla
     const totalRevenue = pricePerUnit ? quantity * pricePerUnit : null;
 
@@ -209,6 +237,8 @@ export async function POST(request: NextRequest) {
         totalRevenue,
         quality,
         moistureContent: moistureContent ? parseFloat(moistureContent) : null,
+        withholdingTaxRate: withholdingTaxRate ? parseFloat(withholdingTaxRate) : 2,
+        moistureDeduction,
         storageLocation,
         buyerInfo,
         transportCost: transportCost ? parseFloat(transportCost) : null,
@@ -249,6 +279,42 @@ export async function POST(request: NextRequest) {
         harvestDate: new Date(harvestDate)
       }
     });
+
+    // Tarla sahibine/sahiplerine bildirim gönder
+    // Eğer hasat kaydını yapan kişi tarla sahibi değilse bildirim gönder
+    const fieldOwners = await prisma.fieldOwnership.findMany({
+      where: { fieldId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    if (fieldOwners && fieldOwners.length > 0) {
+      for (const ownership of fieldOwners) {
+        // Sadece hasat kaydını yapan kişi dışındaki sahiplere bildirim gönder
+        if (ownership.userId !== user.id) {
+          await prisma.notification.create({
+            data: {
+              title: 'Yeni Hasat Kaydı',
+              message: `${field.name} tarlasında ${crop.name} ekini için ${user.name} tarafından hasat kaydı oluşturuldu. Miktar: ${quantity} ${unit}`,
+              type: 'HARVEST',
+              priority: 'NORMAL',
+              receiverId: ownership.userId,
+              senderId: user.id,
+              harvestId: harvest.id,
+              fieldId: fieldId,
+              cropId: cropId,
+              link: `/dashboard/harvests/${harvest.id}`
+            }
+          });
+        }
+      }
+    }
 
     return NextResponse.json({
       message: 'Hasat kaydı başarıyla oluşturuldu',

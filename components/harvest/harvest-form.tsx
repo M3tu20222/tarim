@@ -47,6 +47,7 @@ const harvestSchema = z.object({
   quantity: z.string().min(1, "Hasat miktarı gereklidir"),
   unit: z.string().default("kg"),
   pricePerUnit: z.string().optional(),
+  withholdingTaxRate: z.string().default("2"),
   quality: z.string().optional(),
   moistureContent: z.string().optional(),
   storageLocation: z.string().optional(),
@@ -89,6 +90,7 @@ export default function HarvestForm({ initialData, mode, onSuccess }: HarvestFor
   const [fields, setFields] = useState<Field[]>([]);
   const [crops, setCrops] = useState<Crop[]>([]);
   const [filteredCrops, setFilteredCrops] = useState<Crop[]>([]);
+  const [moistureDeduction, setMoistureDeduction] = useState<number | null>(null);
   const { toast } = useToast();
   const router = useRouter();
 
@@ -102,6 +104,7 @@ export default function HarvestForm({ initialData, mode, onSuccess }: HarvestFor
       quantity: initialData?.quantity?.toString() || "",
       unit: initialData?.unit || "kg",
       pricePerUnit: initialData?.pricePerUnit?.toString() || "",
+      withholdingTaxRate: initialData?.withholdingTaxRate?.toString() || "2",
       quality: initialData?.quality || "",
       moistureContent: initialData?.moistureContent?.toString() || "",
       storageLocation: initialData?.storageLocation || "",
@@ -114,11 +117,51 @@ export default function HarvestForm({ initialData, mode, onSuccess }: HarvestFor
   });
 
   const selectedFieldId = form.watch("fieldId");
+  const selectedCropId = form.watch("cropId");
+  const moistureContent = form.watch("moistureContent");
+
+  // Mısır nem oranına göre fire ve kesinti hesaplama
+  const calculateCornMoistureDeduction = (moisture: number): number => {
+    if (moisture <= 14.0) return 0;
+    if (moisture <= 14.5) return 1.4;
+    if (moisture <= 15.0) return 2.7;
+    if (moisture <= 15.5) return 4.0;
+    if (moisture <= 16.0) return 5.3;
+    if (moisture <= 16.5) return 6.7;
+    if (moisture <= 17.0) return 8.0;
+    if (moisture <= 17.5) return 9.4;
+    if (moisture <= 18.0) return 10.7;
+    if (moisture <= 18.5) return 12.0;
+    if (moisture <= 19.0) return 13.3;
+    if (moisture <= 19.5) return 14.7;
+    if (moisture <= 20.0) return 16.0;
+    return 16.0 + ((moisture - 20) * 1.3);
+  };
 
   useEffect(() => {
     fetchFields();
     fetchCrops();
   }, []);
+
+  // Nem oranı değiştiğinde fire düşümünü hesapla
+  useEffect(() => {
+    if (selectedCropId && moistureContent) {
+      const selectedCrop = crops.find(c => c.id === selectedCropId);
+      if (selectedCrop && selectedCrop.cropType === 'CORN') {
+        const moisture = parseFloat(moistureContent);
+        if (!isNaN(moisture)) {
+          const deduction = calculateCornMoistureDeduction(moisture);
+          setMoistureDeduction(deduction);
+        } else {
+          setMoistureDeduction(null);
+        }
+      } else {
+        setMoistureDeduction(null);
+      }
+    } else {
+      setMoistureDeduction(null);
+    }
+  }, [selectedCropId, moistureContent, crops]);
 
   useEffect(() => {
     if (selectedFieldId) {
@@ -229,6 +272,7 @@ export default function HarvestForm({ initialData, mode, onSuccess }: HarvestFor
           harvestedArea: parseFloat(data.harvestedArea),
           quantity: parseFloat(data.quantity),
           pricePerUnit: data.pricePerUnit ? parseFloat(data.pricePerUnit) : null,
+          withholdingTaxRate: data.withholdingTaxRate ? parseFloat(data.withholdingTaxRate) : 2,
           moistureContent: data.moistureContent ? parseFloat(data.moistureContent) : null,
           transportCost: data.transportCost ? parseFloat(data.transportCost) : null,
           laborCost: data.laborCost ? parseFloat(data.laborCost) : null,
@@ -495,6 +539,28 @@ export default function HarvestForm({ initialData, mode, onSuccess }: HarvestFor
                 />
               </div>
 
+              {/* Stopaj Vergisi */}
+              <FormField
+                control={form.control}
+                name="withholdingTaxRate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Stopaj Vergisi Oranı (%)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max="100"
+                        placeholder="Örn: 2"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               {/* Nem Oranı ve Depolama */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
@@ -513,6 +579,16 @@ export default function HarvestForm({ initialData, mode, onSuccess }: HarvestFor
                           {...field}
                         />
                       </FormControl>
+                      {moistureDeduction !== null && moistureDeduction > 0 && (
+                        <p className="text-sm text-orange-600 mt-1">
+                          Mısır nem fire oranı: %{moistureDeduction.toFixed(1)} (Toplam fire + kesinti)
+                        </p>
+                      )}
+                      {moistureDeduction === 0 && (
+                        <p className="text-sm text-green-600 mt-1">
+                          İdeal nem oranı - Fire yok
+                        </p>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}

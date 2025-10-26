@@ -2,6 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 
+// Mısır nem oranına göre fire ve kesinti hesaplama
+function calculateCornMoistureDeduction(moistureContent: number): number {
+  if (moistureContent <= 14.0) return 0;
+  if (moistureContent <= 14.5) return 1.4;
+  if (moistureContent <= 15.0) return 2.7;
+  if (moistureContent <= 15.5) return 4.0;
+  if (moistureContent <= 16.0) return 5.3;
+  if (moistureContent <= 16.5) return 6.7;
+  if (moistureContent <= 17.0) return 8.0;
+  if (moistureContent <= 17.5) return 9.4;
+  if (moistureContent <= 18.0) return 10.7;
+  if (moistureContent <= 18.5) return 12.0;
+  if (moistureContent <= 19.0) return 13.3;
+  if (moistureContent <= 19.5) return 14.7;
+  if (moistureContent <= 20.0) return 16.0;
+  // 20% üzeri için varsayılan
+  return 16.0 + ((moistureContent - 20) * 1.3); // Her 0.5% için yaklaşık %1.3 artış
+}
+
 // GET - Belirli bir hasat kaydını getir
 export async function GET(
   request: NextRequest,
@@ -142,6 +161,7 @@ export async function PUT(
       quantity,
       unit,
       pricePerUnit,
+      withholdingTaxRate,
       quality,
       moistureContent,
       storageLocation,
@@ -151,6 +171,20 @@ export async function PUT(
       notes,
       weatherConditions
     } = body;
+
+    // Crop bilgisini getir (cropType için)
+    const crop = await prisma.crop.findUnique({
+      where: { id: existingHarvest.cropId },
+      select: { cropType: true }
+    });
+
+    // Mısır için nem fire oranını hesapla
+    let moistureDeduction = null;
+    if (crop && crop.cropType === 'CORN' && moistureContent !== undefined) {
+      if (moistureContent !== null) {
+        moistureDeduction = calculateCornMoistureDeduction(parseFloat(moistureContent));
+      }
+    }
 
     // Toplam geliri yeniden hesapla
     const totalRevenue = pricePerUnit ? quantity * pricePerUnit : null;
@@ -167,6 +201,8 @@ export async function PUT(
         ...(totalRevenue !== undefined && { totalRevenue }),
         ...(quality !== undefined && { quality }),
         ...(moistureContent !== undefined && { moistureContent: moistureContent ? parseFloat(moistureContent) : null }),
+        ...(withholdingTaxRate !== undefined && { withholdingTaxRate: withholdingTaxRate ? parseFloat(withholdingTaxRate) : 2 }),
+        ...(moistureDeduction !== null && { moistureDeduction }),
         ...(storageLocation !== undefined && { storageLocation }),
         ...(buyerInfo !== undefined && { buyerInfo }),
         ...(transportCost !== undefined && { transportCost: transportCost ? parseFloat(transportCost) : null }),

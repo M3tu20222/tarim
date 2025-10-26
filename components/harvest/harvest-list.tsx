@@ -347,12 +347,12 @@ export default function HarvestList() {
 
             {/* Field Filter */}
             <div className="w-full lg:w-48">
-              <Select value={selectedField} onValueChange={setSelectedField}>
+              <Select value={selectedField || "all"} onValueChange={(value) => setSelectedField(value === "all" ? "" : value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Tüm Tarlalar" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Tüm Tarlalar</SelectItem>
+                  <SelectItem value="all">Tüm Tarlalar</SelectItem>
                   {fields.map((field) => (
                     <SelectItem key={field.id} value={field.id}>
                       {field.name}
@@ -364,12 +364,12 @@ export default function HarvestList() {
 
             {/* Season Filter */}
             <div className="w-full lg:w-48">
-              <Select value={selectedSeason} onValueChange={setSelectedSeason}>
+              <Select value={selectedSeason || "all"} onValueChange={(value) => setSelectedSeason(value === "all" ? "" : value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Tüm Sezonlar" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Tüm Sezonlar</SelectItem>
+                  <SelectItem value="all">Tüm Sezonlar</SelectItem>
                   {seasons.map((season) => (
                     <SelectItem key={season.id} value={season.id}>
                       {season.name} {season.isActive && "(Aktif)"}

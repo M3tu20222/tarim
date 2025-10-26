@@ -333,6 +333,8 @@ model Harvest {
   totalRevenue        Float?        // Toplam gelir (TL)
   quality             String?       // Kalite (A, B, C vb.)
   moistureContent     Float?        // Nem oranı (%)
+  withholdingTaxRate  Float?        @default(2) // Stopaj vergisi oranı (%)
+  moistureDeduction   Float?        // Nem fire oranı (%) - Mısır için otomatik hesaplanır
   storageLocation     String?       // Depolama yeri
   buyerInfo           String?       // Alıcı bilgisi
   transportCost       Float?        // Nakliye maliyeti
@@ -1155,6 +1157,7 @@ enum NotificationType {
   DEBT_REMINDER
   IRRIGATION_SCHEDULED
   IRRIGATION_COMPLETED
+  HARVEST
   SYSTEM_ALERT
   TASK_UPDATED
   PROCESS_UPDATED
