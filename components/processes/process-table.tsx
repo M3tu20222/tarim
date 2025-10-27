@@ -47,12 +47,22 @@ export default function ProcessTable() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [searchTerm, setSearchTerm] = useState(""); // Arama state'i
-  // const [selectedType, setSelectedType] = useState<string | null>(null); // Filtre state'i (şimdilik yorumlu)
+  const [selectedType, setSelectedType] = useState<string | null>(null); // Filtre state'i
   const { toast } = useToast();
 
+  // İşlem tipleri
+  const processTypes = [
+    { value: "PLOWING", label: "Sürme" },
+    { value: "SEEDING", label: "Ekim" },
+    { value: "FERTILIZING", label: "Gübreleme" },
+    { value: "PESTICIDE", label: "İlaçlama" },
+    { value: "HARVESTING", label: "Hasat" },
+    { value: "OTHER", label: "Diğer" },
+  ];
+
   // useCallback ile fetchProcesses'ı optimize edelim
-  const fetchProcesses = useCallback(async (currentSearchTerm = "") => {
-    // currentSearchTerm parametresi eklendi
+  const fetchProcesses = useCallback(async (currentSearchTerm = "", currentType: string | null = null) => {
+    // currentSearchTerm ve currentType parametreleri eklendi
     try {
       setLoading(true);
       let apiUrl = "/api/processes";
@@ -60,9 +70,9 @@ export default function ProcessTable() {
       if (currentSearchTerm) {
         params.append("search", currentSearchTerm);
       }
-      // if (selectedType) { // Filtre eklenirse
-      //   params.append("type", selectedType);
-      // }
+      if (currentType) {
+        params.append("type", currentType);
+      }
       const queryString = params.toString();
       if (queryString) {
         apiUrl += `?${queryString}`;
@@ -93,12 +103,18 @@ export default function ProcessTable() {
 
   // Arama işlemini tetikleyen fonksiyon
   const handleSearch = () => {
-    fetchProcesses(searchTerm);
+    fetchProcesses(searchTerm, selectedType);
+  };
+
+  // Filtreleme işlemini tetikleyen fonksiyon
+  const handleFilterChange = (typeValue: string | null) => {
+    setSelectedType(typeValue);
+    fetchProcesses(searchTerm, typeValue);
   };
 
   // Silme sonrası listeyi yenilemek için fetchProcesses'ı çağır
   const refreshList = () => {
-    fetchProcesses(searchTerm); // Mevcut arama terimiyle yenile
+    fetchProcesses(searchTerm, selectedType); // Mevcut arama ve filtreyle yenile
   };
 
   // İşlem silme
@@ -166,13 +182,32 @@ export default function ProcessTable() {
                 Ara
               </Button>
             </div>
-            {/* Filtreleme (Şimdilik basit buton) */}
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled> {/* Şimdilik devre dışı */}
-                <Filter className="h-4 w-4 mr-2" />
-                Filtrele
-              </Button>
-              {/* Başka filtre butonları eklenebilir */}
+            {/* Filtreleme */}
+            <div className="flex gap-2 items-center">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <select
+                value={selectedType || ""}
+                onChange={(e) => handleFilterChange(e.target.value || null)}
+                className="px-3 py-1 text-sm border rounded-md bg-slate-950 text-slate-200 border-slate-700 hover:border-slate-600"
+                aria-label="İşlem tipi filtresi"
+              >
+                <option value="">Tüm İşlemler</option>
+                {processTypes.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
+              {selectedType && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleFilterChange(null)}
+                  className="text-xs"
+                >
+                  Filtreyi Temizle
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>
@@ -209,7 +244,7 @@ export default function ProcessTable() {
               processes.map((process) => (
                 <TableRow key={process.id}>
                   <TableCell className="font-medium">
-                    {process.field.name}
+                    {process.field?.name || "Tarla bulunamadı"}
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline">
@@ -223,7 +258,7 @@ export default function ProcessTable() {
                     </span>
                   </TableCell>
                   <TableCell>{formatDate(process.date)}</TableCell>
-                  <TableCell>{process.worker.name}</TableCell>
+                  <TableCell>{process.worker?.name || "Bilinmeyen işçi"}</TableCell>
                   <TableCell>
                     {formatCurrency(calculateTotalCost(process))}
                   </TableCell>

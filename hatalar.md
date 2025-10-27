@@ -152,3 +152,166 @@
   - WORKER kullanıcıları sadece atandığı tarlaların hasat kayıtlarını görebilir
   - API endpoint güncellendi (app/api/harvests/route.ts:43-59)
   - GET isteğinde accessibleFields logic'i düzeltildi
+
+  ---
+
+## ✅ Process Listeleme Hatası (Hasat Değişikliklerinden Sonra)
+- ✅ **ÇÖZÜLDÜ**: ProcessTable null reference hatası düzeltildi
+  - **Hata Nedeni**: `process.field` veya `process.worker` null olduğunda `process.field.name` erişimi Server Component render hatasına neden oluyordu
+  - **Çözüm**: Optional chaining (`?.`) operatörü eklenerek null kontrolleri yapıldı
+  - **Dosya**: components/processes/process-table.tsx:212, 226
+  - **Düzeltmeler**:
+    - `{process.field?.name || "Tarla bulunamadı"}`
+    - `{process.worker?.name || "Bilinmeyen işçi"}`
+  - Düzeltilmiş hata mesajı:
+    - URL: https://tarim-dun.vercel.app/dashboard/owner/processes
+    - Hatanın sebebi: Null field veya worker referansları
+    - İlişkili olaylar: Hasat kaydı değişikliklerinden sonra
+
+---
+
+## 📋 Kısa Özet - 27 Ekim 2025
+
+### ✅ Tamamlanan Düzeltmeler
+1. **Process Listeleme Sayfası** - Optional chaining ile null reference hataları giderildi
+   - Tarla ve işçi bilgileri artık null-safe
+   - Build başarıyla tamamlandı
+   - Test edildi ve onaylandı
+
+### 🔧 Teknik Detaylar
+- **Dosya**: components/processes/process-table.tsx
+- **Değişiklik**: Lines 212, 226
+- **Pattern**: `{value?.property || "fallback"}`
+- **Build Status**: ✅ Success (exit code 0)
+
+---
+
+## ✅ Process Wizard Adım 2 - Envanter Stok Gösterimi Hatası
+- ✅ **ÇÖZÜLDÜ**: Inventory-group komponentinde stok gösterim sorunu düzeltildi
+  - **Hata Nedeni**:
+    - UI "Mevcut: 50 çuval" (toplam stok) gösteriyordu
+    - API "Payı: 5 çuval" (sahip payı) kontrol ediyordu
+    - Mismatch → Form validation hatası
+  - **Çözüm**: UI'da gösterilen stok, API'deki kontrol ile tutarlı hale getirildi
+  - **Dosya**: components/processes/inventory-group.tsx
+  - **Değişiklikler**:
+    - Line 326: `availableStock = ownerShare` (sahip payı kullanılıyor)
+    - Line 342-345: SelectOption'da "Payı:" gösterilir, toplam stok değil
+    - Line 368: "Stok:" yerine "Payı:" gösterilir
+  - **Sonuç**: Form artık doğru stok kontrolü yapacak
+
+---
+
+## ✅ Process Sayfası Filtreleme Özelliği
+- ✅ **EKLENDI**: İşlem tipi filtrelemesi aktifleştirildi
+  - **Dosya**: components/processes/process-table.tsx
+  - **Özellikleri**:
+    - İşlem tipi dropdown filtresi (Sürme, Ekim, Gübreleme, İlaçlama, Hasat, Diğer)
+    - "Tüm İşlemler" seçeneği
+    - "Filtreyi Temizle" butonu aktif filtre varsa görüntülenir
+    - Filtre + Arama kombinasyon desteği
+  - **Değişiklikler**:
+    - `selectedType` state etkinleştirildi
+    - `fetchProcesses` fonksiyonu type parametresi eklemesi için güncellenedi
+    - `handleFilterChange` fonksiyonu eklendi
+    - UI'da filtre dropdown'ı eklendi
+  - **Sonuç**: Kullanıcılar işlemleri tipe göre filtreleyebilir
+
+### ⏭️ Sonraki Adımlar
+Başka hata raporlarını çözmek için hazır...
+
+--- 
+
+form : 
+İşlem Düzenle
+Tarla işlem bilgilerini güncelleyin
+
+Form Hatası
+Envanter ve ekipman bilgileri güncellenirken bir hata oluştu. Lütfen tekrar deneyin.
+Adım 2 / 3
+Kullanılan Ekipman
+Fırfır (0.3 lt/dekar)
+
+Tahmini Yakıt Tüketimi: 8.10 litre
+
+Kullanılan Envanterler
+Yeni Envanter Grubu Ekle
+Kategori
+FERTILIZER
+Toplam Miktar
+6
+Birim
+
+çuval
+
+Grubu Sil
+Otomatik Dağıtım ve Stok Seçimi
+Sahip	Düşülecek Miktar	Kullanılacak Stok
+Himmet TUNÇEZ
+6.00 çuval	
+
+Amonyum Sülfat_Him_denge - Mevcut: 50.00 çuval
+
+6.00 çuval
+Stok: 50.00
+Stok Ekle
+Ebu Bekir TUNÇEZ
+0.00 çuval	
+Stok Ekle
+Kategori
+FUEL
+Toplam Miktar
+8,1
+Birim
+
+litre
+
+Grubu Sil
+Otomatik Dağıtım ve Stok Seçimi
+Sahip	Düşülecek Miktar	Kullanılacak Stok
+Himmet TUNÇEZ
+8.10 litre	
+
+Mazot - Mevcut: 77.13 litre
+
+8.10 litre
+Stok: 77.13
+Stok Ekle
+Ebu Bekir TUNÇEZ
+0.00 litre	
+Stok Ekle
+Geri
+İleri
+
+-
+
+browser cnsl: Failed to load resource: the server responded with a status of 500 (Internal Server Error)Understand this error
+intercept-console-error.js:57 API Error (Update Inventory/Equipment): Objecterror: "Envanter ve ekipman bilgileri güncellenirken bir hata oluştu. Lütfen tekrar deneyin."[[Prototype]]: Object
+
+-
+
+Kullanıcı ID: 67e5b093c8fccd39d1444093, Rol: OWNER
+Update inventory/equipment transaction attempt 1 failed: Error: Sahip Himmet TUNÇEZ'in Amonyum Sülfat_Him_denge envanterinde yeterli miktar bulunmuyor. Gereken: 6 CUVAL, Mevcut: 5 CUVAL.
+    at PUT._lib_prisma__WEBPACK_IMPORTED_MODULE_1__.prisma.$transaction.timeout (app\api\processes\route.ts:448:24)
+    at async PUT (app\api\processes\route.ts:398:28)
+  446 |
+  447 |                 if (ownerInventoryShare.shareQuantity < quantity) {
+> 448 |                   throw new Error(
+      |                        ^
+  449 |                     `Sahip ${ownerInventoryShare.user.name}'in ${inventory.name} envanterinde yeterli miktar bulunmuyor. ` +
+  450 |                     `Gereken: ${quantity} ${inventory.unit}, Mevcut: ${ownerInventoryShare.shareQuantity} ${inventory.unit}.`
+  451 |                   );
+Error updating inventory/equipment for process: Error: Sahip Himmet TUNÇEZ'in Amonyum Sülfat_Him_denge envanterinde yeterli miktar bulunmuyor. Gereken: 6 CUVAL, Mevcut: 5 CUVAL.
+    at PUT._lib_prisma__WEBPACK_IMPORTED_MODULE_1__.prisma.$transaction.timeout (app\api\processes\route.ts:448:24)
+    at async PUT (app\api\processes\route.ts:398:28)
+  446 |
+  447 |                 if (ownerInventoryShare.shareQuantity < quantity) {
+> 448 |                   throw new Error(
+      |                        ^
+  449 |                     `Sahip ${ownerInventoryShare.user.name}'in ${inventory.name} envanterinde yeterli miktar bulunmuyor. ` +
+  450 |                     `Gereken: ${quantity} ${inventory.unit}, Mevcut: ${ownerInventoryShare.shareQuantity} ${inventory.unit}.`
+  451 |                   );
+ PUT /api/processes?processId=68ffa9b5575d6085c10ff237 500 in 3842ms
+
+ ---
+ 

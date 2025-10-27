@@ -323,7 +323,7 @@ export function InventoryGroup({
                         {currentAllocations.map((row, rowIdx) => {
                           const selectedInv = inventoryTypes.find(inv => inv.id === row.inventoryId);
                           const ownerShare = selectedInv?.ownerships?.find(o => o.userId === ownerId)?.shareQuantity ?? 0;
-                          const availableStock = selectedInv ? (selectedInv.totalStock ?? selectedInv.totalQuantity) : 0;
+                          const availableStock = ownerShare; // Sahip payını kullan (API tarafında kontrol edilen değer)
 
                           // Tek satırsa otomatik miktar set et
                           const autoAmount = isSingleRow ? ownerRequiredAmount : (row.amount ?? 0);
@@ -339,10 +339,10 @@ export function InventoryGroup({
                                 </SelectTrigger>
                                 <SelectContent>
                                   {ownerInventories.map(inv => {
-                                    const stock = inv.totalStock ?? inv.totalQuantity;
+                                    const ownerInvShare = inv.ownerships?.find(o => o.userId === ownerId)?.shareQuantity ?? 0;
                                     return (
                                       <SelectItem key={inv.id} value={inv.id}>
-                                        {inv.name} - Mevcut: {stock.toFixed(2)} {unitTranslations[inv.unit]}
+                                        {inv.name} - Payı: {ownerInvShare.toFixed(2)} {unitTranslations[inv.unit]}
                                       </SelectItem>
                                     );
                                   })}
@@ -365,7 +365,7 @@ export function InventoryGroup({
                               )}
 
                               <span className={`text-xs ${autoAmount > availableStock ? "text-red-600" : "text-gray-400"}`}>
-                                Stok: {availableStock.toFixed(2)}
+                                Payı: {availableStock.toFixed(2)}
                               </span>
 
                               {/* Tek satırda sil butonu gösterme; çokluysa göster */}
