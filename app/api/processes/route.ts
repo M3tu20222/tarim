@@ -417,19 +417,29 @@ export async function PUT(request: Request) {
               equipmentUsageRecords.push(equipmentUsage);
             }
 
-            // 2. Envanter kullanımlarını kaydet (sahip bazlı düşüm ile)
+            // 2. Envanter kullanımlarını kaydet (sahib bazlı düşüm ile)
             const inventoryUsageRecords: any[] = [];
+
+            // Equipment'ın fuel consumption'ı varsa, inventoryItems'daki fuel'ü exclude et (iki kere düşmesin)
+            const hasEquipmentFuelConsumption = equipmentId && equipment && equipment.fuelConsumptionPerDecare > 0;
+
             if (inventoryItems && inventoryItems.length > 0) {
               for (const usage of inventoryItems) {
                 const { inventoryId, quantity, ownerId } = usage;
 
                 const inventory = await tx.inventory.findUnique({
                   where: { id: inventoryId },
-                  select: { id: true, name: true, totalQuantity: true, unit: true },
+                  select: { id: true, name: true, category: true, totalQuantity: true, unit: true },
                 });
 
                 if (!inventory) {
                   throw new Error(`Envanter bulunamadı: ${inventoryId}`);
+                }
+
+                // Eğer equipment fuel consumption var ise ve bu item yakıt ise, skip et
+                if (hasEquipmentFuelConsumption && inventory.category === "FUEL") {
+                  console.log(`Skipping inventory item ${inventory.name} (FUEL) because equipment fuel consumption will be calculated automatically`);
+                  continue;
                 }
 
                 const ownerInventoryShare = await tx.inventoryOwnership.findFirst({
@@ -548,6 +558,27 @@ export async function PUT(request: Request) {
                     remainingOwnerShareToDeduct
                   );
 
+                  // Get owner's share of this fuel inventory
+                  const ownerFuelShare = await tx.inventoryOwnership.findFirst({
+                    where: {
+                      inventoryId: inventory.id,
+                      userId: ownerInfo.userId,
+                    },
+                    select: { id: true, shareQuantity: true },
+                  });
+
+                  if (!ownerFuelShare) {
+                    throw new Error(
+                      `Sahip (${ownerInfo.userId}) için ${inventory.id} yakıt envanteri share'i bulunamadı.`
+                    );
+                  }
+
+                  if (ownerFuelShare.shareQuantity < deductionAmount) {
+                    throw new Error(
+                      `Sahip'in bu yakıt envanterinde yeterli miktar bulunmuyor. Gerekli: ${deductionAmount}L, Mevcut: ${ownerFuelShare.shareQuantity}L`
+                    );
+                  }
+
                   const [fuelUsageRecord, updatedInventory] = await Promise.all([
                     tx.inventoryUsage.create({
                       data: {
@@ -563,6 +594,14 @@ export async function PUT(request: Request) {
                       where: { id: inventory.id },
                       data: {
                         totalQuantity: {
+                          decrement: deductionAmount,
+                        },
+                      },
+                    }),
+                    tx.inventoryOwnership.update({
+                      where: { id: ownerFuelShare.id },
+                      data: {
+                        shareQuantity: {
                           decrement: deductionAmount,
                         },
                       },

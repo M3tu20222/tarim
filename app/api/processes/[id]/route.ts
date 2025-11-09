@@ -96,7 +96,11 @@ export async function GET(
           },
         },
         inventoryUsages: {
-          include: {
+          select: {
+            id: true,
+            inventoryId: true,
+            usedQuantity: true,
+            usedById: true,
             inventory: {
               select: {
                 id: true,
@@ -305,9 +309,16 @@ export async function PUT(
 
       // 3. Envanter kullanımlarını güncelle (varsa)
       if (inventoryUsages && inventoryUsages.length > 0) {
-        // Mevcut kullanımları al
+        // Mevcut kullanımları al (usedById ve usedQuantity fetch et!)
         const existingUsages = await tx.inventoryUsage.findMany({
           where: { processId: processId }, // Use processId variable
+          select: {
+            id: true,
+            inventoryId: true,
+            usedQuantity: true,
+            usedById: true,
+            inventory: { select: { category: true } }
+          }
         });
 
         // Mevcut kullanımları sil
@@ -320,39 +331,135 @@ export async function PUT(
           // Use usedQuantity instead of quantityUsed
           const quantityToIncrement = Number(usage.usedQuantity);
           if (!isNaN(quantityToIncrement) && quantityToIncrement > 0) {
-            await tx.inventory.update({
-              where: { id: usage.inventoryId },
-              data: {
-                totalQuantity: {
-                  increment: quantityToIncrement,
-                },
+            // Get owner's inventory share to restore it
+            const ownerShare = await tx.inventoryOwnership.findFirst({
+              where: {
+                inventoryId: usage.inventoryId,
+                userId: usage.usedById,
               },
+              select: { id: true },
             });
+
+            const updateOps: any[] = [
+              tx.inventory.update({
+                where: { id: usage.inventoryId },
+                data: {
+                  totalQuantity: {
+                    increment: quantityToIncrement,
+                  },
+                },
+              }),
+            ];
+
+            // Also restore the owner's share if it exists
+            if (ownerShare) {
+              updateOps.push(
+                tx.inventoryOwnership.update({
+                  where: { id: ownerShare.id },
+                  data: {
+                    shareQuantity: {
+                      increment: quantityToIncrement,
+                    },
+                  },
+                })
+              );
+            }
+
+            await Promise.all(updateOps);
           } else {
              console.warn(`Skipping inventory update for usage ${usage.id} due to invalid quantity: ${usage.usedQuantity}`);
           }
         }
 
-        // Yeni kullanımları ekle
-        await tx.inventoryUsage.createMany({
-          data: inventoryUsages.map((usage: any) => ({
+        // Yeni kullanımları ekle (fuel'ü exclude et eğer equipment var ise)
+        const hasEquipment = equipmentUsages && equipmentUsages.length > 0;
+        const inventoriesToAdd = [];
+
+        for (const usage of inventoryUsages) {
+          // Check if this is a fuel inventory
+          const inventory = await tx.inventory.findUnique({
+            where: { id: usage.inventoryId },
+            select: { category: true },
+          });
+
+          // Skip fuel items if equipment is being used (fuel will be calculated from equipment consumption)
+          if (hasEquipment && inventory?.category === "FUEL") {
+            console.log(`Skipping fuel inventory ${usage.inventoryId} because equipment is present`);
+            continue;
+          }
+
+          inventoriesToAdd.push({
             processId: processId, // Use processId variable
             inventoryId: usage.inventoryId,
-            quantityUsed: Number.parseFloat(usage.quantityUsed),
+            usedQuantity: Number.parseFloat(usage.quantityUsed),
+            usageType: "PROCESSING",
+            usedById: usage.ownerId || userId,  // Use provided ownerId or current user
+            fieldId: updated.fieldId,
             cost: Number.parseFloat(usage.cost),
-          })),
-        });
-
-        // Yeni kullanımlar için envanter stoklarını azalt
-        for (const usage of inventoryUsages) {
-          await tx.inventory.update({
-            where: { id: usage.inventoryId },
-            data: {
-              totalQuantity: {
-                decrement: Number.parseFloat(usage.quantityUsed),
-              },
-            },
           });
+        }
+
+        if (inventoriesToAdd.length > 0) {
+          await tx.inventoryUsage.createMany({
+            data: inventoriesToAdd,
+          });
+        }
+
+        // Yeni kullanımlar için envanter stoklarını azalt (hem total hem owner share'i)
+        for (const usage of inventoryUsages) {
+          // Check if this is a fuel inventory (skip if equipment is present)
+          const inventory = await tx.inventory.findUnique({
+            where: { id: usage.inventoryId },
+            select: { category: true },
+          });
+
+          if (hasEquipment && inventory?.category === "FUEL") {
+            continue;
+          }
+
+          const usedQuantity = Number.parseFloat(usage.quantityUsed);
+          const ownerId = usage.ownerId || userId;
+
+          // Get owner's inventory share
+          const ownerShare = await tx.inventoryOwnership.findFirst({
+            where: {
+              inventoryId: usage.inventoryId,
+              userId: ownerId,
+            },
+            select: { id: true, shareQuantity: true },
+          });
+
+          if (!ownerShare) {
+            throw new Error(
+              `Sahip (${ownerId}) için ${usage.inventoryId} envanteri bulunamadı.`
+            );
+          }
+
+          if (ownerShare.shareQuantity < usedQuantity) {
+            throw new Error(
+              `Sahip'in bu envanterinde yeterli miktar bulunmuyor. Gerekli: ${usedQuantity}, Mevcut: ${ownerShare.shareQuantity}`
+            );
+          }
+
+          // Decrement both total and owner share
+          await Promise.all([
+            tx.inventory.update({
+              where: { id: usage.inventoryId },
+              data: {
+                totalQuantity: {
+                  decrement: usedQuantity,
+                },
+              },
+            }),
+            tx.inventoryOwnership.update({
+              where: { id: ownerShare.id },
+              data: {
+                shareQuantity: {
+                  decrement: usedQuantity,
+                },
+              },
+            }),
+          ]);
         }
       }
 
@@ -668,7 +775,14 @@ export async function DELETE(
       where: { id: processId }, // Use processId variable
       include: {
         field: { select: { id: true } },
-        inventoryUsages: true,
+        inventoryUsages: {
+          select: {
+            id: true,
+            inventoryId: true,
+            usedQuantity: true,
+            usedById: true,
+          }
+        },
       },
     });
 
@@ -706,14 +820,41 @@ export async function DELETE(
           if (!isNaN(quantityToIncrement) && quantityToIncrement > 0) {
                console.log(`Attempting to increment inventory ${usage.inventoryId} by ${quantityToIncrement}`); // Log: Güncelleme denemesi
                try {
-                 await tx.inventory.update({
-                    where: { id: usage.inventoryId },
-                    data: {
-                        totalQuantity: {
-                        increment: quantityToIncrement,
-                        },
-                    },
+                 // Get owner's inventory share to restore it
+                 const ownerShare = await tx.inventoryOwnership.findFirst({
+                   where: {
+                     inventoryId: usage.inventoryId,
+                     userId: usage.usedById,
+                   },
+                   select: { id: true },
                  });
+
+                 const updateOps: any[] = [
+                   tx.inventory.update({
+                      where: { id: usage.inventoryId },
+                      data: {
+                          totalQuantity: {
+                          increment: quantityToIncrement,
+                          },
+                      },
+                   }),
+                 ];
+
+                 // Also restore the owner's share if it exists
+                 if (ownerShare) {
+                   updateOps.push(
+                     tx.inventoryOwnership.update({
+                       where: { id: ownerShare.id },
+                       data: {
+                         shareQuantity: {
+                           increment: quantityToIncrement,
+                         },
+                       },
+                     })
+                   );
+                 }
+
+                 await Promise.all(updateOps);
                  console.log(`Successfully incremented inventory ${usage.inventoryId}`); // Log: Başarılı güncelleme
                } catch (updateError) {
                  console.error(`Failed to update inventory ${usage.inventoryId}:`, updateError); // Log: Güncelleme hatası
