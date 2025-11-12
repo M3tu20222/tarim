@@ -10,7 +10,6 @@ async function _getAllProcesses() {
   return await prisma.process.findMany({
     select: {
       id: true,
-      name: true,
       type: true,
       status: true,
       date: true,
@@ -45,7 +44,6 @@ async function _getProcessesBySeason(seasonId: string) {
     where: { seasonId },
     select: {
       id: true,
-      name: true,
       type: true,
       status: true,
       date: true,
@@ -62,7 +60,7 @@ export const getProcessesBySeason = cache(
   ["processes-by-season"],
   {
     revalidate: 60,
-    tags: (seasonId: string) => ["processes", `processes-season-${seasonId}`],
+    tags: ["processes"],
   }
 );
 
@@ -76,7 +74,6 @@ async function _getActiveProcesses() {
     where: { status: "ACTIVE" },
     select: {
       id: true,
-      name: true,
       type: true,
       status: true,
       date: true,
@@ -106,7 +103,6 @@ async function _getProcessesWithDetails() {
   return await prisma.process.findMany({
     select: {
       id: true,
-      name: true,
       type: true,
       status: true,
       date: true,
@@ -147,7 +143,6 @@ async function _getProcessesByField(fieldId: string) {
     where: { fieldId },
     select: {
       id: true,
-      name: true,
       type: true,
       status: true,
       date: true,
@@ -163,7 +158,7 @@ export const getProcessesByField = cache(
   ["processes-by-field"],
   {
     revalidate: 60,
-    tags: (fieldId: string) => ["processes", `processes-field-${fieldId}`],
+    tags: ["processes"],
   }
 );
 
@@ -177,7 +172,6 @@ async function _getProcessesByWorker(workerId: string) {
     where: { workerId },
     select: {
       id: true,
-      name: true,
       type: true,
       status: true,
       date: true,
@@ -194,6 +188,6 @@ export const getProcessesByWorker = cache(
   ["processes-by-worker"],
   {
     revalidate: 60,
-    tags: (workerId: string) => ["processes", `processes-worker-${workerId}`],
+    tags: ["processes"],
   }
 );
