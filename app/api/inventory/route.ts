@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { revalidateTag } from "next/cache";
+import { getAllInventory, getInventoryWithOwnerships, getActiveInventory } from "@/lib/data/inventory";
 import { InventoryCategory, InventoryStatus, Unit } from "@prisma/client"; // Import the actual enum
 
 // Envanter listesi nadiren değişir; DB yükünü azaltmak için ISR
@@ -23,127 +25,100 @@ export async function GET(request: Request) {
     const category = searchParams.get("category");
     const status = searchParams.get("status");
     const showAll = searchParams.get("showAll") === "true";
-    const fetchAll = searchParams.get("fetchAll") === "true"; // fetchAll parametresini ekle
-    const userIdsParam = searchParams.get("userIds"); // userIds parametresini al (çoğul)
-    const userIdParam = searchParams.get("userId"); // userId parametresini al (tekil)
+    const fetchAll = searchParams.get("fetchAll") === "true";
+    const userIdsParam = searchParams.get("userIds");
+    const userIdParam = searchParams.get("userId");
 
-    // Filtre oluştur
-    const filter: any = {};
+    // Cached data getters'dan veri al
+    let inventory;
 
-    // Kategori filtresi
+    // Ownership verileri gerekli mi kontrol et
+    const needsOwnerships = showAll || fetchAll || userRole === "ADMIN" || userIdsParam || userIdParam;
+
+    if (needsOwnerships) {
+      console.log("[Cache] Using getInventoryWithOwnerships");
+      inventory = await getInventoryWithOwnerships();
+    } else {
+      console.log("[Cache] Using getAllInventory");
+      inventory = await getAllInventory();
+    }
+
+    // Kategori filtresi (bellek içinde)
     if (category) {
       const categories = category
         .split(',')
-        .map(cat => cat.trim().toUpperCase()) // Trim whitespace and convert to uppercase for case-insensitivity
-        .filter(cat => cat in InventoryCategory); // Filter only valid enum keys
+        .map(cat => cat.trim().toUpperCase())
+        .filter(cat => cat in InventoryCategory);
 
       if (categories.length > 0) {
-        filter.category = {
-          in: categories as InventoryCategory[], // Cast to InventoryCategory array
-        };
+        inventory = inventory.filter(item => (categories as any[]).includes(item.category));
       } else {
-        // Geçersiz kategori(ler) varsa veya hiç geçerli kategori yoksa, boş sonuç döndür
-        // veya isteğe bağlı olarak hatayı yoksayabilirsiniz. Şimdilik boş döndürelim.
-        return NextResponse.json([]);
+        return NextResponse.json({ data: [] });
       }
     }
 
-    // Durum filtresi (status için de benzer bir enum kontrolü gerekebilir)
+    // Status filtresi (bellek içinde)
     if (status) {
-      // TODO: status için de enum kontrolü ekle (InventoryStatus enum'u varsa)
-      filter.status = status; // Şimdilik olduğu gibi bırakıldı
+      inventory = inventory.filter(item => item.status === status);
     }
 
-    // Filtreleme Mantığı Düzeltmesi:
-    // 1. userIds (çoğul) parametresi varsa öncelikli olarak ona göre filtrele
+    // Ownership filtresi (bellek içinde)
     if (userIdsParam) {
       const userIdsArray = userIdsParam.split(',').filter(id => id.trim() !== '');
       if (userIdsArray.length > 0) {
-        filter.ownerships = {
-          some: {
-            userId: {
-              in: userIdsArray,
-            },
-          },
-        };
+        inventory = inventory.filter(item =>
+          'ownerships' in item && item.ownerships.some((o: any) => userIdsArray.includes(o.userId))
+        );
       } else {
-        // userIds parametresi var ama geçerli ID içermiyorsa boş liste döndür
-        return NextResponse.json([]);
+        return NextResponse.json({ data: [] });
       }
-    }
-    // 2. userId (tekil) parametresi varsa ona göre filtrele
-    else if (userIdParam) {
-      filter.ownerships = {
-        some: {
-          userId: userIdParam,
-        },
-      };
-    }
-    // 3. userIds/userId yoksa, (showAll=true VEYA fetchAll=true) veya rol ADMIN ise filtre uygulama
-    else if (showAll || fetchAll || userRole === "ADMIN") { // fetchAll kontrolü eklendi
-      // Sahiplik filtresi uygulanmaz, tüm envanter (kategori/status varsa onlara göre filtrelenmiş) gelir.
-    }
-    // 4. Hiçbiri yoksa, isteği yapan kullanıcıya göre filtrele
-    else {
-      filter.ownerships = {
-        some: {
-          userId: userId,
-        },
-      };
+    } else if (userIdParam) {
+      inventory = inventory.filter(item =>
+        'ownerships' in item && item.ownerships.some((o: any) => o.userId === userIdParam)
+      );
+    } else if (!showAll && !fetchAll && userRole !== "ADMIN") {
+      // Kullanıcının kendi envanterini filtrele
+      inventory = inventory.filter(item =>
+        'ownerships' in item && item.ownerships.some((o: any) => o.userId === userId)
+      );
     }
 
-    // Envanter öğelerini getir
-    const inventory = await prisma.inventory.findMany({
-      where: filter,
-      select: {
-        id: true,
-        name: true,
-        category: true,
-        totalQuantity: true,
-        totalStock: true, // Kalan stok bilgisi
-        unit: true,
-        status: true,
-        purchaseDate: true,
-        expiryDate: true,
-        costPrice: true,
-        updatedAt: true,
-        // Sahiplik: minimal projection
-        ownerships: {
-          select: {
-            userId: true,
-            shareQuantity: true,
-            user: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-          },
-        },
-        // Son 3 işlem özet
-        inventoryTransactions: {
-          take: 3,
-          orderBy: { date: "desc" },
-          select: {
-            id: true,
-            type: true,
-            quantity: true,
-            date: true,
-            userId: true,
-          },
-        },
-      },
-      orderBy: { updatedAt: "desc" },
-    });
+    // Ek ilişkili veri getir (inventoryTransactions)
+    const inventoryIds = inventory.map(i => i.id);
+    let transactionsMap = new Map<string, any[]>();
 
-    // Map costPrice to unitPrice for frontend compatibility
+    if (inventoryIds.length > 0) {
+      const transactions = await prisma.inventoryTransaction.findMany({
+        where: { inventoryId: { in: inventoryIds } },
+        orderBy: { date: "desc" },
+        take: 3 * inventoryIds.length, // Max 3 per inventory
+      });
+
+      // Son 3 işlemi stokla
+      transactions.forEach(tx => {
+        if (!transactionsMap.has(tx.inventoryId)) {
+          transactionsMap.set(tx.inventoryId, []);
+        }
+        if ((transactionsMap.get(tx.inventoryId)?.length ?? 0) < 3) {
+          transactionsMap.get(tx.inventoryId)!.push({
+            id: tx.id,
+            type: tx.type,
+            quantity: tx.quantity,
+            date: tx.date,
+            userId: tx.userId,
+          });
+        }
+      });
+    }
+
+    // Öğeleri formatla ve işlemleri ekle
     const formattedInventory = inventory.map(item => ({
       ...item,
-      unitPrice: item.costPrice ?? 0, // Map costPrice to unitPrice, default to 0 if null/undefined
+      unitPrice: (item as any).costPrice ?? 0,
+      inventoryTransactions: transactionsMap.get(item.id) || [],
     }));
 
-
-    return NextResponse.json({ data: formattedInventory }); // Return formatted data with data property
+    return NextResponse.json({ data: formattedInventory });
   } catch (error) {
     console.error("Error fetching inventory:", error);
     return NextResponse.json(
@@ -197,7 +172,7 @@ export async function POST(request: Request) {
     }
 
     // Envanter öğesi oluştur
-    const inventory = await prisma.inventory.create({
+    const newInventory = await prisma.inventory.create({
       data: {
         name,
         category: category as InventoryCategory,
@@ -206,7 +181,7 @@ export async function POST(request: Request) {
         status: status as InventoryStatus,
         purchaseDate: purchaseDate ? new Date(purchaseDate) : null,
         expiryDate: expiryDate ? new Date(expiryDate) : null,
-        costPrice: Number(costPrice), // costPrice eklendi
+        costPrice: Number(costPrice),
         notes,
         ownerships: {
           create: {
@@ -226,7 +201,12 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json(inventory);
+    // Cache invalidation
+    console.log("[Cache] Invalidating inventory tags after inventory creation");
+    revalidateTag("inventory");
+    revalidateTag("inventory-ownerships");
+
+    return NextResponse.json(newInventory);
   } catch (error) {
     console.error("Error creating inventory:", error);
     return NextResponse.json(

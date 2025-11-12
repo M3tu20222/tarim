@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { revalidateTag } from "next/cache";
+import { getAllFields, getFieldsWithOwnerships } from "@/lib/data/fields";
 import type { NextRequest } from "next/server";
 import type { Prisma } from "@prisma/client";
 
@@ -72,89 +74,104 @@ export async function GET(request: NextRequest) {
       where.status = status;
     }
 
-    // Kullanıcı rolüne göre filtreleme (Sadece fetchAll false ise uygula)
-    if (!fetchAll) {
-      // Geri bildirim üzerine: OWNER rolündeki kullanıcıların sadece kendi tarlalarını değil,
-      // sistemdeki tüm tarlaları görebilmesi için sahiplik filtresi kaldırıldı.
-      if (userRole === "WORKER") {
-        // Worker'lar için filtreleme yapma, tüm tarlaları görebilsinler
-        // Ancak wellId parametresi varsa, o kuyuya bağlı tarlaları göster
-        if (!wellId) {
-          where.workerAssignments = {
-            some: {
-              userId: userId,
-            },
-          };
-        }
-      }
+    // Cached data getters'dan veri al
+    let allFields;
+    if (includeOwnerships) {
+      console.log("[Cache] Using getFieldsWithOwnerships");
+      allFields = await getFieldsWithOwnerships();
+    } else {
+      console.log("[Cache] Using getAllFields");
+      allFields = await getAllFields();
     }
 
-    // Toplam kayıt sayısını al
-    const totalCount = await prisma.field.count({ where });
+    // Filtreleme işlemini bellek içinde yap
+    let fields = allFields;
 
-    // Tarlaları getir (projection: yanıtı küçült)
-    const fields = await prisma.field.findMany({
-      where,
-      select: {
-        id: true,
-        name: true,
-        location: true, // Eklendi: Konum bilgisi
-        status: true,   // Eklendi: Durum bilgisi
-        size: true,
-        seasonId: true,
-        // İsteğe bağlı sahiplik bilgileri (yalnızca gereken alanlar)
-        ...(includeOwnerships
-          ? {
-              owners: {
-                select: {
-                  id: true, // Eklendi: FieldOwnership ID'si
-                  userId: true,
-                  percentage: true,
-                  user: {
-                    select: {
-                      id: true,
-                      name: true,
-                    },
-                  },
-                },
-              },
-            }
-          : {}),
-        // Kuyu bilgisi: yalnızca id ve name
-        fieldWells: {
-          select: {
-            id: true, // Eklendi: FieldWell ilişki kaydının ID'si
-            well: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
+    // Well ID'ye göre filtreleme
+    if (wellId) {
+      fields = await Promise.resolve().then(async () => {
+        const fieldWells = await prisma.fieldWell.findMany({
+          where: { wellId },
+          select: { fieldId: true },
+        });
+        const fieldWellIds = fieldWells.map((fw) => fw.fieldId);
+        return fields.filter((f) => fieldWellIds.includes(f.id));
+      });
+    }
+
+    // Arama filtresi
+    if (search) {
+      fields = fields.filter(
+        (f) =>
+          f.name.toLowerCase().includes(search.toLowerCase()) ||
+          f.location?.toLowerCase().includes(search.toLowerCase())
+      );
+    }
+
+    // Status filtresi
+    if (status) {
+      fields = fields.filter((f) => f.status === status);
+    }
+
+    // Worker rolü için filtreleme
+    if (!fetchAll && userRole === "WORKER" && !wellId) {
+      const workerAssignments = await prisma.fieldWorkerAssignment.findMany({
+        where: { userId },
+        select: { fieldId: true },
+      });
+      const assignedFieldIds = workerAssignments.map((wa) => wa.fieldId);
+      fields = fields.filter((f) => assignedFieldIds.includes(f.id));
+    }
+
+    // Ilişkili veri getir (wells, season, ownerships)
+    const fieldIds = fields.map((f) => f.id);
+    let fieldsWithRelations = fields;
+
+    if (fieldIds.length > 0) {
+      const fieldWells = await prisma.fieldWell.findMany({
+        where: { fieldId: { in: fieldIds } },
+        include: {
+          well: {
+            select: { id: true, name: true },
           },
         },
-        // Sezon bilgisi minimal
-        season: {
-          select: {
-            id: true,
-            name: true,
-            startDate: true,
-            endDate: true,
-          },
+      });
+
+      const seasons = await prisma.season.findMany({
+        where: { id: { in: fields.map((f) => f.seasonId).filter(Boolean) } },
+        select: {
+          id: true,
+          name: true,
+          startDate: true,
+          endDate: true,
         },
-      },
-      orderBy: { createdAt: "desc" },
-      skip,
-      take: limit,
-    });
+      });
 
-    // Prisma'dan gelen 'fields' dizisi doğrudan kullanılacak.
-    // formattedFields map işlemi kaldırıldı.
+      const seasonMap = new Map(seasons.map((s) => [s.id, s]));
+      const fieldWellsMap = new Map<string, any[]>();
+      fieldWells.forEach((fw) => {
+        if (!fieldWellsMap.has(fw.fieldId)) {
+          fieldWellsMap.set(fw.fieldId, []);
+        }
+        fieldWellsMap.get(fw.fieldId)!.push({
+          id: fw.id,
+          well: fw.well,
+        });
+      });
 
-    // Revalidate/TTL: App Router'da route-level revalidate önerilir
-    // Bu dosyanın tepesine `export const revalidate = 120` ekleyebiliriz.
-    // Response init içinde 'next' tipi bulunmadığı için burada standart JSON döndürüyoruz.
+      fieldsWithRelations = fields.map((f) => ({
+        ...f,
+        fieldWells: fieldWellsMap.get(f.id) || [],
+        season: f.seasonId ? seasonMap.get(f.seasonId) : null,
+      }));
+    }
+
+    // Pagination
+    const totalCount = fieldsWithRelations.length;
+    const paginatedFields = fieldsWithRelations.slice(skip, skip + limit);
+
     return NextResponse.json({
-      data: fields,
+      data: paginatedFields,
       meta: {
         total: totalCount,
         page,
@@ -283,6 +300,10 @@ export async function POST(request: Request) {
         },
       });
     }
+
+    // Cache invalidation
+    console.log("[Cache] Invalidating fields tag after field creation");
+    revalidateTag("fields");
 
     return NextResponse.json(field);
   } catch (error) {

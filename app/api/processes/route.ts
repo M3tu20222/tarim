@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { revalidateTag } from "next/cache";
+import { getAllProcesses, getProcessesWithDetails, getProcessesByField } from "@/lib/data/processes";
 import type { ProcessType, Unit, ProcessStatus } from "@prisma/client"; // ProcessStatus eklendi
 import { WeatherSnapshotService } from "@/lib/weather/weather-snapshot-service";
 import { FuelDeductionService } from "@/lib/services/fuel-deduction-service";
@@ -26,90 +28,108 @@ export async function GET(request: Request) {
     const seasonIdParam = searchParams.get("seasonId");
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
-    const status = searchParams.get("status"); // Yeni: Status filtresi
+    const status = searchParams.get("status");
+    const includeDetails = searchParams.get("includeDetails") === "true";
 
-    // Filtre oluştur
-    const filter: any = {};
+    // Cached data getters'dan veri al
+    let processesBase;
+    if (includeDetails) {
+      console.log("[Cache] Using getProcessesWithDetails");
+      processesBase = await getProcessesWithDetails();
+    } else {
+      console.log("[Cache] Using getAllProcesses");
+      processesBase = await getAllProcesses();
+    }
+
+    // Bellek içinde filtreleme
+    let filtered = processesBase;
+
+    // Tip filtresi
     if (type) {
-      filter.type = type;
+      filtered = filtered.filter(p => p.type === type);
     }
+
+    // Field filtresi
     if (fieldIdParam) {
-      filter.fieldId = fieldIdParam;
+      filtered = filtered.filter(p => p.fieldId === fieldIdParam);
     }
+
+    // Sezon filtresi
     if (seasonIdParam) {
-      filter.seasonId = seasonIdParam;
+      filtered = filtered.filter(p => p.seasonId === seasonIdParam);
     }
+
+    // Tarih aralığı filtresi
     if (startDate && endDate) {
-      filter.date = {
-        gte: new Date(startDate),
-        lte: new Date(endDate),
-      };
-    }
-    if (status) { // Yeni: Status filtresi eklendi
-      filter.status = status;
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      filtered = filtered.filter(p => {
+        const pDate = new Date(p.date);
+        return pDate >= start && pDate <= end;
+      });
     }
 
-    // Kullanıcı rolüne göre filtreleme
+    // Status filtresi
+    if (status) {
+      filtered = filtered.filter(p => p.status === status);
+    }
+
+    // Worker rolü için filtreleme
     if (userRole === "WORKER") {
-      filter.workerId = userId;
+      filtered = filtered.filter(p => p.workerId === userId);
     }
-    // Owner ve Admin tüm işlemleri görebilir
 
-    // Adım 1: İşlemleri getir (field ve processCosts ilişkisi olmadan)
-    const processesBase = await prisma.process.findMany({
-      where: filter,
-      include: {
-        // field ve processCosts hariç diğer ilişkiler
-        worker: {
-          select: { id: true, name: true, email: true },
-        },
-        season: {
-          select: { id: true, name: true },
-        },
-        equipmentUsages: {
-          include: { equipment: true },
-        },
-        inventoryUsages: {
-          include: { inventory: true },
-        },
-      },
-      orderBy: {
-        date: "desc",
-      },
-    });
+    // Ek ilişkili veri getir (equipmentUsages, inventoryUsages, processCosts)
+    const processIds = filtered.map(p => p.id);
+    const fieldIds = filtered.map(p => p.fieldId).filter(Boolean);
 
-    // Adım 2: ID'leri topla
-    const processIdsWithNonNullFieldId: string[] = [];
-    const fieldIds: string[] = [];
-    processesBase.forEach((p) => {
-      if (p.fieldId) {
-        processIdsWithNonNullFieldId.push(p.id);
-        fieldIds.push(p.fieldId);
-      }
-    });
-    // Tekilleştir (gerçi fieldId listesi için gerekmeyebilir ama garanti olsun)
-    const uniqueFieldIds = [...new Set(fieldIds)];
+    let fieldsMap = new Map<string, any>();
+    let equipmentUsagesMap = new Map<string, any[]>();
+    let inventoryUsagesMap = new Map<string, any[]>();
+    let costsMap = new Map<string, any[]>();
 
-    // Adım 3a: İlişkili tarlaları ayrı sorguyla getir (sadece fieldId varsa)
-    let fieldsMap: Map<string, any> = new Map();
-    if (uniqueFieldIds.length > 0) {
+    if (fieldIds.length > 0 && !includeDetails) {
+      // Field detaylarını getir (includeDetails true ise cached sorgudan geliyor)
       const fields = await prisma.field.findMany({
-        where: { id: { in: uniqueFieldIds } },
+        where: { id: { in: fieldIds } },
         select: { id: true, name: true, location: true, size: true },
       });
       fieldsMap = new Map(fields.map((f) => [f.id, f]));
     }
 
-    // Adım 3b: İlişkili maliyetleri ayrı sorguyla getir (sadece fieldId'si null olmayan işlemler için)
-    const costsMap: Map<string, any[]> = new Map();
-    if (processIdsWithNonNullFieldId.length > 0) {
-      const costs = await prisma.processCost.findMany({
-        where: { processId: { in: processIdsWithNonNullFieldId } }, // fieldId filtresi kaldırıldı
+    if (processIds.length > 0) {
+      // Equipment usages
+      const equipmentUsages = await prisma.equipmentUsage.findMany({
+        where: { processId: { in: processIds } },
+        include: { equipment: true },
       });
-      // fieldId'si null olmayanları filtrele
-      const filteredCosts = costs.filter((cost) => cost.fieldId !== null);
-      // Maliyetleri processId'ye göre grupla
-      filteredCosts.forEach((cost) => {
+
+      equipmentUsages.forEach(eu => {
+        if (!equipmentUsagesMap.has(eu.processId)) {
+          equipmentUsagesMap.set(eu.processId, []);
+        }
+        equipmentUsagesMap.get(eu.processId)!.push(eu);
+      });
+
+      // Inventory usages
+      const inventoryUsages = await prisma.inventoryUsage.findMany({
+        where: { processId: { in: processIds } },
+        include: { inventory: true },
+      });
+
+      inventoryUsages.forEach(iu => {
+        if (!inventoryUsagesMap.has(iu.processId)) {
+          inventoryUsagesMap.set(iu.processId, []);
+        }
+        inventoryUsagesMap.get(iu.processId)!.push(iu);
+      });
+
+      // Process costs
+      const costs = await prisma.processCost.findMany({
+        where: { processId: { in: processIds } },
+      });
+
+      costs.forEach(cost => {
         if (!costsMap.has(cost.processId)) {
           costsMap.set(cost.processId, []);
         }
@@ -117,11 +137,12 @@ export async function GET(request: Request) {
       });
     }
 
-    // Adım 4: Tüm verileri birleştir
-    const processes = processesBase.map((p) => ({
+    // Tüm verileri birleştir
+    const processes = filtered.map((p) => ({
       ...p,
-      field: p.fieldId ? fieldsMap.get(p.fieldId) || null : null,
-      // Sadece ilgili processId için maliyet varsa ekle, yoksa boş dizi ata
+      field: !includeDetails && p.fieldId ? fieldsMap.get(p.fieldId) || null : (p as any).field || null,
+      equipmentUsages: equipmentUsagesMap.get(p.id) || [],
+      inventoryUsages: inventoryUsagesMap.get(p.id) || [],
       processCosts: costsMap.get(p.id) || [],
     }));
 
@@ -247,6 +268,13 @@ export async function POST(request: Request) {
     } catch (snapshotError) {
       console.warn(`⚠️ Process ${process.id} weather snapshot hatası:`, snapshotError);
       // Snapshot hatası process'i etkilemesin
+    }
+
+    // Cache invalidation
+    console.log("[Cache] Invalidating processes tags after process creation");
+    revalidateTag("processes");
+    if (fieldIdParam) {
+      revalidateTag(`processes-field-${fieldId}`);
     }
 
     return NextResponse.json({
@@ -573,6 +601,13 @@ export async function PUT(request: Request) {
 
     if (!transactionResult) {
       throw new Error("Envanter ve ekipman güncelleme birden fazla denemeye rağmen tamamlanamadı.");
+    }
+
+    // Cache invalidation
+    console.log("[Cache] Invalidating processes tags after inventory/equipment update");
+    revalidateTag("processes");
+    if (process.fieldId) {
+      revalidateTag(`processes-field-${process.fieldId}`);
     }
 
     return NextResponse.json({ message: "Envanter ve ekipman bilgileri başarıyla güncellendi." });
