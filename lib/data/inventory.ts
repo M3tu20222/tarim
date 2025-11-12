@@ -59,10 +59,7 @@ export const getInventoryByCategory = cache(
   ["inventory-by-category"],
   {
     revalidate: 180,
-    tags: (category: InventoryCategory) => [
-      "inventory",
-      `inventory-category-${category}`,
-    ],
+    tags: ["inventory"],
   }
 );
 
@@ -178,6 +175,6 @@ export const getInventoryByOwner = cache(
   ["inventory-by-owner"],
   {
     revalidate: 180,
-    tags: (ownerId: string) => ["inventory", `inventory-owner-${ownerId}`],
+    tags: ["inventory"],
   }
 );

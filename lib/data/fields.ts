@@ -72,8 +72,7 @@ export const getFieldById = cache(
   ["field-by-id"],
   {
     revalidate: 60, // 1 minute (more volatile than list)
-    // Dynamic tag based on ID
-    tags: (id: string) => ["fields", `field-${id}`],
+    tags: ["fields"],
   }
 );
 
@@ -160,6 +159,6 @@ export const getFieldsByOwner = cache(
   ["fields-by-owner"],
   {
     revalidate: 120,
-    tags: (ownerId: string) => ["fields", `fields-owner-${ownerId}`],
+    tags: ["fields"],
   }
 );
