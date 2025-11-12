@@ -16,6 +16,14 @@ async function _getAllProcesses() {
       fieldId: true,
       seasonId: true,
       workerId: true,
+      processedArea: true,
+      processedPercentage: true,
+      field: {
+        select: { id: true, name: true },
+      },
+      worker: {
+        select: { id: true, name: true },
+      },
       createdAt: true,
     },
     orderBy: { date: "desc" },
@@ -49,6 +57,14 @@ async function _getProcessesBySeason(seasonId: string) {
       date: true,
       fieldId: true,
       workerId: true,
+      processedArea: true,
+      processedPercentage: true,
+      field: {
+        select: { id: true, name: true },
+      },
+      worker: {
+        select: { id: true, name: true },
+      },
       createdAt: true,
     },
     orderBy: { date: "desc" },
@@ -80,6 +96,14 @@ async function _getActiveProcesses() {
       fieldId: true,
       seasonId: true,
       workerId: true,
+      processedArea: true,
+      processedPercentage: true,
+      field: {
+        select: { id: true, name: true },
+      },
+      worker: {
+        select: { id: true, name: true },
+      },
     },
     orderBy: { date: "desc" },
   });
@@ -109,6 +133,8 @@ async function _getProcessesWithDetails() {
       fieldId: true,
       seasonId: true,
       workerId: true,
+      processedArea: true,
+      processedPercentage: true,
       field: {
         select: { id: true, name: true, location: true },
       },
@@ -147,6 +173,14 @@ async function _getProcessesByField(fieldId: string) {
       status: true,
       date: true,
       workerId: true,
+      processedArea: true,
+      processedPercentage: true,
+      field: {
+        select: { id: true, name: true },
+      },
+      worker: {
+        select: { id: true, name: true },
+      },
       createdAt: true,
     },
     orderBy: { date: "desc" },
@@ -177,6 +211,14 @@ async function _getProcessesByWorker(workerId: string) {
       date: true,
       fieldId: true,
       seasonId: true,
+      processedArea: true,
+      processedPercentage: true,
+      field: {
+        select: { id: true, name: true },
+      },
+      worker: {
+        select: { id: true, name: true },
+      },
       createdAt: true,
     },
     orderBy: { date: "desc" },

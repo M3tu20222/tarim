@@ -35,7 +35,10 @@ export default async function FieldPage({ params }: FieldPageProps) {
     where: { id: awaitedParams.id },
     include: {
       owners: {
-        include: {
+        select: {
+          id: true,
+          userId: true,
+          percentage: true,
           user: {
             select: {
               id: true,
@@ -45,76 +48,74 @@ export default async function FieldPage({ params }: FieldPageProps) {
           },
         },
       },
-      season: true,
+      season: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
       crops: true,
-      // wells: true, // Hatalı include kaldırıldı
-      fieldWells: { // Doğru include eklendi
-        include: {
-          well: true, // İlişkili kuyu bilgilerini getir
-        },
-      },
-      irrigationFieldUsages: { // 'irrigationLogs' yerine 'irrigationFieldUsages' kullanıldı
-        take: 5,
-        orderBy: {
-          irrigationLog: { // İlişkili log'un tarihine göre sırala
-            startDateTime: "desc",
-          },
-        },
-        include: {
-          irrigationLog: { // İlişkili sulama logunu dahil et
-            include: {
-              well: true, // Sulama logundaki kuyu bilgisini de alalım
-              user: { // Sulamayı yapan kullanıcıyı alalım
-                select: { name: true }
-              }
-            }
-          },
-        },
-      },
-      processes: { // Changed from processingLogs to processes
-        take: 5,
-        orderBy: {
-          date: "desc",
-        },
-        include: {
-          worker: {
+      fieldWells: {
+        select: {
+          id: true,
+          wellId: true,
+          well: {
             select: {
+              id: true,
               name: true,
+              depth: true,
+              capacity: true,
+              status: true,
             },
           },
-          inventoryUsages: {
-            include: {
-              inventory: true,
-            },
-          },
-          equipmentUsages: {
-            include: {
-              equipment: true,
-            },
-          },
-          processCosts: {
-            include: {
-              ownerExpenses: {
-                include: {
-                  fieldOwnership: {
-                    include: {
-                      user: {
-                        select: {
-                          name: true,
-                        },
-                      },
-                    },
-                  },
+        },
+      },
+      irrigationFieldUsages: {
+        select: {
+          id: true,
+          percentage: true,
+          irrigationLog: {
+            select: {
+              id: true,
+              startDateTime: true,
+              duration: true,
+              notes: true,
+              well: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+              user: {
+                select: {
+                  id: true,
+                  name: true,
                 },
               },
             },
           },
         },
       },
-      fieldExpenses: { // YENİ: Tarla giderlerini dahil et
-        take: 10,
-        orderBy: {
-          expenseDate: "desc",
+      processes: {
+        select: {
+          id: true,
+          type: true,
+          date: true,
+          description: true,
+          worker: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      },
+      fieldExpenses: {
+        select: {
+          id: true,
+          totalCost: true,
+          sourceType: true,
+          expenseDate: true,
         },
       },
     },
@@ -402,9 +403,8 @@ export default async function FieldPage({ params }: FieldPageProps) {
                   className="flex items-center justify-between rounded-lg border p-3"
                 >
                   <div>
-                    <p className="font-medium">{expense.description || "Açıklama yok"}</p>
                     <p className="text-sm text-muted-foreground">
-                      Tarih: {formatDate(expense.expenseDate)} | Tutar:{" "}
+                      {expense.expenseDate && `${formatDate(expense.expenseDate)} | `}Tutar:{" "}
                       <span className="font-semibold">
                         {expense.totalCost.toLocaleString("tr-TR", {
                           style: "currency",

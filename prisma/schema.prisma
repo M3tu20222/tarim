@@ -765,9 +765,9 @@ model FieldExpense {
   season      Season       @relation(fields: [seasonId], references: [id])
   seasonId    String       @db.ObjectId
   totalCost   Float
-  description String
-  expenseDate DateTime
-  sourceType  String
+  description String?
+  expenseDate DateTime?
+  sourceType  String?
   sourceId    String
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
