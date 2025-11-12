@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { NextRequest } from "next/server";
-import { getServerSideSession } from "@/lib/session";
 import type { Prisma } from "@prisma/client";
 
 // Route-level ISR (120 sn): sabit referans veriler için DB yükünü azaltır
@@ -28,8 +27,11 @@ interface CreateFieldPayload {
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSideSession();
-    if (!session || !session.id) {
+    // Get user info from headers (set by middleware)
+    const userId = request.headers.get("x-user-id");
+    const userRole = request.headers.get("x-user-role");
+
+    if (!userId || !userRole) {
       return NextResponse.json({ error: "Yetkisiz erişim" }, { status: 401 });
     }
 
@@ -74,13 +76,13 @@ export async function GET(request: NextRequest) {
     if (!fetchAll) {
       // Geri bildirim üzerine: OWNER rolündeki kullanıcıların sadece kendi tarlalarını değil,
       // sistemdeki tüm tarlaları görebilmesi için sahiplik filtresi kaldırıldı.
-      if (session.role === "WORKER") {
+      if (userRole === "WORKER") {
         // Worker'lar için filtreleme yapma, tüm tarlaları görebilsinler
         // Ancak wellId parametresi varsa, o kuyuya bağlı tarlaları göster
         if (!wellId) {
           where.workerAssignments = {
             some: {
-              userId: session.id,
+              userId: userId,
             },
           };
         }

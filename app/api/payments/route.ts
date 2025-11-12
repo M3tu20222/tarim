@@ -1,11 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSideSession as getServerSession } from "@/lib/session";
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession();
-    if (!session) {
+    const userId = request.headers.get("x-user-id");
+    const userRole = request.headers.get("x-user-role");
+
+    if (!userId || !userRole) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -45,8 +46,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession();
-    if (!session) {
+    const userId = request.headers.get("x-user-id");
+    const userRole = request.headers.get("x-user-role");
+
+    if (!userId || !userRole) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -61,7 +64,7 @@ export async function POST(request: NextRequest) {
         notes: data.notes,
         debt: data.debtId ? { connect: { id: data.debtId } } : undefined,
         contributor: { connect: { id: data.contributorId } },
-        payer: { connect: { id: data.payerId || session.id } },
+        payer: { connect: { id: data.payerId || userId } },
         receiver: { connect: { id: data.receiverId } },
       },
     });

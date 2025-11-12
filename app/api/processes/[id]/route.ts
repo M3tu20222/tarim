@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { verifyToken } from "@/lib/jwt";
 import type { ProcessType, Role } from "@prisma/client";
+import { FuelDeductionService } from "@/lib/services/fuel-deduction-service";
 
 // Belirli bir işlemi getir
 export async function GET(
@@ -392,7 +393,7 @@ export async function PUT(
             processId: processId, // Use processId variable
             inventoryId: usage.inventoryId,
             usedQuantity: Number.parseFloat(usage.quantityUsed),
-            usageType: "PROCESSING",
+            usageType: "PROCESSING" as const,  // TypeScript için const assertion
             usedById: usage.ownerId || userId,  // Use provided ownerId or current user
             fieldId: updated.fieldId,
             cost: Number.parseFloat(usage.cost),
@@ -461,6 +462,53 @@ export async function PUT(
             }),
           ]);
         }
+
+        // 3.5. Equipment varsa ve yakıt tüketimi varsa, yakıt düşümünü yap
+        if (equipmentUsages && equipmentUsages.length > 0) {
+          // Equipment'ları kontrol et ve yakıt tüketimi olanları bul
+          for (const equipmentUsage of equipmentUsages) {
+            const equipment = await tx.equipment.findUnique({
+              where: { id: equipmentUsage.equipmentId },
+            });
+
+            if (equipment && equipment.fuelConsumptionPerDecare && equipment.fuelConsumptionPerDecare > 0) {
+              // Tarlanın sahiplerini bul
+              const field = await tx.field.findUnique({
+                where: { id: fieldId },
+                include: {
+                  owners: {
+                    select: {
+                      userId: true,
+                      percentage: true,
+                      user: { select: { id: true, name: true } },
+                    },
+                  },
+                },
+              });
+
+              if (!field) {
+                throw new Error(`Tarla bulunamadı: ${fieldId}`);
+              }
+
+              // Yeni OOP servisi ile yakıt düşümü yap
+              const fuelDeductionResults = await FuelDeductionService.deductFuelForEquipment(
+                field.id,
+                equipment.id,
+                processedArea || 0,
+                processId
+              );
+
+              // Sonuçları kontrol et
+              const failedDeductions = fuelDeductionResults.filter(result => !result.success);
+              if (failedDeductions.length > 0) {
+                const errorMessages = failedDeductions.map(result => result.message).join("; ");
+                throw new Error(`Yakıt düşümü başarısız: ${errorMessages}`);
+              }
+
+              console.log(`✅ Equipment yakıt düşümü başarıyla tamamlandı: ${fuelDeductionResults.length} sahip için`);
+            }
+          }
+        }
       }
 
       // 4. Maliyetleri Yeniden Hesapla ve Güncelle
@@ -489,8 +537,8 @@ export async function PUT(
         ),
       ];
 
-      let inventoryMap = new Map<string, { costPrice: number | null }>();
-      let inventoryToPurchaseMap = new Map<string, string>();
+      const inventoryMap = new Map<string, { costPrice: number | null }>();
+      const inventoryToPurchaseMap = new Map<string, string>();
       if (uniqueInventoryIds.length > 0) {
         const inventories = await tx.inventory.findMany({
           where: { id: { in: uniqueInventoryIds } },
@@ -517,7 +565,7 @@ export async function PUT(
       }
 
       const uniquePurchaseIdsForFallback = [...new Set(inventoryToPurchaseMap.values())];
-      let purchasePriceMap = new Map<string, number>();
+      const purchasePriceMap = new Map<string, number>();
       if (uniquePurchaseIdsForFallback.length > 0) {
         const purchases = await tx.purchase.findMany({
           where: { id: { in: uniquePurchaseIdsForFallback } },
@@ -808,66 +856,14 @@ export async function DELETE(
 
     // Transaction başlat (zaman aşımı süresini artırarak)
     await prisma.$transaction(async (tx) => {
-      // 1. Envanter kullanımlarını sil ve stokları geri ekle
-      console.log(`Starting inventory update for process: ${processId}`); // Log başlangıcı
-      if (existingProcess.inventoryUsages && Array.isArray(existingProcess.inventoryUsages) && existingProcess.inventoryUsages.length > 0) {
-        console.log(`Found ${existingProcess.inventoryUsages.length} inventory usages to process.`); // Log: Kaç kullanım bulundu
-        for (const usage of existingProcess.inventoryUsages) {
-          console.log(`Processing usage ID: ${usage.id}, Inventory ID: ${usage.inventoryId}, Quantity Used: ${usage.usedQuantity}`); // Log: Mevcut kullanım detayı
-          // Ensure usedQuantity is a valid number before incrementing
-          // Use usedQuantity instead of quantityUsed
-          const quantityToIncrement = Number(usage.usedQuantity);
-          if (!isNaN(quantityToIncrement) && quantityToIncrement > 0) {
-               console.log(`Attempting to increment inventory ${usage.inventoryId} by ${quantityToIncrement}`); // Log: Güncelleme denemesi
-               try {
-                 // Get owner's inventory share to restore it
-                 const ownerShare = await tx.inventoryOwnership.findFirst({
-                   where: {
-                     inventoryId: usage.inventoryId,
-                     userId: usage.usedById,
-                   },
-                   select: { id: true },
-                 });
-
-                 const updateOps: any[] = [
-                   tx.inventory.update({
-                      where: { id: usage.inventoryId },
-                      data: {
-                          totalQuantity: {
-                          increment: quantityToIncrement,
-                          },
-                      },
-                   }),
-                 ];
-
-                 // Also restore the owner's share if it exists
-                 if (ownerShare) {
-                   updateOps.push(
-                     tx.inventoryOwnership.update({
-                       where: { id: ownerShare.id },
-                       data: {
-                         shareQuantity: {
-                           increment: quantityToIncrement,
-                         },
-                       },
-                     })
-                   );
-                 }
-
-                 await Promise.all(updateOps);
-                 console.log(`Successfully incremented inventory ${usage.inventoryId}`); // Log: Başarılı güncelleme
-               } catch (updateError) {
-                 console.error(`Failed to update inventory ${usage.inventoryId}:`, updateError); // Log: Güncelleme hatası
-                 // Transaction'ı geri almak için hatayı tekrar fırlat
-                 throw updateError;
-               }
-          } else {
-              // Use usedQuantity in the warning message
-              console.warn(`Skipping inventory update for usage ${usage.id} due to invalid or zero quantity: ${usage.usedQuantity}`); // Log: Geçersiz miktar
-          }
-        }
-      } else {
-        console.log(`No inventory usages found for process ${processId} to update.`); // Log: Kullanım bulunamadı
+      // 1. Yakıtı geri iade et (yeni OOP servisi ile)
+      console.log(`Starting fuel restoration for process: ${processId}`);
+      try {
+        await FuelDeductionService.restoreFuelForProcess(processId);
+        console.log(`✅ Yakıt geri iade işlemi başarıyla tamamlandı`);
+      } catch (restoreError) {
+        console.error(`❌ Yakıt geri iade hatası:`, restoreError);
+        throw restoreError;
       }
 
       // 2. İlişkili kayıtları sil (Sıralama önemli!)

@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { PrismaClient, Prisma } from "@prisma/client";
-import { getServerSideSession } from "@/lib/session";
 
 const prisma = new PrismaClient();
 
@@ -67,8 +66,10 @@ type IrrigationFieldUsageWithFieldAndOwners = Prisma.IrrigationFieldUsageGetPayl
 // Tüm sulama kayıtlarını getir (ownerSummaries eklendi)
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSideSession();
-    if (!session || !session.id) {
+    const userId = request.headers.get("x-user-id");
+    const userRole = request.headers.get("x-user-role");
+
+    if (!userId || !userRole) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -174,8 +175,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSideSession();
-    if (!session || !session.id) {
+    const userId = request.headers.get("x-user-id");
+    const userRole = request.headers.get("x-user-role");
+
+    if (!userId || !userRole) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -199,7 +202,7 @@ export async function POST(request: NextRequest) {
         status: "DRAFT", // Başlangıçta taslak olarak oluştur
         wellId: wellId,
         seasonId: seasonId, // seasonId artık null olamaz
-        createdBy: session.id,
+        createdBy: userId,
       },
     });
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { ProcessType, Unit, ProcessStatus } from "@prisma/client"; // ProcessStatus eklendi
 import { WeatherSnapshotService } from "@/lib/weather/weather-snapshot-service";
+import { FuelDeductionService } from "@/lib/services/fuel-deduction-service";
 
 const weatherSnapshotService = new WeatherSnapshotService();
 
@@ -100,7 +101,7 @@ export async function GET(request: Request) {
     }
 
     // Adım 3b: İlişkili maliyetleri ayrı sorguyla getir (sadece fieldId'si null olmayan işlemler için)
-    let costsMap: Map<string, any[]> = new Map();
+    const costsMap: Map<string, any[]> = new Map();
     if (processIdsWithNonNullFieldId.length > 0) {
       const costs = await prisma.processCost.findMany({
         where: { processId: { in: processIdsWithNonNullFieldId } }, // fieldId filtresi kaldırıldı
@@ -506,111 +507,35 @@ export async function PUT(request: Request) {
               equipment &&
               equipment.fuelConsumptionPerDecare > 0
             ) {
-              const totalFuelNeeded =
-                equipment.fuelConsumptionPerDecare * processedArea;
+              // Yeni OOP servisi ile yakıt düşümü yap
+              const fuelDeductionResults = await FuelDeductionService.deductFuelForEquipment(
+                field.id,
+                equipmentId,
+                processedArea,
+                process.id
+              );
 
-              const fieldOwnersWithPercentage = field.owners;
-
-              if (
-                !fieldOwnersWithPercentage ||
-                fieldOwnersWithPercentage.length === 0
-              ) {
-                throw new Error("Tarla sahibi bilgisi bulunamadı.");
+              // Sonuçları kontrol et
+              const failedDeductions = fuelDeductionResults.filter(result => !result.success);
+              if (failedDeductions.length > 0) {
+                const errorMessages = failedDeductions.map(result => result.message).join("; ");
+                throw new Error(`Yakıt düşümü başarısız: ${errorMessages}`);
               }
 
-              for (const ownerInfo of fieldOwnersWithPercentage) {
-                const ownerFuelShare =
-                  totalFuelNeeded * (ownerInfo.percentage / 100);
-
-                if (ownerFuelShare <= 0) continue;
-
-                const ownerFuelInventories = await tx.inventory.findMany({
-                  where: {
-                    category: "FUEL",
-                    ownerships: {
-                      some: {
-                        userId: ownerInfo.userId,
-                      },
-                    },
-                    totalQuantity: { gt: 0 },
-                  },
-                  orderBy: { createdAt: "asc" },
-                });
-
-                let remainingOwnerShareToDeduct = ownerFuelShare;
-                let ownerTotalFuel = ownerFuelInventories.reduce(
-                  (sum, item) => sum + item.totalQuantity,
-                  0
-                );
-
-                if (ownerTotalFuel < ownerFuelShare) {
-                  const ownerName = ownerInfo.user?.name || ownerInfo.userId;
-                  throw new Error(
-                    `Sahip ${ownerName}'in envanterinde payına düşen (${ownerFuelShare.toFixed(2)} L) kadar yakıt bulunmuyor (Mevcut: ${ownerTotalFuel.toFixed(2)} L).`
-                  );
-                }
-
-                for (const inventory of ownerFuelInventories) {
-                  if (remainingOwnerShareToDeduct <= 0) break;
-
-                  const deductionAmount = Math.min(
-                    inventory.totalQuantity,
-                    remainingOwnerShareToDeduct
-                  );
-
-                  // Get owner's share of this fuel inventory
-                  const ownerFuelShare = await tx.inventoryOwnership.findFirst({
-                    where: {
-                      inventoryId: inventory.id,
-                      userId: ownerInfo.userId,
-                    },
-                    select: { id: true, shareQuantity: true },
-                  });
-
-                  if (!ownerFuelShare) {
-                    throw new Error(
-                      `Sahip (${ownerInfo.userId}) için ${inventory.id} yakıt envanteri share'i bulunamadı.`
-                    );
+              // Başarılı düşümlerin inventoryUsage kayıtlarını getir
+              const fuelInventoryUsages = await tx.inventoryUsage.findMany({
+                where: {
+                  processId: process.id,
+                  inventory: {
+                    category: "FUEL"
                   }
-
-                  if (ownerFuelShare.shareQuantity < deductionAmount) {
-                    throw new Error(
-                      `Sahip'in bu yakıt envanterinde yeterli miktar bulunmuyor. Gerekli: ${deductionAmount}L, Mevcut: ${ownerFuelShare.shareQuantity}L`
-                    );
-                  }
-
-                  const [fuelUsageRecord, updatedInventory] = await Promise.all([
-                    tx.inventoryUsage.create({
-                      data: {
-                        processId: process.id,
-                        inventoryId: inventory.id,
-                        usedQuantity: deductionAmount,
-                        usageType: "PROCESSING",
-                        usedById: ownerInfo.userId,
-                        fieldId: field.id,
-                      },
-                    }),
-                    tx.inventory.update({
-                      where: { id: inventory.id },
-                      data: {
-                        totalQuantity: {
-                          decrement: deductionAmount,
-                        },
-                      },
-                    }),
-                    tx.inventoryOwnership.update({
-                      where: { id: ownerFuelShare.id },
-                      data: {
-                        shareQuantity: {
-                          decrement: deductionAmount,
-                        },
-                      },
-                    }),
-                  ]);
-                  inventoryUsageRecords.push(fuelUsageRecord);
-                  remainingOwnerShareToDeduct -= deductionAmount;
                 }
-              }
+              });
+
+              // Bu kayıtları inventoryUsageRecords'a ekle
+              inventoryUsageRecords.push(...fuelInventoryUsages);
+              
+              console.log(`✅ Yakıt düşümü başarıyla tamamlandı: ${fuelDeductionResults.length} sahip için`);
             }
 
             // Proses kaydına inventoryDistribution JSON'ını ekle ve durumu güncelle

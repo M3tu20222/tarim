@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
-import { getServerSideSession } from "@/lib/session";
 
 const prisma = new PrismaClient();
 
@@ -11,8 +10,10 @@ export async function GET(
 ) {
   let data; // data'yı burada tanımla
   try {
-    const session = await getServerSideSession();
-    if (!session || !session.id) {
+    const userId = request.headers.get("x-user-id");
+    const userRole = request.headers.get("x-user-role");
+
+    if (!userId || !userRole) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -89,8 +90,10 @@ export async function PUT(
 ) {
   let data;
   try {
-    const session = await getServerSideSession();
-    if (!session || !session.id) {
+    const userId = request.headers.get("x-user-id");
+    const userRole = request.headers.get("x-user-role");
+
+    if (!userId || !userRole) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -271,8 +274,10 @@ export async function DELETE(
   { params }: { params: Promise<{ irrigationId: string }> }
 ) {
   try {
-    const session = await getServerSideSession();
-    if (!session || !session.id) {
+    const userId = request.headers.get("x-user-id");
+    const userRole = request.headers.get("x-user-role");
+
+    if (!userId || !userRole) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

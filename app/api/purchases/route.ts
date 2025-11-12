@@ -10,7 +10,6 @@ import {
   type Purchase, // Purchase tipini import et
   type Inventory, // Inventory tipini import et
 } from "@prisma/client"; // 'type' kaldırıldı
-import { getServerSideSession } from "@/lib/session"; // getAuth yerine getServerSideSession
 
 // Tüm ALIŞLARI getir (Bu GET isteği aslında PROCESS'leri getiriyordu, şimdilik dokunmuyoruz ama idealde bu da düzeltilmeli)
 export async function GET(request: Request) {
@@ -62,12 +61,12 @@ export async function GET(request: Request) {
 
 // Yeni ALIŞ oluştur
 export async function POST(request: Request) {
-  const session = await getServerSideSession(); // getAuth yerine getServerSideSession
+  const userId = request.headers.get("x-user-id");
+  const userRole = request.headers.get("x-user-role");
 
-  if (!session?.id) { // session.user.id yerine session.id
+  if (!userId || !userRole) {
     return NextResponse.json({ error: "Yetkisiz istek" }, { status: 401 });
   }
-  const userId = session.id; // session.user.id yerine session.id
 
   try {
     const body = await request.json();
