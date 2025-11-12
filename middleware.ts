@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { verifyToken } from "./lib/jwt"
-import { prisma } from "./lib/prisma"
 
 export async function middleware(request: NextRequest) {
   const isProtectedRoute = request.nextUrl.pathname.startsWith("/dashboard")
@@ -24,52 +23,20 @@ export async function middleware(request: NextRequest) {
     }
 
     try {
-      // Step 1: Verify token
       const decoded = await verifyToken(token)
-
-      if (!decoded || !decoded.id) {
-        console.error("Token decode başarısız")
-        return NextResponse.json({ error: "Geçersiz token" }, { status: 401 })
-      }
-
-      // Step 2: Fetch user from database (NEW!)
-      // This ensures user still exists and is active
-      const user = await prisma.user.findUnique({
-        where: { id: decoded.id },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          status: true,
-        },
-      })
-
-      // Step 3: Validate user exists
-      if (!user) {
-        console.error(`Kullanıcı bulunamadı: ${decoded.id}`)
-        return NextResponse.json({ error: "Kullanıcı bulunamadı" }, { status: 401 })
-      }
-
-      // Step 4: Validate user is active (NEW!)
-      // Prevents deactivated users from accessing API
-      if (user.status !== "ACTIVE") {
-        console.warn(`İnaktif kullanıcı erişim denemesi: ${user.id}, Status: ${user.status}`)
-        return NextResponse.json(
-          { error: "Kullanıcı hesabı deaktif veya silinmiş" },
-          { status: 401 }
-        )
-      }
-
-      // Step 5: Set all user info in headers (NEW!)
       const requestHeaders = new Headers(request.headers)
-      requestHeaders.set("x-user-id", user.id)
-      requestHeaders.set("x-user-role", user.role)
-      requestHeaders.set("x-user-name", user.name)
-      requestHeaders.set("x-user-email", user.email)
-      requestHeaders.set("Cookie", `token=${token}`)
+      requestHeaders.set("x-user-id", decoded.id)
+      requestHeaders.set("x-user-role", decoded.role)
+      requestHeaders.set("Cookie", `token=${token}`) // Cookie'yi ekle
 
-      console.log(`[Middleware] Auth success - User: ${user.id}, Role: ${user.role}, Path: ${request.nextUrl.pathname}`)
+      // Debug için konsola yazdıralım
+      console.log(`API isteği: ${request.nextUrl.pathname}`)
+      console.log(`Kullanıcı ID: ${decoded.id}, Rol: ${decoded.role}`)
+
+      // Worker'ların irrigation API'lerine erişimini sağla
+      if (decoded.role === "WORKER" && request.nextUrl.pathname.startsWith("/api/irrigation")) {
+        console.log("Worker kullanıcısı irrigation API'sine erişiyor:", request.nextUrl.pathname)
+      }
 
       return NextResponse.next({
         request: {
@@ -77,7 +44,7 @@ export async function middleware(request: NextRequest) {
         },
       })
     } catch (error) {
-      console.error("[Middleware] Auth error:", error)
+      console.error("Token doğrulama hatası:", error)
       return NextResponse.json({ error: "Kimlik doğrulama gerekli" }, { status: 401 })
     }
   }
