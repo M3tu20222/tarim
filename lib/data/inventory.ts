@@ -17,6 +17,7 @@ async function _getAllInventory() {
       totalQuantity: true,
       unit: true,
       createdAt: true,
+      costPrice: true,
     },
     orderBy: { createdAt: "desc" },
   });
@@ -107,6 +108,8 @@ async function _getInventoryWithOwnerships() {
       status: true,
       totalQuantity: true,
       unit: true,
+      createdAt: true,
+      costPrice: true,
     },
   });
 

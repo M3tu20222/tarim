@@ -33,7 +33,7 @@ export async function GET(request: Request) {
     let inventory;
 
     // Ownership verileri gerekli mi kontrol et
-    const needsOwnerships = showAll || fetchAll || userRole === "ADMIN" || userIdsParam || userIdParam;
+    const needsOwnerships = showAll || fetchAll || userRole === "ADMIN" || userRole === "OWNER" || userIdsParam || userIdParam;
 
     if (needsOwnerships) {
       console.log("[Cache] Using getInventoryWithOwnerships");
@@ -116,6 +116,7 @@ export async function GET(request: Request) {
       ...item,
       unitPrice: (item as any).costPrice ?? 0,
       inventoryTransactions: transactionsMap.get(item.id) || [],
+      updatedAt: (item as any).updatedAt || new Date(), // Ensure updatedAt exists
     }));
 
     return NextResponse.json({ data: formattedInventory });

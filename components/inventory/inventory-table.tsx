@@ -81,13 +81,25 @@ export function InventoryTable() {
   const calculateOwnershipPercentage = (item: any) => {
     if (!user || !item.ownerships || item.ownerships.length === 0) return "0%";
 
-    const userOwnership = item.ownerships.find(
-      (o: any) => o.user.id === user.id
-    );
+    // Handle both object format (with user) and simple userId format
+    const userOwnership = item.ownerships.find((o: any) => {
+      // Check if o.user exists (full object)
+      if (o.user && typeof o.user === 'object') {
+        return o.user.id === user.id;
+      }
+      // Otherwise check userId directly
+      return o.userId === user.id;
+    });
+
     if (!userOwnership) return "0%";
 
     const totalQuantity = item.totalQuantity || 1;
     const percentage = (userOwnership.shareQuantity / totalQuantity) * 100;
+
+    // Handle extreme values (floating point errors)
+    if (percentage > 200 || percentage < 0) {
+      return "N/A";
+    }
 
     return `${percentage.toFixed(2)}%`;
   };
@@ -174,7 +186,7 @@ export function InventoryTable() {
                       {getStatusLabel(item.status)}
                     </Badge>
                   </TableCell>
-                  <TableCell>{formatDate(item.updatedAt)}</TableCell>
+                  <TableCell>{formatDate(item.createdAt || item.updatedAt)}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
                       <Button variant="outline" size="icon" asChild>
