@@ -2,7 +2,18 @@
   "permissions": {
     "allow": [
       "Bash(git stash:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(npm run build:*)",
+      "Bash(timeout 5 npx prisma studio:*)",
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(npx prisma generate:*)",
+      "Bash(npm install:*)",
+      "Bash(del /F /Q \"node_modules\\.prisma\\client\\query_engine-windows.dll.node\" 2)",
+      "Bash(nul)",
+      "Bash(find:*)",
+      "Bash(npm run lint)",
+      "Bash(npx ts-node:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

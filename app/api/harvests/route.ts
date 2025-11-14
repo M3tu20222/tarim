@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
+import { updateCropPeriodToHarvesting } from '@/lib/crop-period/lifecycle-transitions';
 
 // Mısır nem oranına göre fire ve kesinti hesaplama
 function calculateCornMoistureDeduction(moistureContent: number): number {
@@ -223,61 +224,69 @@ export async function POST(request: NextRequest) {
     // Toplam geliri hesapla
     const totalRevenue = pricePerUnit ? quantity * pricePerUnit : null;
 
-    // Hasat kaydını oluştur
-    const harvest = await prisma.harvest.create({
-      data: {
-        cropId,
-        fieldId,
-        seasonId: crop.seasonId,
-        harvestDate: new Date(harvestDate),
-        harvestedArea: parseFloat(harvestedArea),
-        quantity: parseFloat(quantity),
-        unit: unit || 'kg',
-        pricePerUnit: pricePerUnit ? parseFloat(pricePerUnit) : null,
-        totalRevenue,
-        quality,
-        moistureContent: moistureContent ? parseFloat(moistureContent) : null,
-        withholdingTaxRate: withholdingTaxRate ? parseFloat(withholdingTaxRate) : 2,
-        moistureDeduction,
-        storageLocation,
-        buyerInfo,
-        transportCost: transportCost ? parseFloat(transportCost) : null,
-        laborCost: laborCost ? parseFloat(laborCost) : null,
-        notes,
-        weatherConditions,
-        harvestedById: user.id
-      },
-      include: {
-        field: {
-          select: {
-            id: true,
-            name: true,
-            location: true
-          }
+    // Transaction içinde hasat kaydı oluştur ve CropPeriod'u güncelle
+    const harvest = await prisma.$transaction(async (tx) => {
+      // Hasat kaydını oluştur
+      const harvestRecord = await tx.harvest.create({
+        data: {
+          cropId,
+          fieldId,
+          seasonId: crop.seasonId,
+          harvestDate: new Date(harvestDate),
+          harvestedArea: parseFloat(harvestedArea),
+          quantity: parseFloat(quantity),
+          unit: unit || 'kg',
+          pricePerUnit: pricePerUnit ? parseFloat(pricePerUnit) : null,
+          totalRevenue,
+          quality,
+          moistureContent: moistureContent ? parseFloat(moistureContent) : null,
+          withholdingTaxRate: withholdingTaxRate ? parseFloat(withholdingTaxRate) : 2,
+          moistureDeduction,
+          storageLocation,
+          buyerInfo,
+          transportCost: transportCost ? parseFloat(transportCost) : null,
+          laborCost: laborCost ? parseFloat(laborCost) : null,
+          notes,
+          weatherConditions,
+          harvestedById: user.id
         },
-        crop: {
-          select: {
-            id: true,
-            name: true,
-            cropType: true
-          }
-        },
-        season: {
-          select: {
-            id: true,
-            name: true
+        include: {
+          field: {
+            select: {
+              id: true,
+              name: true,
+              location: true
+            }
+          },
+          crop: {
+            select: {
+              id: true,
+              name: true,
+              cropType: true
+            }
+          },
+          season: {
+            select: {
+              id: true,
+              name: true
+            }
           }
         }
-      }
-    });
+      });
 
-    // Crop'u HARVESTED durumuna güncelle
-    await prisma.crop.update({
-      where: { id: cropId },
-      data: {
-        status: 'HARVESTED',
-        harvestDate: new Date(harvestDate)
-      }
+      // Crop'u HARVESTED durumuna güncelle
+      await tx.crop.update({
+        where: { id: cropId },
+        data: {
+          status: 'HARVESTED',
+          harvestDate: new Date(harvestDate)
+        }
+      });
+
+      // 🎯 YENİ: CropPeriod'u HARVESTING'e geçir
+      await updateCropPeriodToHarvesting(cropId, fieldId, tx);
+
+      return harvestRecord;
     });
 
     // Tarla sahibine/sahiplerine bildirim gönder

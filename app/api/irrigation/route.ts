@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { PrismaClient, Prisma } from "@prisma/client";
+import { getActiveCropPeriod } from "@/lib/crop-period/get-active-period";
+import { updateCropPeriodToIrrigation } from "@/lib/crop-period/lifecycle-transitions";
 
 const prisma = new PrismaClient();
 

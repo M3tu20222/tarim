@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { PrismaClient, Prisma } from "@prisma/client";
+import { updateCropPeriodToIrrigation } from "@/lib/crop-period/lifecycle-transitions";
 
 const prisma = new PrismaClient();
 
@@ -91,7 +92,7 @@ export async function POST(
       });
 
       // Bildirimleri Oluştur (Mevcut POST'tan taşındı)
-      const createdByUser = await tx.user.findUnique({ where: { id: session.id } });
+      const createdByUser = await tx.user.findUnique({ where: { id: userId } });
       const well = irrigationLog.wellId ? await tx.well.findUnique({ where: { id: irrigationLog.wellId } }) : null;
 
       // Tarla isimlerini topla
@@ -128,7 +129,7 @@ export async function POST(
 
       const uniqueOwnerIds = [...new Set(ownerDurations.map((os: OwnerDurationInput) => os.userId))];
       for (const ownerId of uniqueOwnerIds) {
-        if (ownerId !== session.id) {
+        if (ownerId !== userId) {
           const fieldNames = ownerFieldNames[ownerId] || [];
           const fieldNamesText = fieldNames.length > 0
             ? fieldNames.map(name => `<span class="neon-text-green">${name}</span>`).join(', ')
@@ -147,7 +148,7 @@ export async function POST(
               message: `${well?.name || (irrigationLog.wellId ? `Kuyu (ID: ${irrigationLog.wellId})` : 'Bilinmeyen Kuyu')}'dan ${fieldNamesText} için ${irrigationLog.duration} dakika sulama yapıldı.`,
               type: "IRRIGATION_COMPLETED",
               receiverId: ownerId as string,
-              senderId: session.id as string,
+              senderId: userId as string,
               irrigationId: irrigationLog.id,
               fieldId: primaryFieldId,
               link: `/dashboard/owner/irrigation/${irrigationLog.id}`,
@@ -168,7 +169,7 @@ export async function POST(
         : "bilinmeyen tarlalar";
 
       for (const admin of admins) {
-        if (admin.id !== session.id) {
+        if (admin.id !== userId) {
           const primaryFieldId = fieldUsageRecords.length > 0 && fieldUsageRecords[0].field ?
             fieldUsageRecords[0].field.id : null;
 
@@ -178,7 +179,7 @@ export async function POST(
               message: `${well?.name || 'Bilinmeyen Kuyu'}'dan ${allFieldNamesText} için ${irrigationLog.duration} dakika süren yeni bir sulama kaydı (${createdByUser?.name || 'bir kullanıcı'} tarafından) oluşturuldu.`,
               type: "IRRIGATION_COMPLETED",
               receiverId: admin.id as string,
-              senderId: session.id as string,
+              senderId: userId as string,
               irrigationId: irrigationLog.id,
               fieldId: primaryFieldId,
               link: `/dashboard/admin/irrigation/${irrigationLog.id}`,
@@ -272,6 +273,17 @@ export async function POST(
             },
           });
 
+          // 🎯 YENİ: Aktif cropPeriodId'yi bul
+          const activeCropPeriod = await tx.cropPeriod.findFirst({
+            where: {
+              fieldId: fieldUsage.fieldId,
+              status: {
+                in: ["PREPARATION", "SEEDING", "IRRIGATION", "FERTILIZING", "HARVESTING"]
+              }
+            },
+            orderBy: { startDate: "desc" }
+          });
+
           // IrrigationFieldExpense kaydı oluştur
           await tx.irrigationFieldExpense.create({
             data: {
@@ -283,8 +295,14 @@ export async function POST(
               description: `${fieldUsage.field.name} tarlası sulama maliyeti`,
               totalCost,
               expenseDate: irrigationLogWithDetails.startDateTime,
+              cropPeriodId: activeCropPeriod?.id || undefined, // 🎯 YENİ: CropPeriodId'yi ekle
             },
           });
+
+          // 🎯 YENİ: İlk sulama kaydı ise SEEDING → IRRIGATION geçişini tetikle
+          if (activeCropPeriod && activeCropPeriod.status === "SEEDING") {
+            await updateCropPeriodToIrrigation(fieldUsage.fieldId, tx);
+          }
 
           // Tarla sahipleri için gider kayıtları oluştur
           const fieldOwnerships = await tx.fieldOwnership.findMany({

@@ -174,6 +174,19 @@ export function IrrigationList() {
         .then((data) => data.data || []),
   });
 
+  // İlk açılışta aktif sezonu otomatik seç
+  useEffect(() => {
+    if (seasonsData.length > 0) {
+      // Eğer henüz bir sezon seçilmemişse, aktif sezonu otomatik seç
+      if (!filters.seasonId) {
+        const activeSeason = seasonsData.find((season: any) => season.isActive);
+        if (activeSeason) {
+          setFilters((prev) => ({ ...prev, seasonId: activeSeason.id }));
+        }
+      }
+    }
+  }, [seasonsData]); // seasonsData yüklendikten sonra çalış
+
   // Seçili kuya göre tarlaları filtrele
   const filteredFieldsData = fieldsData.filter((field: any) => {
     if (!filters.wellId) return true;
@@ -253,8 +266,7 @@ export function IrrigationList() {
           <CardHeader>
             <CardTitle className="neon-text-cyan">Filtreler</CardTitle>
             <CardDescription className="text-muted-foreground">
-              Sulama kayıtlarını filtrelemek için aşağıdaki seçenekleri
-              kullanın.
+              Sulama kayıtlarını filtrelemek için aşağıdaki seçenekleri kullanın. Eski kayıtlar için Sezon seçin.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col md:flex-row gap-4 items-end">

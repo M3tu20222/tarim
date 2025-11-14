@@ -83,6 +83,9 @@ model Season {
   processes             Process[]
   irrigationLogs        IrrigationLog[]
 
+  // YENİ: CropPeriod ilişkisi
+  cropPeriods           CropPeriod[]           @relation("SeasonToCropPeriod")
+
   fieldExpenses FieldExpense[]
 
   notifications Notification[] @relation("SeasonNotifications")
@@ -121,6 +124,9 @@ model Field {
   notifications       Notification[]          @relation("FieldNotifications")
   irrigationFieldUsages IrrigationFieldUsage[]
   irrigationLogs      IrrigationLog[]
+
+  // YENİ: CropPeriod ilişkisi
+  cropPeriods         CropPeriod[]            @relation("FieldToCropPeriod")
 
   wellBillFieldDistributions WellBillFieldDistribution[]
   wellBillDistributions      WellBillDistribution[]
@@ -317,9 +323,50 @@ model Crop {
   field   Field  @relation(fields: [fieldId], references: [id])
   fieldId String @db.ObjectId
 
+  // YENİ: CropPeriod ilişkisi
+  periods             CropPeriod[]  @relation("CropToPeriod")
+
   notifications Notification[] @relation("CropNotifications")
   agroDailyFeatures   AgroFeatureDaily[]
   harvests            Harvest[]
+}
+
+// YENİ: Ürün Dönem Modeli
+model CropPeriod {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+
+  // Temel İlişkiler
+  crop        Crop?    @relation("CropToPeriod", fields: [cropId], references: [id], onDelete: SetNull)
+  cropId      String?  @db.ObjectId
+  // Açıklama: cropId nullable çünkü PREPARATION aşamasında henüz ürün belirlenmemiş
+
+  field       Field    @relation("FieldToCropPeriod", fields: [fieldId], references: [id], onDelete: Cascade)
+  fieldId     String   @db.ObjectId
+
+  season      Season   @relation("SeasonToCropPeriod", fields: [seasonId], references: [id], onDelete: Cascade)
+  seasonId    String   @db.ObjectId
+
+  // Tarihler
+  startDate   DateTime
+  endDate     DateTime?
+
+  // Durum / Lifecycle
+  status      CropPeriodStatus @default(PREPARATION)
+
+  // Operasyon İlişkileri
+  processes              Process[]
+  irrigationLogs         IrrigationLog[]
+  fieldExpenses          FieldExpense[]
+  irrigationFieldExpenses IrrigationFieldExpense[] // 🎯 YENİ: Sulama giderleri
+
+  // Audit
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([fieldId])
+  @@index([cropId])
+  @@index([seasonId])
+  @@index([status])
 }
 
 // Hasat Kayıt Modeli
@@ -583,6 +630,11 @@ model Process {
   processedPercentage   Float
   seasonId              String?       @db.ObjectId
   season                Season?       @relation(fields: [seasonId], references: [id])
+
+  // YENİ: CropPeriod ilişkisi
+  cropPeriod            CropPeriod?   @relation(fields: [cropPeriodId], references: [id], onDelete: SetNull)
+  cropPeriodId          String?       @db.ObjectId
+
   inventoryUsages       InventoryUsage[]
   equipmentUsages       EquipmentUsage[]
   processCosts          ProcessCost[]
@@ -591,6 +643,8 @@ model Process {
   weatherSnapshots      ProcessWeatherSnapshot[]
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
+
+  @@index([cropPeriodId])
 }
 
 model Notification {
@@ -764,6 +818,11 @@ model FieldExpense {
   fieldId     String       @db.ObjectId
   season      Season       @relation(fields: [seasonId], references: [id])
   seasonId    String       @db.ObjectId
+
+  // YENİ: CropPeriod ilişkisi
+  cropPeriod  CropPeriod?  @relation(fields: [cropPeriodId], references: [id], onDelete: SetNull)
+  cropPeriodId String?     @db.ObjectId
+
   totalCost   Float
   description String?
   expenseDate DateTime?
@@ -772,6 +831,8 @@ model FieldExpense {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   notifications Notification[] @relation("ExpenseNotifications")
+
+  @@index([cropPeriodId])
 }
 
 model FieldOwnerExpense {
@@ -816,6 +877,11 @@ model IrrigationLog {
   updatedAt       DateTime                     @updatedAt
   seasonId        String?                      @db.ObjectId
   season          Season?                      @relation(fields: [seasonId], references: [id])
+
+  // YENİ: CropPeriod ilişkisi
+  cropPeriod      CropPeriod?                  @relation(fields: [cropPeriodId], references: [id], onDelete: SetNull)
+  cropPeriodId    String?                      @db.ObjectId
+
   fieldUsages     IrrigationFieldUsage[]
   inventoryUsages IrrigationInventoryUsage[]
   billingUsages   WellBillingIrrigationUsage[]
@@ -823,6 +889,8 @@ model IrrigationLog {
   notifications   Notification[]               @relation("IrrigationNotifications")
   irrigationCosts IrrigationCost[]
   weatherSnapshots ProcessWeatherSnapshot[]
+
+  @@index([cropPeriodId])
 }
 
 model IrrigationFieldUsage {
@@ -981,6 +1049,8 @@ model IrrigationFieldExpense {
   fieldId         String   @db.ObjectId
   season          Season   @relation("SeasonIrrigationExpenses", fields: [seasonId], references: [id])
   seasonId        String   @db.ObjectId
+  cropPeriod      CropPeriod? @relation(fields: [cropPeriodId], references: [id], onDelete: SetNull)
+  cropPeriodId    String?  @db.ObjectId // 🎯 YENİ: CropPeriod ilişkisi
   irrigationLogId String   @db.ObjectId
   sourceType      String   // "IRRIGATION"
   sourceId        String   // IrrigationLog ID
@@ -990,6 +1060,8 @@ model IrrigationFieldExpense {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   notifications   Notification[] @relation("IrrigationFieldExpenseNotifications")
+
+  @@index([cropPeriodId])
 }
 
 model IrrigationOwnerExpense {
@@ -1366,4 +1438,13 @@ enum AlertStatus {
   CANCELLED // İptal edildi
 }
 
+// CropPeriod Enum
+enum CropPeriodStatus {
+  PREPARATION   // Toprak hazırlığı, sürme, gübre
+  SEEDING       // Ekim aşaması
+  IRRIGATION    // Sulama dönemi
+  FERTILIZING   // Gübreleme aşaması
+  HARVESTING    // Hasat aşaması
+  CLOSED        // Dönem kapandı
+}
 

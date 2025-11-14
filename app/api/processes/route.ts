@@ -5,6 +5,8 @@ import { getAllProcesses, getProcessesWithDetails, getProcessesByField } from "@
 import type { ProcessType, Unit, ProcessStatus } from "@prisma/client"; // ProcessStatus eklendi
 import { WeatherSnapshotService } from "@/lib/weather/weather-snapshot-service";
 import { FuelDeductionService } from "@/lib/services/fuel-deduction-service";
+import { getActiveCropPeriod } from "@/lib/crop-period/get-active-period";
+import { updateCropPeriodToFertilizing } from "@/lib/crop-period/lifecycle-transitions";
 
 const weatherSnapshotService = new WeatherSnapshotService();
 
@@ -224,6 +226,17 @@ export async function POST(request: Request) {
     while (retries < MAX_RETRIES) {
       try {
         process = await prisma.$transaction(async (tx) => {
+          // 🎯 YENİ: Aktif CropPeriod'u bul
+          const activeCropPeriod = await tx.cropPeriod.findFirst({
+            where: {
+              fieldId,
+              status: {
+                in: ["PREPARATION", "SEEDING", "IRRIGATION", "FERTILIZING"]
+              }
+            },
+            orderBy: { startDate: "desc" }
+          });
+
           // İşlem kaydı oluştur (DRAFT durumunda)
           return await tx.process.create({
             data: {
@@ -237,6 +250,7 @@ export async function POST(request: Request) {
               processedArea,
               processedPercentage,
               status: "DRAFT" as ProcessStatus, // Başlangıç durumu DRAFT
+              cropPeriodId: activeCropPeriod?.id || undefined, // 🎯 YENİ: CropPeriodId'yi ata
             },
           });
         }, { timeout: 10000 }); // Daha kısa timeout

@@ -154,6 +154,9 @@ export async function POST(request: Request) {
               },
             });
 
+            // 🎯 YENİ: Process'in cropPeriodId'sini al
+            const processCropPeriodId = (process as any).cropPeriodId;
+
             // Tarla gideri oluştur
             const fieldExpense = await tx.fieldExpense.create({
               data: {
@@ -164,6 +167,7 @@ export async function POST(request: Request) {
                 description: `${process.field?.name} tarlasındaki ${process.type} işlemi maliyeti`,
                 totalCost,
                 expenseDate: process.date,
+                cropPeriodId: processCropPeriodId || undefined, // 🎯 YENİ: CropPeriodId'yi ekle
               },
             });
 
