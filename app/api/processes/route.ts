@@ -287,7 +287,7 @@ export async function POST(request: Request) {
     // Cache invalidation
     console.log("[Cache] Invalidating processes tags after process creation");
     revalidateTag("processes");
-    if (fieldIdParam) {
+    if (fieldId) {
       revalidateTag(`processes-field-${fieldId}`);
     }
 
@@ -576,7 +576,7 @@ export async function PUT(request: Request) {
 
               // Bu kayıtları inventoryUsageRecords'a ekle
               inventoryUsageRecords.push(...fuelInventoryUsages);
-              
+
               console.log(`✅ Yakıt düşümü başarıyla tamamlandı: ${fuelDeductionResults.length} sahip için`);
             }
 

@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { verifyToken } from "@/lib/jwt";
 import type { ProcessType, Role } from "@prisma/client";
 import { FuelDeductionService } from "@/lib/services/fuel-deduction-service";
+import { revalidateTag } from "next/cache";
 
 // Belirli bir işlemi getir
 export async function GET(
@@ -903,6 +904,13 @@ export async function DELETE(
     }, {
       timeout: 15000 // Zaman aşımını 15 saniyeye çıkar
     });
+
+    // Cache invalidation
+    console.log("[Cache] Invalidating processes tags after process deletion");
+    revalidateTag("processes");
+    if (existingProcess.fieldId) {
+      revalidateTag(`processes-field-${existingProcess.fieldId}`);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
