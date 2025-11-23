@@ -30,7 +30,11 @@ async function getProcess(id: string, userId: string, userRole: string) {
     const token = cookieStore.get("token")?.value;
 
     // API isteği için header'ları hazırla
-    const headers: HeadersInit = {};
+    const headers: HeadersInit = {
+      // Middleware tarafından beklenen headers'ları ekle
+      "x-user-id": userId,
+      "x-user-role": userRole,
+    };
 
     // Cookie başlığını ekle (eğer token varsa)
     if (token) {
@@ -45,16 +49,25 @@ async function getProcess(id: string, userId: string, userRole: string) {
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error(
+        `[getProcess] API error - Status: ${response.status}, Body: ${errorText}`
+      );
       if (response.status === 404) {
         return null;
       }
-      throw new Error("Failed to fetch process");
+      throw new Error(`API error: ${response.status} - ${errorText}`);
     }
 
     return response.json();
   } catch (error) {
-    console.error("Error fetching process:", error);
-    throw new Error("Failed to fetch process");
+    console.error("[getProcess] Fetch error:", {
+      error,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    throw new Error(
+      `Failed to fetch process: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 }
 

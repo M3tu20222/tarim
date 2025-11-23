@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
 import { cookies } from "next/headers";
 import { getApiUrl } from "@/lib/api-url";
+import { getServerSideSession } from "@/lib/session";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -30,19 +31,29 @@ async function getProcess(id: string) {
       return null;
     }
 
+    // Kullanıcı bilgilerini session'dan al
+    const user = await getServerSideSession();
+    if (!user) {
+      console.error("Kullanıcı bilgileri alınamadı");
+      return null;
+    }
+
     // Server-side API çağrısı: Vercel'de çalışan tam URL kullan
     const url = getApiUrl(`/api/processes/${id}`);
     const response = await fetch(url, {
       headers: {
         Cookie: `token=${token}`,
         "Cache-Control": "no-store",
+        "x-user-id": user.id,
+        "x-user-role": user.role,
       },
       next: { revalidate: 0 },
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
       console.error(
-        `API yanıtı başarısız: ${response.status} ${response.statusText}`
+        `API yanıtı başarısız: ${response.status} ${response.statusText} - ${errorText}`
       );
       if (response.status === 404) {
         return null;
