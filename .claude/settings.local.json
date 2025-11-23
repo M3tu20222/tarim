@@ -16,7 +16,13 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(git restore:*)",
+      "Bash(done)",
+      "Bash(while read f)",
+      "Bash(do if ! grep -q '\"\"\"\"use client\"\"\"\"' \"$f\")",
+      "Bash(then echo \"$f\")",
+      "Bash(fi)"
     ],
     "deny": [],
     "ask": []

@@ -8,6 +8,7 @@ import { ArrowLeft, Calendar, Tractor, User } from "lucide-react";
 
 import { getServerSideSession } from "@/lib/session";
 import { cookies } from "next/headers";
+import { getApiUrl } from "@/lib/api-url";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,8 +37,9 @@ async function getProcess(id: string, userId: string, userRole: string) {
       headers["Cookie"] = `token=${token}`;
     }
 
-    // Server-side API çağrısı: relative path kullan (localhost problemi yok)
-    const response = await fetch(`/api/processes/${id}`, {
+    // Server-side API çağrısı: Vercel'de çalışan tam URL kullan
+    const url = getApiUrl(`/api/processes/${id}`);
+    const response = await fetch(url, {
       headers,
       cache: "no-store",
     });

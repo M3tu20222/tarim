@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
 import { cookies } from "next/headers";
+import { getApiUrl } from "@/lib/api-url";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -29,8 +30,9 @@ async function getProcess(id: string) {
       return null;
     }
 
-    // Server-side API çağrısı: relative path kullan (localhost problemi yok)
-    const response = await fetch(`/api/processes/${id}`, {
+    // Server-side API çağrısı: Vercel'de çalışan tam URL kullan
+    const url = getApiUrl(`/api/processes/${id}`);
+    const response = await fetch(url, {
       headers: {
         Cookie: `token=${token}`,
         "Cache-Control": "no-store",
