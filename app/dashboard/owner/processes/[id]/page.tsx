@@ -24,26 +24,20 @@ export const metadata: Metadata = {
 
 async function getProcess(id: string, userId: string, userRole: string) {
   try {
-    let baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
-    if (!baseUrl) {
-      baseUrl = "http://localhost:3000";
-    }
-    
     // Cookie'leri al
-    const cookieStore = await cookies(); // await eklendi
+    const cookieStore = await cookies();
     const token = cookieStore.get("token")?.value;
-    
+
     // API isteği için header'ları hazırla
     const headers: HeadersInit = {};
-    
+
     // Cookie başlığını ekle (eğer token varsa)
     if (token) {
       headers["Cookie"] = `token=${token}`;
     }
-    
-    // Middleware'in x-user-id ve x-user-role başlıklarını eklemesi beklenir.
-    // Bu nedenle frontend'den bunları göndermiyoruz.
-    const response = await fetch(`${baseUrl}/api/processes/${id}`, {
+
+    // Server-side API çağrısı: relative path kullan (localhost problemi yok)
+    const response = await fetch(`/api/processes/${id}`, {
       headers,
       cache: "no-store",
     });

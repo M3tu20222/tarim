@@ -29,8 +29,8 @@ async function getProcess(id: string) {
       return null;
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
-    const response = await fetch(`${baseUrl}/api/processes/${id}`, {
+    // Server-side API çağrısı: relative path kullan (localhost problemi yok)
+    const response = await fetch(`/api/processes/${id}`, {
       headers: {
         Cookie: `token=${token}`,
         "Cache-Control": "no-store",
