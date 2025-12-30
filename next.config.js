@@ -1,10 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Disable ESLint during build
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-
   // Disable TypeScript errors during build
   typescript: {
     ignoreBuildErrors: true,
@@ -18,16 +13,6 @@ const nextConfig = {
       '@radix-ui/react-dialog',
       'lucide-react'
     ]
-  },
-
-  // Webpack optimizations
-  webpack: (config, { dev, isServer }) => {
-    if (!dev && !isServer) {
-      // Tree shaking optimization
-      config.optimization.usedExports = true;
-      config.optimization.sideEffects = false;
-    }
-    return config;
   },
 
   // Image optimization
