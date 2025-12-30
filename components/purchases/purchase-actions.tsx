@@ -25,7 +25,12 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { MoreHorizontal, Pencil, Trash, Eye, CreditCard } from "lucide-react";
 
-export function PurchaseActions({ purchase }: { purchase: any }) {
+interface PurchaseActionsProps {
+  purchase: any;
+  onViewDetails?: (purchaseId: string) => void;
+}
+
+export function PurchaseActions({ purchase, onViewDetails }: PurchaseActionsProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const router = useRouter();
@@ -75,14 +80,22 @@ export function PurchaseActions({ purchase }: { purchase: any }) {
             <span className="sr-only">Open menu</span>
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent 
+          align="end" 
+          side="bottom" 
+          sideOffset={5} 
+          collisionPadding={20}
+          sticky="always"
+          avoidCollisions={true}
+        >
           <DropdownMenuLabel>Actions</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem asChild>
-            <Link href={`/dashboard/owner/purchases/${purchase.id}`}>
-              <Eye className="mr-2 h-4 w-4" />
-              View Details
-            </Link>
+          <DropdownMenuItem 
+            onClick={() => onViewDetails?.(purchase.id)}
+            className="cursor-pointer"
+          >
+            <Eye className="mr-2 h-4 w-4" />
+            Detayları Gör
           </DropdownMenuItem>
           {hasPendingDebts && (
             <DropdownMenuItem asChild>

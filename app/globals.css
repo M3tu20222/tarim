@@ -298,9 +298,7 @@ body {
 
 .bg-card,
 .bg-background {
-  background-color: hsla(var(--card), 0.7);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background-color: hsla(var(--card), 0.85);
 }
 
 .bg-muted {

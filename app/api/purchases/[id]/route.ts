@@ -3,8 +3,83 @@ import { prisma } from "@/lib/prisma";
 import { Prisma, InventoryCategory, InventoryStatus, Unit, PaymentMethod, ApprovalStatus, ProductCategory } from "@prisma/client"; // Eksik tipler eklendi
 import type { Purchase, InventoryTransaction, Debt, PurchaseContributor, Inventory, InventoryOwnership } from "@prisma/client"; // Inventory ve InventoryOwnership tipleri eklendi
 
-// Alış detaylarını getir (Opsiyonel, gerekirse eklenebilir)
-// export async function GET(request: NextRequest, { params }: { params: { id: string } }) { ... }
+// Alış detaylarını getir
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: purchaseId } = await params;
+
+    if (!purchaseId) {
+      return NextResponse.json(
+        { error: "Alış ID'si gerekli" },
+        { status: 400 }
+      );
+    }
+
+    // Alış kaydını tüm ilişkili verilerle birlikte al (detay sayfasıyla aynı query)
+    const purchase = await prisma.purchase.findUnique({
+      where: { id: purchaseId },
+      include: {
+        contributors: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+        season: true,
+        debts: {
+          include: {
+            creditor: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            debtor: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+        inventoryTransactions: true,
+        approvals: {
+          include: {
+            approver: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!purchase) {
+      return NextResponse.json(
+        { error: "Alış kaydı bulunamadı" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json(purchase);
+  } catch (error: any) {
+    console.error("Error fetching purchase:", error);
+    return NextResponse.json(
+      { error: error.message || "Alış detayları alınırken bir hata oluştu" },
+      { status: 500 }
+    );
+  }
+}
 
 // Alış güncelle (Opsiyonel, gerekirse eklenebilir)
 // export async function PUT(request: NextRequest, { params }: { params: { id: string } }) { ... }
